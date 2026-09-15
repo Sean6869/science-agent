@@ -64,6 +64,7 @@ const confirm=document.createElement('button');confirm.className='primary';confi
 af.onsubmit=e=>{e.preventDefault();const option=new FormData(af).get('assessment'),a=assessments.find(a=>a.id===option),d=state.data[4];if(!a||d.submissions.at(-1)?.option===option)return;d.submissions.push({id:crypto.randomUUID(),option,at:new Date().toISOString()});d.stale=false;invalidate(4);add(4,'user',a.label+'：'+a.detail);add(4,'agent',a.reply);render();};
 $('composer').onsubmit=submit;
 $('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e.target.value;save();};
+$('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
 $('clear').onclick=()=>{if(window.confirm('清除本次所有草稿、产出及反馈？')){if(speech)speech.abort();state=fresh();save();render();}};
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 $('voice').onclick=()=>{
