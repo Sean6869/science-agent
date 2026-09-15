@@ -15,10 +15,21 @@ function renderMessages(){
  $('messages').append(div);}
  $('messages').scrollTop=$('messages').scrollHeight;
 }
+function renderBrief(text) {
+ const lines=text.trim().split('\n');
+ const last=lines.findLastIndex(line=>line.trim());
+ const nodes=lines.map((line,index)=>{
+  const node=document.createElement(index===last?'strong':'p');
+  node.className=line.trim()?'brief-line':'brief-gap';
+  node.textContent=line;
+  return node;
+ });
+ $('brief').replaceChildren(...nodes);
+}
 function render(){
  const s=stages[state.stage-1],d=state.data[s.id];
  document.querySelectorAll('.stage').forEach(b=>{const active=+b.dataset.id===s.id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active)); const done=state.data[b.dataset.id].submissions.length>0; b.classList.toggle('complete',done); b.querySelector('.stage-state').textContent=active?'当前阶段':done?'已提交':'未开始';});
- $('brief').textContent=s.brief;
+ renderBrief(s.brief);
  $('stageStatus').textContent=`第 ${s.id} 步 · ${d.submissions.length?'已提交':'进行中'}${d.stale?' · 依据已更新，请复核':''}${d.draft?' · 有未提交草稿':''}`;
  $('draft').value=d.draft;$('draft').placeholder=s.placeholder;
  $('composer').hidden=s.id===4;$('assessment').hidden=s.id!==4;
@@ -46,7 +57,7 @@ function submit(e){
  d.submissions.push(submission);d.stale=false;d.draft='';invalidate(id);add(id,'user',`第${submission.revision}次产出\n${text}`);requestFeedback(id,submission);
 }
 $('stages').replaceChildren();
-for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=s.title;const status=document.createElement('span');status.className='stage-state';b.append(number,label,status);b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();};$('stages').append(b);}
+for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);const status=document.createElement('span');status.className='stage-state';b.append(number,label,status);b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();};$('stages').append(b);}
 const af=document.createElement('form');
 for(const a of assessments){const label=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='assessment';input.value=a.id;input.required=true;label.append(input,document.createTextNode(` ${a.label}：${a.detail}`));af.append(label);}
 const confirm=document.createElement('button');confirm.className='primary';confirm.textContent='确认小组自评';af.append(confirm);$('assessment').append(af);
@@ -60,13 +71,12 @@ $('voice').onclick=()=>{
  if(!Recognition){$('voiceState').textContent='当前浏览器不支持语音转写，请使用文字输入或支持语音识别的浏览器。';return;}
  const id=state.stage,epoch=state,base=state.data[id].draft;let transcript='',cancelled=false;
  const recognition=new Recognition();speech=recognition;recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;
- recognition.onstart=()=>{$('voice').classList.add('recording');$('voice').textContent='■ 停止';$('voiceState').textContent='正在转写。语音由浏览器识别服务处理，停止后请核对数字、单位与术语再提交。';};
+ recognition.onstart=()=>{$('voice').classList.add('recording');$('voice').setAttribute('aria-label','停止录音');$('voice').title='停止录音';$('voiceState').textContent='正在转写。语音由浏览器识别服务处理，停止后请核对数字、单位与术语再提交。';};
  recognition.onresult=e=>{transcript=Array.from(e.results).map(r=>r[0].transcript).join('');if(state!==epoch||cancelled)return;state.data[id].draft=(base+(base?'\n':'')+transcript).slice(0,2000);if(state.stage===id)$('draft').value=state.data[id].draft;save();};
  recognition.onerror=e=>{$('voiceState').textContent=`语音识别未完成（${e.error}），已有文字已保留，请编辑后提交。`;};
  const timer=setTimeout(()=>recognition.stop(),90000);
- recognition.onend=()=>{clearTimeout(timer);speech=null;$('voice').classList.remove('recording');$('voice').textContent='● 语音';};
+ recognition.onend=()=>{clearTimeout(timer);speech=null;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','语音输入');$('voice').title='语音输入';};
  try{recognition.start();}catch{speech=null;clearTimeout(timer);$('voiceState').textContent='无法启动语音识别，请使用文字输入。';}
 };
 render();
 fetch('/api/config').then(r=>r.json()).then(c=>{ $('lab').onload=()=>{$('loading').classList.add('done');};$('lab').src=c.labUrl;$('openLab').href=c.labUrl;setTimeout(()=>{if(!$('loading').classList.contains('done'))$('loading').textContent='实验加载较慢，请使用上方“新页面打开”。';},8000);}).catch(()=>{$('loading').textContent='无法加载实验配置，请刷新重试。';});
-

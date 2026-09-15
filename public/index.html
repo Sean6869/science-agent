@@ -41,10 +41,14 @@
 </div>
 <form id="composer">
 <div class="input-row">
-<button type="button" id="voice" class="voice" aria-label="语音输入">● 语音</button>
-<textarea id="draft" rows="3" placeholder="先阅读上方标准，再写下小组的推理产出…">
-</textarea>
-<button class="send primary">提交</button>
+<textarea id="draft" rows="2" aria-label="本阶段产出" placeholder="输入小组的科学推理产出…"></textarea>
+<div class="composer-actions">
+<button type="button" id="voice" class="icon-button voice" aria-label="语音输入" title="语音输入">
+<svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3M9 21h6"/></svg>
+<svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+</button>
+<button type="submit" class="icon-button send primary" aria-label="提交产出" title="提交产出"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+</div>
 </div>
 <small id="voiceState"></small>
 </form>
@@ -56,5 +60,3 @@
 </script>
 </body>
 </html>
-
-
