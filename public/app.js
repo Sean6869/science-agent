@@ -1,11 +1,74 @@
-const stages=[{id:1,title:'共同观察与问题界定',short:'问题',brief:'欢迎来到科学实验室！一个好的科学问题需要明确具体，并且可以通过观察或测量回答。请结合凸透镜实验，写下你们想研究的问题。',placeholder:'例如：物距改变时，像的大小如何变化？'},{id:2,title:'提出并确认假设',short:'假设',brief:'一个好的实验假设要可检验、明确变量关系，并说明成立的条件。请写出你们对实验结果的预测。',placeholder:'请用“在……条件下，如果……那么……”写出假设。'},{id:3,title:'协作设计实验',short:'设计',brief:'设计时只改变一个变量，其他条件保持不变，并明确要观察和记录什么。请写下你们的实验步骤计划。',placeholder:'请说明改变、固定、观察和记录的内容。'},{id:4,title:'协作采集证据',short:'证据',brief:'数据的充分性和临界条件附近的变化都很重要。完成操作后选择一项自评，不必在这里输入文字。',placeholder:''},{id:5,title:'协作评估证据并得出结论',short:'结论',brief:'结论要覆盖实验条件、说明适用范围，并准确描述像距、大小、正倒和虚实。请依据你们的记录写出结论。',placeholder:'请引用至少一条具体观察或数据。'},{id:6,title:'反思讨论',short:'反思',brief:'高质量讨论要说清观点和理由，并指向表格数据或假设中的具体内容。请写下你们的讨论摘要。',placeholder:'哪条证据支持或挑战了你们的假设？'}];
-const assessment=[['needs_revision','还需要再改改：同一条件下只采集了一组数据，或遗漏了临界条件附近的观察。'],['partial','基本说清楚了：各条件有多组数据，但对临界条件附近的变化关注还不够。'],['sufficient','完整且充分：各条件有多组数据，并关注了临界条件附近的成像变化。']];
-const state={stage:1,group:'',members:'',data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[]}]))};
-const $=id=>document.getElementById(id); const stage=()=>stages.find(s=>s.id===state.stage); const save=()=>sessionStorage.setItem('science-session',JSON.stringify(state));
-function render(){const s=stage();document.querySelectorAll('.stage').forEach(x=>x.classList.toggle('active',+x.dataset.id===state.stage));$('brief').textContent=s.brief;$('stageStatus').textContent=`第 ${s.id} 步 · ${s.title} · ${state.data[s.id].submissions.length?'已提交':'进行中'}`;$('draft').value=state.data[s.id].draft;$('draft').placeholder=s.placeholder;$('assessment').hidden=s.id!==4; renderMessages();}
-function msg(role,text){state.data[state.stage].messages.push({role,text});renderMessages();save()}function renderMessages(){$('messages').innerHTML='';state.data[state.stage].messages.forEach(m=>{const e=document.createElement('div');e.className=`msg ${m.role}`;e.textContent=m.text;$('messages').append(e)});$('messages').scrollTop=$('messages').scrollHeight}
-function selectStage(id){state.stage=id;render();}
-function fixed(option){const text={needs_revision:'为了让结论更可靠，请在同一区间补充一两组不同物距，并对比焦点两侧的关键现象，再重新自评。',partial:'你们注意到了数据充分性。请再比较焦点两侧的记录，确认像的虚实和正倒是否发生变化。',sufficient:'根据你们的自评，数据覆盖较完整。请带着这些记录进入结论分析，并在结论中引用具体数据。'}[option]; state.data[4].submissions.push({type:'assessment',option,text});msg('user',text);msg('agent',text);$('stageStatus').textContent='第 4 步 · 已记录自评';save()}
-async function submit(){const text=$('draft').value.trim();if(!text)return;state.data[state.stage].draft=text;state.data[state.stage].submissions.push({text,source:'text',at:new Date().toISOString()});msg('user',text);msg('system','小科正在阅读你们的产出…');try{const r=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({stage:state.stage,text,group:state.group})});const p=await r.json();state.data[state.stage].messages.pop();msg('agent',p.content||'请继续补充具体证据。')}catch{state.data[state.stage].messages.pop();msg('agent',`暂时无法连接服务。请依据本阶段标准检查：${stage().brief}`)}$('draft').value='';save()}
-let recording=false;function voice(){recording=!recording;$('voice').classList.toggle('recording',recording);$('voiceState').textContent=recording?'正在录音…再次点击停止，当前版本将保留文字确认入口。':'语音转写服务尚未配置，请直接编辑文字后提交。'}
-$('stages').innerHTML=stages.map(s=>`<button class="stage" data-id="${s.id}"><b>${s.id} · ${s.title}</b><small>${s.short}</small></button>`).join('');document.querySelectorAll('.stage').forEach(b=>b.onclick=()=>selectStage(+b.dataset.id));$('composer').onsubmit=e=>{e.preventDefault();submit()};$('draft').oninput=e=>{state.data[state.stage].draft=e.target.value;save()};$('voice').onclick=voice;$('clear').onclick=()=>{if(confirm('清除本组所有记录？')){sessionStorage.removeItem('science-session');location.reload()}};$('profileForm').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);state.group=f.get('group');state.members=f.get('members');$('profileSaved').hidden=false;$('profileSaved').textContent=`已保存：${state.group} · ${state.members}`;$('sessionLabel').textContent=state.group;save()};$('profileToggle').onclick=()=>{$('profileForm').hidden=!$('profileForm').hidden};$('assessment').innerHTML=assessment.map(([id,t])=>`<label><input type="radio" name="assessment" value="${id}"> ${t}</label>`).join('');$('assessment').onchange=e=>fixed(e.target.value);try{Object.assign(state,JSON.parse(sessionStorage.getItem('science-session')||'{}'))}catch{};render();fetch('/api/config').then(r=>r.json()).then(c=>{$('lab').src=c.labUrl;$('openLab').href=c.labUrl;$('lab').onload=()=>$('loading').classList.add('done')});
+import { stages, assessments } from './content.js';
+const KEY='science-session-v2';
+const fresh=()=>({version:2,stage:1,group:'',members:'',data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false}]))});
+let state=fresh();
+try {const saved=JSON.parse(sessionStorage.getItem(KEY)); if(saved?.version===2 && stages.every(s=>saved.data?.[s.id]?.submissions && saved.data[s.id].messages) && stages.some(s=>s.id===saved.stage)) state=saved;} catch {}
+const $=id=>document.getElementById(id);
+const busy=new Set();
+let speech=null;
+function save(){try {sessionStorage.setItem(KEY,JSON.stringify(state));} catch {$('voiceState').textContent='存储不可用，刷新前请复制保存产出。';}}
+function add(id,role,text,extra={}) {state.data[id].messages.push({role,text,...extra});save();if(id===state.stage)renderMessages();}
+function renderMessages(){
+ $('messages').replaceChildren();
+ for(const m of state.data[state.stage].messages){const div=document.createElement('div');div.className=`msg ${m.role}`;div.textContent=m.text;
+ if(m.retry){const b=document.createElement('button');b.textContent='重试反馈';b.onclick=()=>requestFeedback(m.retry.stage,m.retry.submission);div.append(document.createElement('br'),b);}
+ $('messages').append(div);}
+ $('messages').scrollTop=$('messages').scrollHeight;
+}
+function render(){
+ const s=stages[state.stage-1],d=state.data[s.id];
+ document.querySelectorAll('.stage').forEach(b=>{const active=+b.dataset.id===s.id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
+ $('brief').textContent=s.brief;
+ $('stageStatus').textContent=`第 ${s.id} 步 · ${d.submissions.length?'已提交':'进行中'}${d.stale?' · 依据已更新，请复核':''}${d.draft?' · 有未提交草稿':''}`;
+ $('draft').value=d.draft;$('draft').placeholder=s.placeholder;
+ $('composer').hidden=s.id===4;$('assessment').hidden=s.id!==4;
+ $('draft').disabled=busy.has(s.id);document.querySelector('.send').disabled=busy.has(s.id);
+ renderMessages();save();
+}
+function profile(){const has=Boolean(state.group);$('profileSaved').hidden=!has;$('profileSaved').textContent=`${state.group} · ${state.members}`;$('profileForm').hidden=has;$('profileToggle').textContent=has?'编辑':'收起';$('sessionLabel').textContent=has?state.group:'请填写小组信息';$('profileForm').elements.group.value=state.group;$('profileForm').elements.members.value=state.members;}
+function invalidate(id){for(const s of stages)if(s.id>id&&state.data[s.id].submissions.length)state.data[s.id].stale=true;}
+async function requestFeedback(id,submission){
+ if(busy.has(id))return;busy.add(id);if(id===state.stage)render();
+ const epoch=state;const pending={role:'system',text:'小科正在阅读你们的产出…'};state.data[id].messages.push(pending);renderMessages();
+ try {
+ const r=await fetch('/api/chat',{method:'POST',signal:AbortSignal.timeout(30000),headers:{'content-type':'application/json'},body:JSON.stringify({stage:id,text:submission.text,context:submission.context})});
+ const p=await r.json();if(!r.ok)throw new Error(p.message||'服务请求失败');if(state!==epoch)return;
+ state.data[id].messages=state.data[id].messages.filter(m=>m!==pending && m.retry?.submission.id!==submission.id);
+ add(id,'agent',p.content,{submissionId:submission.id,source:p.source});
+ }catch{if(state!==epoch)return;state.data[id].messages=state.data[id].messages.filter(m=>m!==pending);add(id,'system','反馈暂不可用，产出已保存。可重试本次反馈。',{retry:{stage:id,submission}});}
+ finally{busy.delete(id);if(state===epoch){save();if(id===state.stage)render();}}
+}
+function submit(e){
+ e.preventDefault();const id=state.stage;if(busy.has(id))return;const text=$('draft').value.trim();if(!text)return;
+ if(!state.group){$('profileForm').hidden=false;$('profileForm').elements.group.focus();$('voiceState').textContent='请先保存小组编号和成员昵称。';return;}
+ const d=state.data[id];
+ const context=stages.filter(s=>s.id<id&&s.id!==4).map(s=>{const latest=state.data[s.id].submissions.at(-1);return latest?{stage:s.id,text:latest.text,id:latest.id}:null;}).filter(Boolean);
+ const submission={id:crypto.randomUUID(),text,context,at:new Date().toISOString(),revision:d.submissions.length+1};
+ d.submissions.push(submission);d.stale=false;d.draft='';invalidate(id);add(id,'user',`第${submission.revision}次产出\n${text}`);requestFeedback(id,submission);
+}
+$('stages').replaceChildren();
+for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;b.textContent=`${s.id} · ${s.title}`;b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();};$('stages').append(b);}
+const af=document.createElement('form');
+for(const a of assessments){const label=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='assessment';input.value=a.id;input.required=true;label.append(input,document.createTextNode(` ${a.label}：${a.detail}`));af.append(label);}
+const confirm=document.createElement('button');confirm.className='primary';confirm.textContent='确认小组自评';af.append(confirm);$('assessment').append(af);
+af.onsubmit=e=>{e.preventDefault();if(!state.group){$('profileForm').hidden=false;$('profileForm').elements.group.focus();return;}const option=new FormData(af).get('assessment'),a=assessments.find(a=>a.id===option),d=state.data[4];if(!a||d.submissions.at(-1)?.option===option)return;d.submissions.push({id:crypto.randomUUID(),option,at:new Date().toISOString()});d.stale=false;invalidate(4);add(4,'user',a.label+'：'+a.detail);add(4,'agent',a.reply);render();};
+$('composer').onsubmit=submit;
+$('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e.target.value;save();};
+$('profileForm').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);const group=String(f.get('group')).trim(),members=String(f.get('members')).trim();if(!group||!members)return;if(state.group&&state.group!==group){if(!window.confirm('更换小组会清除当前小组记录，继续吗？'))return;if(speech)speech.abort();state=fresh();}state.group=group;state.members=members;save();profile();render();};
+$('profileToggle').onclick=()=>{$('profileForm').hidden=!$('profileForm').hidden;$('profileToggle').textContent=$('profileForm').hidden?'编辑':'收起';};
+$('clear').onclick=()=>{if(window.confirm('清除本组所有草稿、产出及反馈？')){if(speech)speech.abort();state=fresh();save();profile();render();}};
+const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+$('voice').onclick=()=>{
+ if(speech){speech.stop();return;}
+ if(!Recognition){$('voiceState').textContent='当前浏览器不支持语音转写，请使用文字输入或支持语音识别的浏览器。';return;}
+ const id=state.stage,epoch=state,base=state.data[id].draft;let transcript='',cancelled=false;
+ const recognition=new Recognition();speech=recognition;recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;
+ recognition.onstart=()=>{$('voice').classList.add('recording');$('voice').textContent='■ 停止';$('voiceState').textContent='正在转写。语音由浏览器识别服务处理，停止后请核对数字、单位与术语再提交。';};
+ recognition.onresult=e=>{transcript=Array.from(e.results).map(r=>r[0].transcript).join('');if(state!==epoch||cancelled)return;state.data[id].draft=(base+(base?'\n':'')+transcript).slice(0,2000);if(state.stage===id)$('draft').value=state.data[id].draft;save();};
+ recognition.onerror=e=>{$('voiceState').textContent=`语音识别未完成（${e.error}），已有文字已保留，请编辑后提交。`;};
+ const timer=setTimeout(()=>recognition.stop(),90000);
+ recognition.onend=()=>{clearTimeout(timer);speech=null;$('voice').classList.remove('recording');$('voice').textContent='● 语音';};
+ try{recognition.start();}catch{speech=null;clearTimeout(timer);$('voiceState').textContent='无法启动语音识别，请使用文字输入。';}
+};
+profile();render();
+fetch('/api/config').then(r=>r.json()).then(c=>{ $('lab').onload=()=>{$('loading').classList.add('done');};$('lab').src=c.labUrl;$('openLab').href=c.labUrl;setTimeout(()=>{if(!$('loading').classList.contains('done'))$('loading').textContent='实验加载较慢，请使用上方“新页面打开”。';},8000);}).catch(()=>{$('loading').textContent='无法加载实验配置，请刷新重试。';});
