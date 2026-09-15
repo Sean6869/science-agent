@@ -24,6 +24,7 @@ p,h2{margin:0}
 .experiment{display:flex;flex-direction:column;padding:10px;position:sticky;top:8px;height:calc(100dvh - 16px)}
 .panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0 12px}
 .panel-head h2{font-size:16px;font-weight:700}
+.brand-logo{display:block;width:clamp(150px,18vw,235px);height:auto;max-height:58px;object-fit:contain;object-position:left center}
 .kicker{display:none}
 .panel-head a{color:var(--blue);font-size:12px;white-space:nowrap;text-decoration:none}
 .frame{flex:1;min-height:0;position:relative;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:var(--soft)}
@@ -76,4 +77,5 @@ textarea:focus-visible{outline:none}
  .app{padding:4px}.inquiry{padding:8px}.brief{padding:10px;font-size:13px}
  .stage-label{font-size:10px}.stage{padding:0;gap:4px}
  .panel-head h2{font-size:14px}.panel-head a{font-size:11px}
+ .brand-logo{width:150px;max-height:44px}
 }
