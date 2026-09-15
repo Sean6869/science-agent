@@ -65,7 +65,7 @@ function submit(e){
  d.submissions.push(submission);d.stale=false;d.draft='';invalidate(id);add(id,'user',`第${submission.revision}次产出\n${text}`);requestFeedback(id,submission);
 }
 $('stages').replaceChildren();
-for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();narrator.speak(s.brief);};$('stages').append(b);}
+for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();narrator.play(`/audio/stage-${s.id}.mp3`);};$('stages').append(b);}
 const af=document.createElement('form');
 for(const a of assessments){const label=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='assessment';input.value=a.id;input.required=true;label.append(input,document.createTextNode(` ${a.label}：${a.detail}`));af.append(label);}
 const confirm=document.createElement('button');confirm.className='primary';confirm.textContent='确认小组自评';af.append(confirm);$('assessment').append(af);
@@ -75,7 +75,7 @@ $('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e
 $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
 $('clear').onclick=()=>{if(window.confirm('清除本次所有草稿、产出及反馈？')){if(speech)speech.abort();state=fresh();save();render();}};
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-narrationButton.onclick=()=>narrator.isSpeaking()?narrator.stop():narrator.speak(stages[state.stage-1].brief);
+narrationButton.onclick=()=>narrator.isPlaying()?narrator.stop():narrator.play(`/audio/stage-${state.stage}.mp3`);
 $('voice').onclick=()=>{
  narrator.stop();
  if(speech){speech.stop();return;}
@@ -90,5 +90,5 @@ $('voice').onclick=()=>{
  try{recognition.start();}catch{speech=null;clearTimeout(timer);$('voiceState').textContent='无法启动语音识别，请使用文字输入。';}
 };
 render();
-setTimeout(()=>narrator.speak(stages[state.stage-1].brief),150);
+setTimeout(()=>narrator.play(`/audio/stage-${state.stage}.mp3`),150);
 fetch('/api/config').then(r=>r.json()).then(c=>{ $('lab').onload=()=>{$('loading').classList.add('done');};$('lab').src=c.labUrl;$('openLab').href=c.labUrl;setTimeout(()=>{if(!$('loading').classList.contains('done'))$('loading').textContent='实验加载较慢，请使用上方“新页面打开”。';},8000);}).catch(()=>{$('loading').textContent='无法加载实验配置，请刷新重试。';});

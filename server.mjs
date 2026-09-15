@@ -36,7 +36,7 @@ export function createApp() { return createServer(async (req,res)=>{
   if(req.method!=='GET') return json(res,405,{message:'不支持此请求'});
   const path=resolve(pub,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
   if(!path.startsWith(pub+sep)) return json(res,403,{message:'禁止访问'});
-  try {const file=await readFile(path);res.writeHead(200,{'content-type':({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8'})[extname(path)]||'application/octet-stream','x-content-type-options':'nosniff'});res.end(file);} catch {json(res,404,{message:'文件不存在'});}
+  try {const file=await readFile(path);res.writeHead(200,{'content-type':({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.mp3':'audio/mpeg'})[extname(path)]||'application/octet-stream','x-content-type-options':'nosniff'});res.end(file);} catch {json(res,404,{message:'文件不存在'});}
  } catch {json(res,500,{message:'服务暂不可用'});}
 });}
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) createApp().listen(process.env.PORT||4173,()=>console.log('Science inquiry server ready'));
