@@ -28,7 +28,7 @@ function renderBrief(text) {
 }
 function render(){
  const s=stages[state.stage-1],d=state.data[s.id];
- document.querySelectorAll('.stage').forEach(b=>{const active=+b.dataset.id===s.id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active)); const done=state.data[b.dataset.id].submissions.length>0; b.classList.toggle('complete',done); b.querySelector('.stage-state').textContent=active?'当前阶段':done?'已提交':'未开始';});
+ document.querySelectorAll('.stage').forEach(b=>{const active=+b.dataset.id===s.id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));const done=state.data[b.dataset.id].submissions.length>0;b.classList.toggle('complete',done);});
  renderBrief(s.brief);
  $('stageStatus').textContent=`第 ${s.id} 步 · ${d.submissions.length?'已提交':'进行中'}${d.stale?' · 依据已更新，请复核':''}${d.draft?' · 有未提交草稿':''}`;
  $('draft').value=d.draft;$('draft').placeholder=s.placeholder;
@@ -57,7 +57,7 @@ function submit(e){
  d.submissions.push(submission);d.stale=false;d.draft='';invalidate(id);add(id,'user',`第${submission.revision}次产出\n${text}`);requestFeedback(id,submission);
 }
 $('stages').replaceChildren();
-for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);const status=document.createElement('span');status.className='stage-state';b.append(number,label,status);b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();};$('stages').append(b);}
+for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();};$('stages').append(b);}
 const af=document.createElement('form');
 for(const a of assessments){const label=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='assessment';input.value=a.id;input.required=true;label.append(input,document.createTextNode(` ${a.label}：${a.detail}`));af.append(label);}
 const confirm=document.createElement('button');confirm.className='primary';confirm.textContent='确认小组自评';af.append(confirm);$('assessment').append(af);
