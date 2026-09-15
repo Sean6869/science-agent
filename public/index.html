@@ -1,1 +1,60 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>小科｜虚拟科学探究平台</title><link rel="stylesheet" href="/styles.css"></head><body><main class="app"><header><div><span class="kicker">SCIENCE INQUIRY LAB</span><h1>小科 · 凸透镜探究</h1><p class="subtitle">把观察变成证据，把想法变成结论</p></div><div class="session" id="sessionLabel">未开始</div></header><section class="layout"><article class="experiment"><div class="panel-head"><div><span class="kicker">实验空间</span><h2>探究凸透镜成像的规律</h2></div><a id="openLab" target="_blank" rel="noopener">新页面打开 ↗</a></div><div class="frame"><div id="loading">正在连接 NOBOOK 实验…</div><iframe id="lab" title="NOBOOK 凸透镜实验"></iframe></div><p class="hint">完成一次操作后，记下物距、像距、像的虚实、大小和正倒，再回到右侧提交。</p></article><aside class="coach"><section class="profile"><div class="panel-head"><div><span class="kicker">协作信息</span><h2>试验者</h2></div><button id="profileToggle">收起</button></div><form id="profileForm"><input name="group" placeholder="小组编号（必填）" required><input name="members" placeholder="成员昵称（必填）" required><button class="primary">保存小组</button></form><div id="profileSaved" class="saved" hidden></div></section><section class="inquiry"><nav id="stages" aria-label="探究阶段"></nav><div class="brief" id="brief"></div><div class="stage-meta"><span id="stageStatus"></span><button id="clear" class="link">清空本组记录</button></div><div id="messages" class="messages" aria-live="polite"></div><div id="assessment" class="assessment" hidden></div><form id="composer"><div class="input-row"><button type="button" id="voice" class="voice" aria-label="语音输入">● 语音</button><textarea id="draft" rows="3" placeholder="先阅读上方标准，再写下小组的推理产出…"></textarea><button class="send primary">提交</button></div><small id="voiceState">语音会先转成可编辑文字，确认后才会提交。</small></form></section></aside></section></main><script type="module" src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小科｜虚拟科学探究平台</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="app">
+<section class="layout">
+<article class="experiment">
+<div class="panel-head">
+<div>
+<span class="kicker">实验空间</span>
+<h2>探究凸透镜成像的规律</h2>
+</div>
+<a id="openLab" target="_blank" rel="noopener">新页面打开 ↗</a>
+</div>
+<div class="frame">
+<div id="loading">正在连接 NOBOOK 实验…</div>
+<iframe id="lab" title="NOBOOK 凸透镜实验">
+</iframe>
+</div>
+</article>
+<aside class="coach">
+<section class="inquiry">
+
+<nav id="stages" aria-label="探究阶段">
+</nav>
+<div class="brief" id="brief">
+</div>
+<div class="stage-meta">
+<span id="stageStatus">
+</span>
+<button id="clear" class="link">清空本次记录</button>
+</div>
+<div id="messages" class="messages" aria-live="polite">
+</div>
+<div id="assessment" class="assessment" hidden>
+</div>
+<form id="composer">
+<div class="input-row">
+<button type="button" id="voice" class="voice" aria-label="语音输入">● 语音</button>
+<textarea id="draft" rows="3" placeholder="先阅读上方标准，再写下小组的推理产出…">
+</textarea>
+<button class="send primary">提交</button>
+</div>
+<small id="voiceState"></small>
+</form>
+</section>
+</aside>
+</section>
+</main>
+<script type="module" src="/app.js">
+</script>
+</body>
+</html>
+
+
