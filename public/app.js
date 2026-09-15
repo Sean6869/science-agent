@@ -1,4 +1,5 @@
 import { stages, assessments } from './content.js';
+import { createNarrator } from './narration.js';
 const KEY='science-session-v2';
 const fresh=()=>({version:2,stage:1,group:'',members:'',data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false}]))});
 let state=fresh();
@@ -6,6 +7,13 @@ try {const saved=JSON.parse(sessionStorage.getItem(KEY)); if(saved?.version===2 
 const $=id=>document.getElementById(id);
 const busy=new Set();
 let speech=null;
+const narrationButton=$('narrate');
+const narrator=createNarrator({onState:playing=>{
+ narrationButton.classList.toggle('playing',playing);
+ narrationButton.setAttribute('aria-label',playing?'停止播放开场白':'播放开场白');
+ narrationButton.title=playing?'停止播放':'播放开场白';
+}});
+narrationButton.hidden=!narrator.supported;
 function save(){try {sessionStorage.setItem(KEY,JSON.stringify(state));} catch {$('voiceState').textContent='存储不可用，刷新前请复制保存产出。';}}
 function add(id,role,text,extra={}) {state.data[id].messages.push({role,text,...extra});save();if(id===state.stage)renderMessages();}
 function renderMessages(){
@@ -24,7 +32,7 @@ function renderBrief(text) {
   node.textContent=line;
   return node;
  });
- $('brief').replaceChildren(...nodes);
+ $('brief').replaceChildren(narrationButton,...nodes);
 }
 function render(){
  const s=stages[state.stage-1],d=state.data[s.id];
@@ -57,7 +65,7 @@ function submit(e){
  d.submissions.push(submission);d.stale=false;d.draft='';invalidate(id);add(id,'user',`第${submission.revision}次产出\n${text}`);requestFeedback(id,submission);
 }
 $('stages').replaceChildren();
-for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();};$('stages').append(b);}
+for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();narrator.speak(s.brief);};$('stages').append(b);}
 const af=document.createElement('form');
 for(const a of assessments){const label=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='assessment';input.value=a.id;input.required=true;label.append(input,document.createTextNode(` ${a.label}：${a.detail}`));af.append(label);}
 const confirm=document.createElement('button');confirm.className='primary';confirm.textContent='确认小组自评';af.append(confirm);$('assessment').append(af);
@@ -67,7 +75,9 @@ $('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e
 $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
 $('clear').onclick=()=>{if(window.confirm('清除本次所有草稿、产出及反馈？')){if(speech)speech.abort();state=fresh();save();render();}};
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+narrationButton.onclick=()=>narrator.isSpeaking()?narrator.stop():narrator.speak(stages[state.stage-1].brief);
 $('voice').onclick=()=>{
+ narrator.stop();
  if(speech){speech.stop();return;}
  if(!Recognition){$('voiceState').textContent='当前浏览器不支持语音转写，请使用文字输入或支持语音识别的浏览器。';return;}
  const id=state.stage,epoch=state,base=state.data[id].draft;let transcript='',cancelled=false;
@@ -80,4 +90,5 @@ $('voice').onclick=()=>{
  try{recognition.start();}catch{speech=null;clearTimeout(timer);$('voiceState').textContent='无法启动语音识别，请使用文字输入。';}
 };
 render();
+setTimeout(()=>narrator.speak(stages[state.stage-1].brief),150);
 fetch('/api/config').then(r=>r.json()).then(c=>{ $('lab').onload=()=>{$('loading').classList.add('done');};$('lab').src=c.labUrl;$('openLab').href=c.labUrl;setTimeout(()=>{if(!$('loading').classList.contains('done'))$('loading').textContent='实验加载较慢，请使用上方“新页面打开”。';},8000);}).catch(()=>{$('loading').textContent='无法加载实验配置，请刷新重试。';});
