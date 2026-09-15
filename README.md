@@ -27,8 +27,11 @@ npm run check
 - `PORT`：服务端口，默认 `4173`。
 - `PUBLIC_NOBOOK_LENS_RESOURCE_URL`：公开的 NOBOOK iframe 地址，不是密钥。
 - `DEEPSEEK_API_KEY`：DeepSeek API key，只在 `server.mjs` 中读取，不下发浏览器。
-- `DEEPSEEK_MODEL`：DeepSeek 模型，默认 `deepseek-v4-flash`。
-- `AGENT_API_URL` / `AGENT_API_KEY`：可选泛用外部 Agent 端点；配置 DeepSeek 时优先使用 DeepSeek。
+- `DEEPSEEK_MODEL`：DeepSeek 模型，默认 `deepseek-flash`（V4.1 Flash），也支持 `deepseek-v4-pro`。
+- `DEEPSEEK_THINKING`：`disabled`（默认）或 `enabled`。课堂短反馈默认关闭思考模式。
+- `DEEPSEEK_REASONING_EFFORT`：开启思考时使用 `low`（默认）、`high` 或 `max`。
+
+接入按 [2026-09-10 更新日志](https://api-docs.deepseek.com/zh-cn/updates/)及[思考模式文档](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode/)调整，继续使用 Chat Completions 接口。旧模型名自动迁移到 `deepseek-flash`；旧 `deepseek-reasoner` 在未明确设置模式时保留思考模式。非思考模式最多输出 700 token、超时 25 秒；思考模式使用 8192 token、超时 60 秒，浏览器等待上限 65 秒。只展示完整的最终回答，不展示推理内容；截断、空回答或接口故障均返回明确的自查提示。旧的 `AGENT_API_URL` / `AGENT_API_KEY` 未被实现，已从配置模板移除。
 
 本地配置示例：
 

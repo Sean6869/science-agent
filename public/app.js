@@ -41,7 +41,7 @@ async function requestFeedback(id,submission){
  if(busy.has(id))return;busy.add(id);if(id===state.stage)render();
  const epoch=state;const pending={role:'system',text:'小科正在阅读你们的产出…'};state.data[id].messages.push(pending);renderMessages();
  try {
- const r=await fetch('/api/chat',{method:'POST',signal:AbortSignal.timeout(30000),headers:{'content-type':'application/json'},body:JSON.stringify({stage:id,text:submission.text,context:submission.context})});
+ const r=await fetch('/api/chat',{method:'POST',signal:AbortSignal.timeout(65000),headers:{'content-type':'application/json'},body:JSON.stringify({stage:id,text:submission.text,context:submission.context})});
  const p=await r.json();if(!r.ok)throw new Error(p.message||'服务请求失败');if(state!==epoch)return;
  state.data[id].messages=state.data[id].messages.filter(m=>m!==pending && m.retry?.submission.id!==submission.id);
  add(id,'agent',p.content,{submissionId:submission.id,source:p.source});
