@@ -17,7 +17,7 @@ function renderMessages(){
 }
 function render(){
  const s=stages[state.stage-1],d=state.data[s.id];
- document.querySelectorAll('.stage').forEach(b=>{const active=+b.dataset.id===s.id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
+ document.querySelectorAll('.stage').forEach(b=>{const active=+b.dataset.id===s.id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active)); const done=state.data[b.dataset.id].submissions.length>0; b.classList.toggle('complete',done); b.querySelector('.stage-state').textContent=active?'当前阶段':done?'已提交':'未开始';});
  $('brief').textContent=s.brief;
  $('stageStatus').textContent=`第 ${s.id} 步 · ${d.submissions.length?'已提交':'进行中'}${d.stale?' · 依据已更新，请复核':''}${d.draft?' · 有未提交草稿':''}`;
  $('draft').value=d.draft;$('draft').placeholder=s.placeholder;
@@ -25,7 +25,6 @@ function render(){
  $('draft').disabled=busy.has(s.id);document.querySelector('.send').disabled=busy.has(s.id);
  renderMessages();save();
 }
-function profile(){const has=Boolean(state.group);$('profileSaved').hidden=!has;$('profileSaved').textContent=`${state.group} · ${state.members}`;$('profileForm').hidden=has;$('profileToggle').textContent=has?'编辑':'收起';$('sessionLabel').textContent=has?state.group:'请填写小组信息';$('profileForm').elements.group.value=state.group;$('profileForm').elements.members.value=state.members;}
 function invalidate(id){for(const s of stages)if(s.id>id&&state.data[s.id].submissions.length)state.data[s.id].stale=true;}
 async function requestFeedback(id,submission){
  if(busy.has(id))return;busy.add(id);if(id===state.stage)render();
@@ -40,23 +39,21 @@ async function requestFeedback(id,submission){
 }
 function submit(e){
  e.preventDefault();const id=state.stage;if(busy.has(id))return;const text=$('draft').value.trim();if(!text)return;
- if(!state.group){$('profileForm').hidden=false;$('profileForm').elements.group.focus();$('voiceState').textContent='请先保存小组编号和成员昵称。';return;}
+ 
  const d=state.data[id];
  const context=stages.filter(s=>s.id<id&&s.id!==4).map(s=>{const latest=state.data[s.id].submissions.at(-1);return latest?{stage:s.id,text:latest.text,id:latest.id}:null;}).filter(Boolean);
  const submission={id:crypto.randomUUID(),text,context,at:new Date().toISOString(),revision:d.submissions.length+1};
  d.submissions.push(submission);d.stale=false;d.draft='';invalidate(id);add(id,'user',`第${submission.revision}次产出\n${text}`);requestFeedback(id,submission);
 }
 $('stages').replaceChildren();
-for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;b.textContent=`${s.id} · ${s.title}`;b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();};$('stages').append(b);}
+for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=s.title;const status=document.createElement('span');status.className='stage-state';b.append(number,label,status);b.onclick=()=>{if(speech)speech.stop();state.stage=s.id;render();};$('stages').append(b);}
 const af=document.createElement('form');
 for(const a of assessments){const label=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='assessment';input.value=a.id;input.required=true;label.append(input,document.createTextNode(` ${a.label}：${a.detail}`));af.append(label);}
 const confirm=document.createElement('button');confirm.className='primary';confirm.textContent='确认小组自评';af.append(confirm);$('assessment').append(af);
-af.onsubmit=e=>{e.preventDefault();if(!state.group){$('profileForm').hidden=false;$('profileForm').elements.group.focus();return;}const option=new FormData(af).get('assessment'),a=assessments.find(a=>a.id===option),d=state.data[4];if(!a||d.submissions.at(-1)?.option===option)return;d.submissions.push({id:crypto.randomUUID(),option,at:new Date().toISOString()});d.stale=false;invalidate(4);add(4,'user',a.label+'：'+a.detail);add(4,'agent',a.reply);render();};
+af.onsubmit=e=>{e.preventDefault();const option=new FormData(af).get('assessment'),a=assessments.find(a=>a.id===option),d=state.data[4];if(!a||d.submissions.at(-1)?.option===option)return;d.submissions.push({id:crypto.randomUUID(),option,at:new Date().toISOString()});d.stale=false;invalidate(4);add(4,'user',a.label+'：'+a.detail);add(4,'agent',a.reply);render();};
 $('composer').onsubmit=submit;
 $('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e.target.value;save();};
-$('profileForm').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);const group=String(f.get('group')).trim(),members=String(f.get('members')).trim();if(!group||!members)return;if(state.group&&state.group!==group){if(!window.confirm('更换小组会清除当前小组记录，继续吗？'))return;if(speech)speech.abort();state=fresh();}state.group=group;state.members=members;save();profile();render();};
-$('profileToggle').onclick=()=>{$('profileForm').hidden=!$('profileForm').hidden;$('profileToggle').textContent=$('profileForm').hidden?'编辑':'收起';};
-$('clear').onclick=()=>{if(window.confirm('清除本组所有草稿、产出及反馈？')){if(speech)speech.abort();state=fresh();save();profile();render();}};
+$('clear').onclick=()=>{if(window.confirm('清除本次所有草稿、产出及反馈？')){if(speech)speech.abort();state=fresh();save();render();}};
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 $('voice').onclick=()=>{
  if(speech){speech.stop();return;}
@@ -70,5 +67,6 @@ $('voice').onclick=()=>{
  recognition.onend=()=>{clearTimeout(timer);speech=null;$('voice').classList.remove('recording');$('voice').textContent='● 语音';};
  try{recognition.start();}catch{speech=null;clearTimeout(timer);$('voiceState').textContent='无法启动语音识别，请使用文字输入。';}
 };
-profile();render();
+render();
 fetch('/api/config').then(r=>r.json()).then(c=>{ $('lab').onload=()=>{$('loading').classList.add('done');};$('lab').src=c.labUrl;$('openLab').href=c.labUrl;setTimeout(()=>{if(!$('loading').classList.contains('done'))$('loading').textContent='实验加载较慢，请使用上方“新页面打开”。';},8000);}).catch(()=>{$('loading').textContent='无法加载实验配置，请刷新重试。';});
+
