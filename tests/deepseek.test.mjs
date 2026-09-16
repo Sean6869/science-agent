@@ -17,6 +17,13 @@ test('default request explicitly disables thinking and exposes only final conten
  assert.equal(result, '请补充观察条件。');
 });
 
+test('structured feedback requests DeepSeek JSON output',async()=>{
+ await completeFeedback([{role:'user',content:'输出JSON'}],{env:{DEEPSEEK_API_KEY:'test'},responseFormat:{type:'json_object'},fetchImpl:async(_url,init)=>{
+  assert.deepEqual(JSON.parse(init.body).response_format,{type:'json_object'});
+  return Response.json({choices:[{finish_reason:'stop',message:{content:'{"ok":true}'}}]});
+ }});
+});
+
 test('legacy models migrate while explicit thinking settings take precedence', () => {
  for (const name of ['deepseek-chat','deepseek-reasoner','deepseek-v4-flash','deepseek-v4-flash-vision-exp']) {
   assert.equal(deepseekConfig({DEEPSEEK_MODEL:name}).model, 'deepseek-flash');

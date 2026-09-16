@@ -27,8 +27,31 @@
 <aside class="coach">
 <section class="inquiry">
 
+<section class="stage-progress">
 <nav id="stages" aria-label="探究阶段">
 </nav>
+<div class="timer-toolbar">
+<div id="stageTimer" class="stage-timer" data-state="idle" aria-live="polite">
+<svg class="alarm-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3 3 7m14-4 4 4M5 13a7 7 0 1 1 14 0c0 2.2-1 4.2-2.6 5.5L18 21M6 21l1.6-2.5M12 9v4l2.5 1.5"/></svg>
+<span id="timerLabel">第 1 环节</span>
+<strong id="timerRemaining">05:00</strong>
+<span id="timerHint">点击环节开始</span>
+<button id="timerToggle" type="button" class="icon-button timer-control" aria-label="开始倒计时" title="开始倒计时">
+<svg class="timer-play" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 9 6-9 6V6Z"/></svg>
+<svg class="timer-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg>
+</button>
+<button id="timerReset" type="button" class="link timer-reset">重置</button>
+</div>
+<button id="timerSettingsToggle" type="button" class="timer-settings-toggle" aria-expanded="false" aria-controls="timerSettingsPanel">设置各环节时间⌄</button>
+</div>
+<form id="timerSettingsPanel" class="timer-settings-panel" hidden>
+<div id="timerFields" class="timer-fields"></div>
+<div class="timer-settings-actions">
+<span>保存后将按新时长重置全部倒计时</span>
+<button type="submit" class="primary">保存时间设置</button>
+</div>
+</form>
+</section>
 <div class="brief" id="brief">
 <button id="narrate" type="button" class="icon-button brief-narrate" aria-label="播放开场白" title="播放开场白">
 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Zm4 4a4 4 0 0 1 0 6m2.5-8.5a7.5 7.5 0 0 1 0 11"/></svg>

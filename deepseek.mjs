@@ -12,14 +12,14 @@ export function deepseekConfig(env = process.env) {
   : {temperature: 0.2, max_tokens: 700})};
 }
 
-export async function completeFeedback(messages, {env = process.env, fetchImpl = fetch} = {}) {
+export async function completeFeedback(messages, {env = process.env, fetchImpl = fetch, responseFormat} = {}) {
  if (!env.DEEPSEEK_API_KEY?.trim()) throw new Error('DeepSeek key is not configured');
  const config = deepseekConfig(env);
  const response = await fetchImpl('https://api.deepseek.com/chat/completions', {
   method: 'POST',
   signal: AbortSignal.timeout(config.thinking.type === 'enabled' ? 60000 : 25000),
   headers: {'content-type': 'application/json', authorization: `Bearer ${env.DEEPSEEK_API_KEY.trim()}`},
-  body: JSON.stringify({...config, stream: false, messages})
+  body: JSON.stringify({...config, stream: false, messages, ...(responseFormat?{response_format:responseFormat}:{})})
  });
  if (!response.ok) throw new Error(`DeepSeek HTTP ${response.status}`);
  const result = await response.json();
