@@ -115,16 +115,21 @@ textarea:focus-visible{outline:none}
 
 
 .lesson-selector{display:flex;justify-content:center;align-items:center;gap:8px}
-.lesson-selector button{border:0;background:transparent;color:#54c3ec;font-size:27px;line-height:1;padding:3px;text-shadow:1px 1px 0 #0766a4,-1px -1px 0 #0766a4;transition:transform .15s}
 #previousLesson{transform:rotate(180deg)}
-.lesson-selector strong{white-space:nowrap;font-size:22px;font-weight:900;color:#76d4f4;-webkit-text-stroke:1px #1474ae;paint-order:stroke fill;text-shadow:0 2px 0 #125c94;letter-spacing:1px}
 .knowledge-pet{position:fixed;left:24px;top:calc(100dvh - 106px);z-index:30;width:76px;height:76px;padding:0;border:0;background:transparent;touch-action:none;user-select:none;cursor:grab;filter:drop-shadow(0 4px 5px #174b7830)}
 .knowledge-pet img{width:100%;height:100%;object-fit:contain;pointer-events:none}
 .knowledge-pet.dragging{cursor:grabbing;transform:scale(1.06)}
 .knowledge-pet[aria-expanded="true"]{filter:drop-shadow(0 0 6px #58c8ef88)}
-@media(max-width:650px){.panel-head{grid-template-columns:auto 1fr}.workspace-actions{grid-column:1/-1}.lesson-selector strong{font-size:20px}}
+@media(max-width:650px){.panel-head{grid-template-columns:auto 1fr}.workspace-actions{grid-column:1/-1}}
 
 #coachToggle{display:flex;align-items:center;gap:3px;padding:3px;border:0;background:transparent}
 #coachToggle img{width:96px;height:32px;object-fit:contain}
 #coachToggle span{font-size:24px;color:#187bb5}
 #coachToggle[aria-expanded="false"] span{transform:rotate(180deg)}
+
+.lesson-selector button{display:grid;place-items:center;width:36px;height:36px;padding:2px;border:0;background:transparent;transition:filter .15s}
+.lesson-selector button svg{width:30px;height:30px}
+.lesson-selector button:hover{filter:brightness(1.08)}
+#lessonLabel{display:flex;align-items:center}
+#lessonArtwork{display:block;width:116px;height:38px;object-fit:contain}
+.knowledge-pet::before{content:"";position:absolute;inset:3px;border-radius:50%;background:white;z-index:-1}

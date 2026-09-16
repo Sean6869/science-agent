@@ -15,7 +15,9 @@ export async function createExperimentWorkspace(){
    if(activeId===lesson.id)return;
    activeId=lesson.id;clearTimeout(timeout);
    try{sessionStorage.setItem('science-lesson',lesson.id);}catch{}
-   document.getElementById('lessonLabel').textContent=`第${['一','二','三'][lessons.indexOf(lesson)]}节课`;
+   const artwork=document.getElementById('lessonArtwork');
+   artwork.src=`/assets/lesson-${lesson.number}.png`;
+   artwork.alt=`第${['一','二','三'][lessons.indexOf(lesson)]}节课`; 
    selector.title=lesson.title;
    let entry=instances.get(lesson.id);
    if(!entry){
