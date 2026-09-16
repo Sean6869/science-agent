@@ -1,3 +1,4 @@
+import {lessons,defaultLessonId} from './lessons.mjs';
 import { completeFeedback } from './deepseek.mjs';
 import {answerKnowledge} from './knowledge-agent.mjs';
 import {buildFeedbackMessages,exhaustedFeedback,fallbackFeedback,formatStructuredFeedback,isStructuredFeedbackComplete,MAX_CONTENT_SUBMISSIONS} from './metacognitive-agent.mjs';
@@ -29,9 +30,7 @@ export function createApp() { return createServer(async (req,res)=>{
  try {
   const url = new URL(req.url,'http://localhost');
   if (url.pathname==='/api/config' && req.method==='GET') {
-   let labUrl = 'https://phet.colorado.edu/sims/html/geometric-optics/latest/geometric-optics_zh_CN.html?screens=1';
-   try { const u=new URL(process.env.PUBLIC_PHET_GEOMETRIC_OPTICS_URL||labUrl); if(u.protocol==='https:' && u.hostname==='phet.colorado.edu' && u.pathname.startsWith('/sims/html/geometric-optics/') && u.pathname.endsWith('.html')) labUrl=u.href; } catch {}
-   return json(res,200,{labUrl});
+   return json(res,200,{lessons,defaultLessonId});
   }
   if(url.pathname==='/api/knowledge' && req.method==='POST') {
    let p;try{p=await body(req);}catch{return json(res,400,{message:'请求格式无效'});}

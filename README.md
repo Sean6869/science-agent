@@ -1,6 +1,6 @@
 # 凸透镜探究智能实验平台
 
-面向初中学生的 Web 实验应用：左侧直接嵌入 PhET 中文“几何光学”实验，右侧提供六阶段探究引导与对话式智能学伴“小科”。
+面向初中学生的 Web 实验应用：左侧可切换三个 PhET 中文实验，右侧提供六阶段探究引导与对话式智能学伴“小科”。
 
 当前已包含一个轻量 Web 应用骨架：左侧嵌入 PhET 实验，右侧提供六阶段进度、阶段开场白和对话式智能学伴“小科”。
 
@@ -25,7 +25,6 @@ npm run check
 参考 [.env.example](.env.example)。服务启动时会尝试读取本地 `.env.local`，该文件已被 Git 忽略；生产环境建议通过部署平台或进程管理器注入环境变量。
 
 - `PORT`：服务端口，默认 `4173`。
-- `PUBLIC_PHET_GEOMETRIC_OPTICS_URL`：公开的 PhET iframe 地址，不是密钥。
 - `DEEPSEEK_API_KEY`：DeepSeek API key，只在 `server.mjs` 中读取，不下发浏览器。
 - `DEEPSEEK_MODEL`：DeepSeek 模型，默认 `deepseek-flash`（V4.1 Flash），也支持 `deepseek-v4-pro`。
 - `DEEPSEEK_THINKING`：`disabled`（默认）或 `enabled`。课堂短反馈默认关闭思考模式。
@@ -56,9 +55,7 @@ npm run dev
 左侧实验不基于该 HTML 编写或拆分，直接嵌入 PhET 第三方页面：
 
 - 用户提供的资源入口：[PhET 中文模拟平台](https://phet.colorado.edu/zh_CN/)
-- 默认嵌入的实验：[几何光学（中文透镜屏幕）](https://phet.colorado.edu/sims/html/geometric-optics/latest/geometric-optics_zh_CN.html?screens=1)
 
-课堂页面直接加载“几何光学”的透镜屏幕，跳过平台首页和实验检索步骤；页面右上角仍保留“新页面打开”作为嵌入失败时的恢复入口。
 
 ## 已确定的产品方向
 
@@ -78,3 +75,13 @@ npm run dev
 
 两个智能体使用独立入口与会话：元认知支架可通过实验区右上方按钮收起，收起后实验占满可用宽度；点击左上角小科头像打开知识答疑。知识答疑支持基础概念解释，不消耗正式内容提交次数，遇到完整核心规律提问时引导学生回到实验。知识提示词集中在 knowledge-agent.mjs，前端会话在 public/knowledge-chat.js。
 输入区采用独立内容高度，约为原截图的一半，剩余高度用于聊天记录。
+
+## 实验课程
+
+课程目录由 `lessons.mjs` 统一定义，`/api/config` 返回课程目录。前端 `public/experiment-workspace.js` 管理课程选择、加载与外部打开链接。
+
+1. 光的折射
+2. 几何光学：基础
+3. 电路组装和欧姆定律
+
+首次进入默认第一节；刷新恢复所选课程。切换时保留已加载实验的 iframe，返回时继续操作；刷新页面会重置实验内部状态。探究支架、计时和对话不因实验切换而清空。

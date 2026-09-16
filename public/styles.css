@@ -115,3 +115,8 @@ textarea:focus-visible{outline:none}
  .panel-head h2{font-size:14px}.panel-head a{font-size:11px}
  .brand-logo{width:150px;max-height:44px}
 }
+
+.lesson-selector{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px;flex:none}
+.lesson-selector button{font-size:13px;line-height:1.4;padding:8px 5px;background:var(--soft)}
+.lesson-selector button span{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}
+.lesson-selector button[aria-pressed="true"]{border-color:var(--blue);background:#edf3ff;color:var(--blue)}

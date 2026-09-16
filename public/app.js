@@ -1,3 +1,4 @@
+import {createExperimentWorkspace} from './experiment-workspace.js';
 import { stages, assessments } from './content.js';
 import { createNarrator } from './narration.js';
 import {createWorkspacePanels} from './workspace-panels.js';
@@ -151,4 +152,4 @@ createWorkspacePanels();
 createKnowledgeChat();
 setInterval(()=>{const result=advanceTimer(state.timers[state.stage]);if(result.warning){ringAlarm();save();}if(result.finished){ringAlarm(true);save();}renderTimer();},250);
 setTimeout(()=>narrator.play(`/audio/stage-${state.stage}.mp3`),150);
-fetch('/api/config').then(r=>r.json()).then(c=>{ $('lab').onload=()=>{$('loading').classList.add('done');};$('lab').src=c.labUrl;$('openLab').href=c.labUrl;setTimeout(()=>{if(!$('loading').classList.contains('done'))$('loading').textContent='实验加载较慢，请使用上方“新页面打开”。';},8000);}).catch(()=>{$('loading').textContent='无法加载实验配置，请刷新重试。';});
+createExperimentWorkspace();
