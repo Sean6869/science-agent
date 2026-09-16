@@ -3,7 +3,6 @@ export async function createExperimentWorkspace(){
  const initial=document.getElementById('lab');
  const frame=initial.parentElement;
  const loading=document.getElementById('loading');
- const open=document.getElementById('openLab');
  const instances=new Map();
  let activeId;
  let timeout;
@@ -16,9 +15,8 @@ export async function createExperimentWorkspace(){
    if(activeId===lesson.id)return;
    activeId=lesson.id;clearTimeout(timeout);
    try{sessionStorage.setItem('science-lesson',lesson.id);}catch{}
-   open.href=lesson.url;
-   open.setAttribute('aria-label',`新页面打开：${lesson.title}`);
-   for(const button of selector.children)button.setAttribute('aria-pressed',String(button.dataset.lesson===lesson.id));
+   document.getElementById('lessonLabel').textContent=`第${['一','二','三'][lessons.indexOf(lesson)]}节课`;
+   selector.title=lesson.title;
    let entry=instances.get(lesson.id);
    if(!entry){
     const element=instances.size?document.createElement('iframe'):initial;
@@ -31,14 +29,11 @@ export async function createExperimentWorkspace(){
    for(const [id,item] of instances)item.element.hidden=id!==activeId;
    loading.textContent=`正在连接 ${lesson.title}…`;
    loading.classList.toggle('done',entry.loaded);
-   if(!entry.loaded)timeout=setTimeout(()=>{loading.textContent='实验加载较慢，可使用上方“新页面打开”。';},8000);
+   if(!entry.loaded)timeout=setTimeout(()=>{loading.textContent='实验加载较慢，请检查网络连接后刷新页面。';},8000);
   }
-  for(const lesson of lessons){
-   const button=document.createElement('button');button.type='button';button.dataset.lesson=lesson.id;
-   const number=document.createElement('span');number.textContent=`第 ${lesson.number} 节课`;
-   button.append(number,document.createTextNode(lesson.title));
-   button.addEventListener('click',()=>select(lesson));selector.append(button);
-  }
+  const step=offset=>select(lessons[(lessons.findIndex(l=>l.id===activeId)+offset+lessons.length)%lessons.length]);
+  document.getElementById('previousLesson').onclick=()=>step(-1);
+  document.getElementById('nextLesson').onclick=()=>step(1);
   select(lessons.find(l=>l.id===saved)||lessons.find(l=>l.id===defaultLessonId)||lessons[0]);
  }catch{loading.textContent='无法加载实验课程，请刷新重试。';}
 }

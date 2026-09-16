@@ -17,3 +17,5 @@ test('static source files outside public cannot be read',async()=>{for(const p o
 test('all packaged stage narrations are served as playable MP3 audio',async()=>{for(let stage=1;stage<=6;stage++){const r=await fetch(`${base}/audio/stage-${stage}.mp3`);assert.equal(r.status,200);assert.equal(r.headers.get('content-type'),'audio/mpeg');assert.ok((await r.arrayBuffer()).byteLength>100000);}});
 
 test('course catalog exposes three exact Chinese simulations in lesson order',async()=>{const p=await(await fetch(base+'/api/config')).json();assert.equal(p.defaultLessonId,'bending-light');assert.deepEqual(p.lessons.map(l=>l.id),['bending-light','geometric-optics-basics','circuit-construction-kit-ac']);for(const [i,l] of p.lessons.entries()){assert.equal(l.number,i+1);assert.equal(l.url,`https://phet.colorado.edu/sims/html/${l.id}/latest/${l.id}_zh_CN.html`);}});
+
+test("null chat payload returns 400",async()=>{const r=await fetch(base+"/api/chat",{method:"POST",body:"null"});assert.equal(r.status,400);});

@@ -6,7 +6,7 @@ import {createKnowledgeChat} from './knowledge-chat.js';
 import {advanceTimer,createStageTimers,formatTime,pauseTimer,remainingSeconds,resetTimer,startTimer} from './stage-timer.js';
 import {isSelfAssessmentText} from './turn-kind.js';
 const KEY='science-session-v2';
-const fresh=()=>({version:3,stage:1,group:'',members:'',timers:createStageTimers(stages.map(s=>s.id)),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))});
+const fresh=()=>({version:3,stage:1,timers:createStageTimers(stages.map(s=>s.id)),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))});
 let state=fresh();
 try {
  const saved=JSON.parse(sessionStorage.getItem(KEY));
@@ -138,10 +138,10 @@ $('voice').onclick=()=>{
  narrator.stop();
  if(speech){speech.stop();return;}
  if(!Recognition){$('voiceState').textContent='当前浏览器不支持语音转写，请使用文字输入或支持语音识别的浏览器。';return;}
- const id=state.stage,epoch=state,base=state.data[id].draft;let transcript='',cancelled=false;
+ const id=state.stage,epoch=state,base=state.data[id].draft;let transcript='';
  const recognition=new Recognition();speech=recognition;recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;
  recognition.onstart=()=>{$('voice').classList.add('recording');$('voice').setAttribute('aria-label','停止录音');$('voice').title='停止录音';$('voiceState').textContent='正在转写。语音由浏览器识别服务处理，停止后请核对数字、单位与术语再提交。';};
- recognition.onresult=e=>{transcript=Array.from(e.results).map(r=>r[0].transcript).join('');if(state!==epoch||cancelled)return;state.data[id].draft=(base+(base?'\n':'')+transcript).slice(0,2000);if(state.stage===id)$('draft').value=state.data[id].draft;save();};
+ recognition.onresult=e=>{transcript=Array.from(e.results).map(r=>r[0].transcript).join('');if(state!==epoch)return;state.data[id].draft=(base+(base?'\n':'')+transcript).slice(0,2000);if(state.stage===id)$('draft').value=state.data[id].draft;save();};
  recognition.onerror=e=>{$('voiceState').textContent=`语音识别未完成（${e.error}），已有文字已保留，请编辑后提交。`;};
  const timer=setTimeout(()=>recognition.stop(),90000);
  recognition.onend=()=>{clearTimeout(timer);speech=null;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','语音输入');$('voice').title='语音输入';};

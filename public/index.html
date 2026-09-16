@@ -13,12 +13,11 @@
 <article class="experiment">
 <div class="panel-head">
 <div>
-<span class="kicker">实验空间</span>
-<button id="knowledgeToggle" class="brand-trigger" type="button" aria-label="打开知识答疑" aria-expanded="false" aria-controls="knowledgePanel"><img class="brand-logo" src="/assets/xiaoke-logo-transparent.png" alt="小科"><span>知识答疑</span></button>
+<img class="brand-logo" src="/assets/xiaoke-logo-transparent.png" alt="小科">
 </div>
-<div class="workspace-actions"><a id="openLab" target="_blank" rel="noopener">新页面打开 ↗</a><button id="coachToggle" type="button" aria-controls="coachPanel" aria-expanded="true">收起探究支架 ›</button></div>
+<nav id="lessonSelector" class="lesson-selector" aria-label="选择实验课程"><button id="previousLesson" type="button" aria-label="上一节课">➜</button><strong id="lessonLabel" aria-live="polite">第一节课</strong><button id="nextLesson" type="button" aria-label="下一节课">➜</button></nav>
+<div class="workspace-actions"><button id="coachToggle" type="button" aria-controls="coachPanel" aria-expanded="true" aria-label="收起探究支架"><img src="/assets/coach-toggle.png" alt=""><span aria-hidden="true">›</span></button></div>
 </div>
-<nav id="lessonSelector" class="lesson-selector" aria-label="选择实验课程"></nav>
 <div class="frame">
 <div id="loading">正在加载实验课程…</div>
 <iframe id="lab" title="PhET 科学实验" allow="fullscreen">
@@ -84,6 +83,7 @@
 </aside>
 </section>
 </main>
+<button id="knowledgeToggle" class="knowledge-pet" type="button" aria-label="打开知识答疑" aria-expanded="false" aria-controls="knowledgePanel" title="点击答疑，拖动移动"><img id="petFace" src="/assets/xiaoke-icon-transparent.png" alt="小科知识宠物" draggable="false"></button>
 <section id="knowledgePanel" class="knowledge-panel" role="dialog" aria-modal="false" aria-labelledby="knowledgeTitle" hidden>
 <header class="knowledge-header"><div><strong id="knowledgeTitle">小科 · 知识答疑</strong><small>科学概念基础知识</small></div><button id="knowledgeClose" type="button" aria-label="收起知识答疑">×</button></header>
 <div id="knowledgeMessages" class="knowledge-messages" role="log" aria-live="polite"></div>

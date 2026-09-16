@@ -39,7 +39,7 @@ export function createApp() { return createServer(async (req,res)=>{
   }
   if(url.pathname==='/api/chat' && req.method==='POST') {
    let p; try {p=await body(req);} catch {return json(res,400,{message:'请求格式无效或内容过长'});}
-   if(!Number.isInteger(p.stage)||![1,2,3,5,6].includes(p.stage)||!['content','self_assessment'].includes(p.kind)||!Number.isInteger(p.attempt)||p.attempt<0||p.attempt>MAX_CONTENT_SUBMISSIONS+1||(p.kind==='content'&&p.attempt<1)||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000) return json(res,400,{message:'请选择有效阶段并输入1至2000字产出'});
+   if(!p||!Number.isInteger(p.stage)||![1,2,3,5,6].includes(p.stage)||!['content','self_assessment'].includes(p.kind)||!Number.isInteger(p.attempt)||p.attempt<0||p.attempt>MAX_CONTENT_SUBMISSIONS+1||(p.kind==='content'&&p.attempt<1)||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000) return json(res,400,{message:'请选择有效阶段并输入1至2000字产出'});
    return json(res,200,await evaluate(p));
   }
   if(url.pathname.startsWith('/api/')) return json(res,404,{message:'接口不存在'});
