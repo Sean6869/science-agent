@@ -133,3 +133,9 @@ textarea:focus-visible{outline:none}
 #lessonLabel{display:flex;align-items:center}
 #lessonArtwork{display:block;width:116px;height:38px;object-fit:contain}
 .knowledge-pet::before{content:"";position:absolute;inset:3px;border-radius:50%;background:white;z-index:-1}
+
+.knowledge-prompts{margin:0 14px 8px;border:1px solid var(--line);border-radius:10px;background:var(--soft);flex:none}
+.knowledge-prompts summary{cursor:pointer;padding:8px 10px;color:var(--blue);font-size:12px;font-weight:700}
+.knowledge-prompt-list{display:grid;gap:5px;padding:0 8px 8px}
+.knowledge-prompt-list button{text-align:left;padding:7px 9px;border:1px solid #d6e2f1;background:white;border-radius:8px;color:var(--ink);font-size:12px;line-height:1.45}
+.knowledge-prompt-list button:hover{border-color:var(--blue);color:var(--blue);background:#edf3ff}

@@ -86,6 +86,7 @@
 <button id="knowledgeToggle" class="knowledge-pet" type="button" aria-label="打开知识答疑" aria-expanded="false" aria-controls="knowledgePanel" title="点击答疑，拖动移动"><img id="petFace" src="/assets/xiaoke-icon-transparent.png" alt="小科知识宠物" draggable="false"></button>
 <section id="knowledgePanel" class="knowledge-panel" role="dialog" aria-modal="false" aria-labelledby="knowledgeTitle" hidden>
 <header class="knowledge-header"><div><strong id="knowledgeTitle">小科 · 知识答疑</strong><small>科学概念基础知识</small></div><button id="knowledgeClose" type="button" aria-label="收起知识答疑">×</button></header>
+<details class="knowledge-prompts"><summary>典型问题</summary><div id="knowledgePromptList" class="knowledge-prompt-list"></div></details>
 <div id="knowledgeMessages" class="knowledge-messages" role="log" aria-live="polite"></div>
 <form id="knowledgeComposer" class="chat-composer"><textarea id="knowledgeDraft" aria-label="知识问题" placeholder="例如：实像和虚像有什么区别？" maxlength="2000" rows="2"></textarea><div class="composer-actions"><button class="icon-button primary" id="knowledgeSend" type="submit" aria-label="发送知识问题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></div></form>
 </section>

@@ -1,7 +1,9 @@
 const KEY='science-knowledge-v1';
 export function createKnowledgeChat(){
- const list=document.getElementById('knowledgeMessages'),draft=document.getElementById('knowledgeDraft'),form=document.getElementById('knowledgeComposer'),send=document.getElementById('knowledgeSend');
+ const promptList=document.getElementById('knowledgePromptList'),list=document.getElementById('knowledgeMessages'),draft=document.getElementById('knowledgeDraft'),form=document.getElementById('knowledgeComposer'),send=document.getElementById('knowledgeSend');
  let state={draft:'',messages:[]},busy=false;
+ function setLesson(lesson){promptList.replaceChildren(...(lesson.questions||[]).map(question=>{const b=document.createElement('button');b.type='button';b.textContent=question;b.onclick=()=>{draft.value=question;state.draft=question;save();draft.focus();};return b;}));}
+ window.addEventListener('science:lesson-change',event=>setLesson(event.detail));
  try{const saved=JSON.parse(sessionStorage.getItem(KEY));if(saved&&typeof saved.draft==='string'&&Array.isArray(saved.messages))state=saved;}catch{}
  const save=()=>{try{sessionStorage.setItem(KEY,JSON.stringify(state));}catch{}};
  function render(){
@@ -21,4 +23,5 @@ export function createKnowledgeChat(){
  form.onsubmit=e=>{e.preventDefault();const text=draft.value.trim();if(!text||busy)return;const turn={id:crypto.randomUUID(),text,history:state.messages.filter(m=>m.role==='user'||m.role==='agent').slice(-8).map(({role,text})=>({role,text}))};state.messages.push({role:'user',text});state.draft='';draft.value='';save();void request(turn);};
  draft.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();form.requestSubmit();}};
  render();
+ setLesson(window.__scienceLesson||{questions:[]});
 }
