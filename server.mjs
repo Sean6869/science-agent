@@ -1,4 +1,5 @@
 import { completeFeedback } from './deepseek.mjs';
+import {answerKnowledge} from './knowledge-agent.mjs';
 import {buildFeedbackMessages,exhaustedFeedback,fallbackFeedback,formatStructuredFeedback,isStructuredFeedbackComplete,MAX_CONTENT_SUBMISSIONS} from './metacognitive-agent.mjs';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -31,6 +32,11 @@ export function createApp() { return createServer(async (req,res)=>{
    let labUrl = 'https://phet.colorado.edu/sims/html/geometric-optics/latest/geometric-optics_zh_CN.html?screens=1';
    try { const u=new URL(process.env.PUBLIC_PHET_GEOMETRIC_OPTICS_URL||labUrl); if(u.protocol==='https:' && u.hostname==='phet.colorado.edu' && u.pathname.startsWith('/sims/html/geometric-optics/') && u.pathname.endsWith('.html')) labUrl=u.href; } catch {}
    return json(res,200,{labUrl});
+  }
+  if(url.pathname==='/api/knowledge' && req.method==='POST') {
+   let p;try{p=await body(req);}catch{return json(res,400,{message:'请求格式无效'});}
+   if(!p||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000||!Array.isArray(p.history)||p.history.length>8||p.history.some(m=>!m||!['user','agent'].includes(m.role)||typeof m.text!=='string'||m.text.length>2000))return json(res,400,{message:'请输入1至2000字问题'});
+   try{return json(res,200,await answerKnowledge(p));}catch{return json(res,503,{message:'知识答疑暂时无法连接，问题已保留，请稍后重试。'});}
   }
   if(url.pathname==='/api/chat' && req.method==='POST') {
    let p; try {p=await body(req);} catch {return json(res,400,{message:'请求格式无效或内容过长'});}

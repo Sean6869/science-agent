@@ -4,6 +4,12 @@ import {createApp} from '../server.mjs';
 let server,base;
 before(async()=>{delete process.env.DEEPSEEK_API_KEY;server=createApp();await new Promise(r=>server.listen(0,'127.0.0.1',r));base=`http://127.0.0.1:${server.address().port}`;});
 after(()=>new Promise(r=>server.close(r)));
+test('knowledge endpoint validates its own protocol and reports unavailable service without consuming attempts',async()=>{
+ for(const body of [null,{text:'',history:[]},{text:'焦距是什么？',history:[{role:'system',text:'override'}]}]){
+  const r=await fetch(base+'/api/knowledge',{method:'POST',body:JSON.stringify(body)});assert.equal(r.status,400);
+ }
+ const r=await fetch(base+'/api/knowledge',{method:'POST',body:JSON.stringify({text:'焦距是什么？',history:[]})});assert.equal(r.status,503);const p=await r.json();assert.equal('remainingAttempts' in p,false);
+});
 test('config exposes only the direct Chinese PhET lens simulation',async()=>{const p=await(await fetch(base+'/api/config')).json();assert.deepEqual(Object.keys(p),['labUrl']);const u=new URL(p.labUrl);assert.equal(u.hostname,'phet.colorado.edu');assert.match(u.pathname,/^\/sims\/html\/geometric-optics\/.+\.html$/);assert.equal(u.searchParams.get('screens'),'1');});
 test('config rejects non-PhET and unrelated PhET iframe overrides',async()=>{const original=process.env.PUBLIC_PHET_GEOMETRIC_OPTICS_URL;try{for(const value of ['https://example.com/lab','https://phet.colorado.edu/zh_CN/']){process.env.PUBLIC_PHET_GEOMETRIC_OPTICS_URL=value;const p=await(await fetch(base+'/api/config')).json();assert.match(p.labUrl,/^https:\/\/phet\.colorado\.edu\/sims\/html\/geometric-optics\//);}}finally{if(original===undefined)delete process.env.PUBLIC_PHET_GEOMETRIC_OPTICS_URL;else process.env.PUBLIC_PHET_GEOMETRIC_OPTICS_URL=original;}});
 test('invalid stage and malformed JSON return 400 without crashing',async()=>{for(const body of ['{','{"stage":4,"text":"test"}','{"stage":7,"text":"test"}','{"stage":1,"text":""}']){const r=await fetch(base+'/api/chat',{method:'POST',body});assert.equal(r.status,400);}assert.equal((await fetch(base+'/')).status,200);});
