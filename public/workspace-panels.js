@@ -1,6 +1,10 @@
 export function createWorkspacePanels(){
  const layout=document.querySelector('.layout'),coach=document.getElementById('coachPanel'),toggle=document.getElementById('coachToggle');
  const knowledge=document.getElementById('knowledgePanel'),avatar=document.getElementById('knowledgeToggle'),face=document.getElementById('petFace');
+ let hovered=false;
+ function renderFace(){face.src=hovered||!knowledge.hidden?'/assets/xiaoke-pet-active.png':'/assets/xiaoke-icon-transparent.png';}
+ avatar.onpointerenter=e=>{if(e.pointerType==='touch')return;hovered=true;renderFace();};
+ avatar.onpointerleave=()=>{hovered=false;renderFace();};
  const clamp=(n,max)=>Math.max(8,Math.min(n,Math.max(8,max)));
  function positionPanel(){
   if(knowledge.hidden)return;
@@ -10,7 +14,7 @@ export function createWorkspacePanels(){
  }
  function positionPet(x,y){avatar.style.left=`${clamp(x,innerWidth-avatar.offsetWidth-8)}px`;avatar.style.top=`${clamp(y,innerHeight-avatar.offsetHeight-8)}px`;positionPanel();}
  function setCoach(open){coach.hidden=!open;layout.classList.toggle('coach-collapsed',!open);toggle.setAttribute('aria-expanded',String(open));toggle.setAttribute('aria-label',open?'收起探究支架':'展开探究支架');toggle.title=open?'收起探究支架':'展开探究支架';try{sessionStorage.setItem('science-coach-open',String(open));}catch{}}
- function setKnowledge(open){knowledge.hidden=!open;avatar.setAttribute('aria-expanded',String(open));avatar.setAttribute('aria-label',open?'收起知识答疑':'打开知识答疑');face.src=open?'/assets/xiaoke-pet-active.png':'/assets/xiaoke-icon-transparent.png';positionPanel();if(open)document.getElementById('knowledgeDraft').focus();else avatar.focus();}
+ function setKnowledge(open){knowledge.hidden=!open;avatar.setAttribute('aria-expanded',String(open));avatar.setAttribute('aria-label',open?'收起知识答疑':'打开知识答疑');renderFace();positionPanel();if(open)document.getElementById('knowledgeDraft').focus();else avatar.focus();}
  toggle.onclick=()=>setCoach(coach.hidden);
  let drag=null,suppressClick=false;
  avatar.onpointerdown=e=>{if(e.button!==0)return;const r=avatar.getBoundingClientRect();drag={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top,moved:false};suppressClick=false;avatar.setPointerCapture(e.pointerId);};
