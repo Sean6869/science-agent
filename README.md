@@ -1,8 +1,8 @@
 # 凸透镜探究智能实验平台
 
-面向初中学生的 Web 实验应用：左侧直接嵌入 NOBOOK 凸透镜实验网页，右侧提供试验者信息、五阶段探究引导与对话式智能学伴“小科”。
+面向初中学生的 Web 实验应用：左侧直接嵌入 PhET 中文“几何光学”实验，右侧提供六阶段探究引导与对话式智能学伴“小科”。
 
-当前已包含一个轻量 Web 应用骨架：左侧嵌入 NOBOOK 实验，右侧提供试验者信息、五阶段按钮和对话式智能学伴“小科”。
+当前已包含一个轻量 Web 应用骨架：左侧嵌入 PhET 实验，右侧提供六阶段进度、阶段开场白和对话式智能学伴“小科”。
 
 ## 本地运行
 
@@ -25,7 +25,7 @@ npm run check
 参考 [.env.example](.env.example)。服务启动时会尝试读取本地 `.env.local`，该文件已被 Git 忽略；生产环境建议通过部署平台或进程管理器注入环境变量。
 
 - `PORT`：服务端口，默认 `4173`。
-- `PUBLIC_NOBOOK_LENS_RESOURCE_URL`：公开的 NOBOOK iframe 地址，不是密钥。
+- `PUBLIC_PHET_GEOMETRIC_OPTICS_URL`：公开的 PhET iframe 地址，不是密钥。
 - `DEEPSEEK_API_KEY`：DeepSeek API key，只在 `server.mjs` 中读取，不下发浏览器。
 - `DEEPSEEK_MODEL`：DeepSeek 模型，默认 `deepseek-flash`（V4.1 Flash），也支持 `deepseek-v4-pro`。
 - `DEEPSEEK_THINKING`：`disabled`（默认）或 `enabled`。课堂短反馈默认关闭思考模式。
@@ -53,19 +53,19 @@ npm run dev
 
 - [/Users/gresonkwan/Downloads/deepseek_html_20260527_520198.html](/Users/gresonkwan/Downloads/deepseek_html_20260527_520198.html)
 
-左侧实验不基于该 HTML 编写或拆分，直接嵌入 NOBOOK 第三方页面：
+左侧实验不基于该 HTML 编写或拆分，直接嵌入 PhET 第三方页面：
 
-- 用户提供的资源入口：[NOBOOK 精品实验列表](https://wl.nobook.com/console/templates/resource)
-- 已核验到的目标资源页：[探究凸透镜成像的规律](https://wl.nobook.com/console/templates/resource/207_d2c4a829c23aa7471a0344a92e34cb74)
+- 用户提供的资源入口：[PhET 中文模拟平台](https://phet.colorado.edu/zh_CN/)
+- 默认嵌入的实验：[几何光学（中文透镜屏幕）](https://phet.colorado.edu/sims/html/geometric-optics/latest/geometric-optics_zh_CN.html?screens=1)
 
-资源入口是实验列表，具体资源页显示“探究凸透镜成像的规律”及“去做实验”入口。正式课堂页面应优先直接加载具体资源页，减少学生在资源列表中搜索的步骤。
+课堂页面直接加载“几何光学”的透镜屏幕，跳过平台首页和实验检索步骤；页面右上角仍保留“新页面打开”作为嵌入失败时的恢复入口。
 
 ## 已确定的产品方向
 
 - 面向学生的文案使用“试验者/小组信息”，不沿用原型中的“教师填写小组信息”。
 - 五个步骤按钮触发用户指定的提示词模板，其中第 1 至 3 步使用“滑动摩擦力”作为科学方法迁移示例，并引导学生回到凸透镜实验。
 - Agent 由后端代理调用模型服务，前端不存放 API 密钥。
-- NOBOOK 为跨域第三方页面；MVP 不假定可以自动读取其操作状态。Agent 根据学生在对话中报告的观察和数据进行引导。
+- PhET 为跨域第三方页面；MVP 不假定可以自动读取其操作状态。Agent 根据学生在对话中报告的观察和数据进行引导。
 
 ## 后续实现建议
 
