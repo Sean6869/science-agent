@@ -24,7 +24,7 @@ test('short star-rating replies are self-assessments while scientific content is
 });
 
 test('model feedback must preserve the three labelled sections',()=>{
- assert.equal(hasRequiredFeedbackStructure('引导自评：你们会评几星？\n参考星级：明确性⭐⭐。\n反馈评语：请说明条件。'),true);
+ assert.equal(hasRequiredFeedbackStructure('自我评价：你们会评几星？\n老师的评价：明确性⭐⭐。\n请说明条件。'),true);
  assert.equal(hasRequiredFeedbackStructure('总体不错，请继续。'),false);
 });
 

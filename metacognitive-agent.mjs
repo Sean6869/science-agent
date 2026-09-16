@@ -41,7 +41,7 @@ export function fallbackFeedback({stage,kind='content',attempt=1}) {
  const names=rubric.dimensions.map(d=>`“${d.name}”`).join('、');
  const remaining=Math.max(0,MAX_CONTENT_SUBMISSIONS-attempt);
  if(kind==='self_assessment') return `引导自评：谢谢你们给出星级判断，请再说出一个支持这个判断的具体依据。\n参考星级：智能反馈暂时不可用，请先依据${names}逐项核对你们的星级。\n反馈评语：保留当前内容和自评依据，服务恢复后再核验；自评回答不占用内容提交次数。`;
- return `引导自评：请先依据${names}判断各维度可以达到几星，并说出理由。\n参考星级：智能反馈暂时不可用，本次不生成可能误导你们的星级。\n反馈评语：请对照本阶段量规逐项自查并保留当前产出；本环节还剩${remaining}次内容提交机会。`;
+ return `自我评价：请先依据${names}判断各维度可以达到几星，并说出理由。\n老师的评价：智能反馈暂时不可用，本次不生成可能误导你们的星级。\n请对照本阶段量规逐项自查并保留当前产出；本环节还剩${remaining}次内容提交机会。`;
 }
 
 export function buildFeedbackMessages(payload) {
@@ -61,7 +61,7 @@ export function buildFeedbackMessages(payload) {
 export function hasRequiredFeedbackStructure(content) {
  if(typeof content!=='string')return false;
  const lines=content.trim().split(/\r?\n/).filter(Boolean);
- return lines.length===3&&lines[0].startsWith('引导自评：')&&lines[1].startsWith('参考星级：')&&lines[2].startsWith('反馈评语：');
+ return lines.length===3&&lines[0].startsWith('自我评价：')&&lines[1].startsWith('老师的评价：');
 }
 
 export function isStructuredFeedbackComplete(raw) {
@@ -82,7 +82,7 @@ export function formatStructuredFeedback(raw, {stage,kind='content',attempt=1}) 
  if(value.ratings.every(r=>r.stars===3)){
   const processQuestion=`请回顾哪一步思考帮助你们同时满足${expected.map(name=>`“${name}”`).join('和')}这些标准呢？`;
   const ending=kind==='content'?`本环节还剩${remaining}次内容提交机会，请保存成果并进入下一环节。`:'本次星级自评不占用内容提交次数，请保存成果并进入下一环节。';
-  return `引导自评：${sentence(value.selfAssessmentGuide)}\n参考星级：${ratings}。\n反馈评语：各维度都达到三星，很棒😊；${processQuestion}${ending}`;
+  return `自我评价：${sentence(value.selfAssessmentGuide)}\n老师的评价：${ratings}。\n各维度都达到三星，很棒😊；${processQuestion}${ending}`;
  }
- return `引导自评：${sentence(value.selfAssessmentGuide)}\n参考星级：${ratings}。\n反馈评语：${sentence(value.feedback)} ${suffix}`;
+ return `自我评价：${sentence(value.selfAssessmentGuide)}\n老师的评价：${ratings}。\n${sentence(value.feedback)} ${suffix}`;
 }
