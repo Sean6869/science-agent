@@ -2,7 +2,7 @@ export function createWorkspacePanels(){
  const layout=document.querySelector('.layout'),coach=document.getElementById('coachPanel'),toggle=document.getElementById('coachToggle');
  const knowledge=document.getElementById('knowledgePanel'),avatar=document.getElementById('knowledgeToggle'),face=document.getElementById('petFace');
  let hovered=false;
- function renderFace(){face.src=hovered||!knowledge.hidden?'/assets/xiaoke-pet-active.png':'/assets/xiaoke-icon-transparent.png';}
+ function renderFace(){face.src=hovered||!knowledge.hidden?'/assets/xiaoke-pet-active.png?v=20260917':'/assets/xiaoke-icon-transparent.png?v=20260917';}
  avatar.onpointerenter=e=>{if(e.pointerType==='touch')return;hovered=true;renderFace();};
  avatar.onpointerleave=()=>{hovered=false;renderFace();};
  const clamp=(n,max)=>Math.max(8,Math.min(n,Math.max(8,max)));
