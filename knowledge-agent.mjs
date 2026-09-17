@@ -9,7 +9,7 @@ export const knowledgeSystemPrompt = `你是小科科学概念基础知识答疑
 只输出JSON：{"sentences":["第一句。","第二句。","第三句。"]}；数组为3或4项，每项一个句子。`;
 
 export function knowledgeMessages({text,history=[]}) {
- return [{role:'system',content:knowledgeSystemPrompt},...history.slice(-8).map(m=>({role:m.role==='agent'?'assistant':'user',content:m.text.slice(0,2000)})),{role:'user',content:text}];
+ return [{role:'system',content:knowledgeSystemPrompt},...history.slice(-8).map(m=>({role:m.role==='agent'?'assistant':'user',content:m.role==='agent'?JSON.stringify({sentences:m.text.slice(0,2000).split('\n').filter(Boolean)}):m.text.slice(0,2000)})),{role:'user',content:text}];
 }
 
 export function parseKnowledgeAnswer(raw){
@@ -39,6 +39,15 @@ export async function answerKnowledge(payload,options={}){
  if(/(?:成像规律|折射规律|欧姆定律)/.test(payload.text)&&/(?:是什么|告诉|完整|所有|公式|列出|总结|直接)/.test(payload.text)){
   return {content:'这条核心规律需要由你们通过实验逐步得出。\n可以先选一组条件，记录改变前后的现象，再比较哪些量发生了变化。\n你们已经观察到什么变化呢？',source:'rule',agent:'knowledge'};
  }
- const raw=await completeFeedback(knowledgeMessages(payload),{...options,responseFormat:{type:'json_object'}});
- return {content:parseKnowledgeAnswer(raw),source:'model',agent:'knowledge'};
+ const messages=knowledgeMessages(payload);
+ for(let attempt=0;attempt<2;attempt++){
+  try{
+   const raw=await completeFeedback(messages,{...options,responseFormat:{type:'json_object'}});
+   let content;try{content=parseKnowledgeAnswer(raw);}catch{const error=new Error('Invalid knowledge response');error.code='invalid_response';throw error;}
+   return {content,source:'model',agent:'knowledge'};
+  }catch(error){
+   if(attempt||!['empty_response','invalid_response'].includes(error.code))throw error;
+   messages.push({role:'user',content:'请直接输出非空 JSON 对象，sentences 数组包含3至4句完整回答，不要输出空白字符。'});
+  }
+ }
 }

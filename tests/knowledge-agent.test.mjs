@@ -7,6 +7,18 @@ test('direct requests for the full core law return inquiry guidance without a mo
 test('knowledge dialogue has an independent policy and bounded history',()=>{
  const messages=knowledgeMessages({text:'什么是焦距？',history:Array.from({length:12},()=>({role:'agent',text:'旧回答'}))});
  assert.equal(messages.length,10);assert.match(messages[0].content,/不直接给出/);assert.match(messages[0].content,/不提供星级/);assert.equal(messages.at(-1).content,'什么是焦距？');
+ assert.deepEqual(JSON.parse(messages[1].content),{sentences:['旧回答']});
+});
+
+test('blank successful JSON response is retried once and recovered',async()=>{
+ let calls=0;
+ const answer=await answerKnowledge({text:'你是谁',history:[]},{env:{DEEPSEEK_API_KEY:'test'},fetchImpl:async()=>{calls++;return Response.json({choices:[{finish_reason:'stop',message:{content:calls===1?'   ':JSON.stringify({sentences:['我是小科。','可以帮助你理解科学概念。','你想了解什么？']})}}]});}});
+ assert.equal(calls,2);assert.equal(answer.source,'model');
+});
+test('persistent blank response stops after one retry',async()=>{
+ let calls=0;
+ await assert.rejects(answerKnowledge({text:'你是谁',history:[]},{env:{DEEPSEEK_API_KEY:'test'},fetchImpl:async()=>{calls++;return Response.json({choices:[{finish_reason:'stop',message:{content:' '}}]});}}),{code:'empty_response'});
+ assert.equal(calls,2);
 });
 test('knowledge response rejects missing sentences and multiple followups',()=>{
  assert.throws(()=>parseKnowledgeAnswer('{"sentences":["一句"]}'));

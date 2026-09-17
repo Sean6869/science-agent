@@ -30,6 +30,10 @@ export async function completeFeedback(messages, {env = process.env, fetchImpl =
  const result = await response.json();
  const choice = result?.choices?.[0];
  const content = choice?.message?.content;
- if (choice?.finish_reason !== 'stop' || typeof content !== 'string' || !content.trim()) throw new Error('Incomplete DeepSeek feedback');
+ if (choice?.finish_reason !== 'stop' || typeof content !== 'string' || !content.trim()) {
+  const error=new Error('Incomplete DeepSeek feedback');
+  error.code=choice?.finish_reason==='stop'&&typeof content==='string'&&!content.trim()?'empty_response':'incomplete_response';
+  throw error;
+ }
  return content.trim();
 }
