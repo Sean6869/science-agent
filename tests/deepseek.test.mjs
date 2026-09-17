@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {completeFeedback, deepseekConfig} from '../deepseek.mjs';
+import {cleanEnvValue,completeFeedback,deepseekConfig} from '../deepseek.mjs';
 
 test('default request explicitly disables thinking and exposes only final content', async () => {
  const messages = [{role:'user',content:'物距改变时，像的大小如何变化？'}];
@@ -37,6 +37,12 @@ test('legacy models migrate while explicit thinking settings take precedence', (
  assert.equal(deepseekConfig({DEEPSEEK_MODEL:'deepseek-v4-pro'}).model,'deepseek-v4-pro');
  assert.throws(()=>deepseekConfig({DEEPSEEK_MODEL:'typo'}));
  assert.throws(()=>deepseekConfig({DEEPSEEK_THINKING:'yes'}));
+});
+
+test('Railway values tolerate accidental straight and Chinese quotation marks',async()=>{
+ assert.equal(cleanEnvValue(' “deepseek-flash” '),'deepseek-flash');
+ assert.deepEqual(deepseekConfig({DEEPSEEK_MODEL:'“deepseek-flash”',DEEPSEEK_THINKING:'”disabled”',DEEPSEEK_REASONING_EFFORT:'“low”'}).thinking,{type:'disabled'});
+ await completeFeedback([],{env:{DEEPSEEK_API_KEY:'“test-key”'},fetchImpl:async(_url,init)=>{assert.equal(init.headers.authorization,'Bearer test-key');return Response.json({choices:[{finish_reason:'stop',message:{content:'ok'}}]});}});
 });
 
 test('truncated, empty, malformed and failed replies are rejected', async()=>{

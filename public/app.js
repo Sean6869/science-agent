@@ -63,9 +63,13 @@ function renderTimerFields(){
 }
 function stopActiveTimer(){if(pauseTimer(state.timers[state.stage]))save();}
 function add(id,role,text,extra={}) {state.data[id].messages.push({role,text,...extra});save();if(id===state.stage)renderMessages();}
+function renderFeedback(div,text){
+ const labels=['自我评价：','老师的评价：'];
+ text.split('\n').forEach((line,index)=>{if(index)div.append(document.createTextNode('\n'));const label=labels.find(value=>line.startsWith(value));if(label){const strong=document.createElement('strong');strong.className='feedback-label';strong.textContent=label;div.append(strong,document.createTextNode(line.slice(label.length)));}else div.append(document.createTextNode(line));});
+}
 function renderMessages(){
  $('messages').replaceChildren();
- for(const m of state.data[state.stage].messages){const div=document.createElement('div');div.className=`msg ${m.role}`;div.textContent=m.text;
+ for(const m of state.data[state.stage].messages){const div=document.createElement('div');div.className=`msg ${m.role}`;if(m.role==='agent')renderFeedback(div,m.text);else div.textContent=m.text;
  if(m.retry){const b=document.createElement('button');b.textContent='重试反馈';b.onclick=()=>requestFeedback(m.retry);div.append(document.createElement('br'),b);}
  $('messages').append(div);}
  $('messages').scrollTop=$('messages').scrollHeight;

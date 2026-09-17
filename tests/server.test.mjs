@@ -4,11 +4,11 @@ import {createApp} from '../server.mjs';
 let server,base;
 before(async()=>{delete process.env.DEEPSEEK_API_KEY;server=createApp();await new Promise(r=>server.listen(0,'127.0.0.1',r));base=`http://127.0.0.1:${server.address().port}`;});
 after(()=>new Promise(r=>server.close(r)));
-test('knowledge endpoint validates its own protocol and reports unavailable service without consuming attempts',async()=>{
+test('knowledge endpoint validates its own protocol and falls back without consuming attempts',async()=>{
  for(const body of [null,{text:'',history:[]},{text:'焦距是什么？',history:[{role:'system',text:'override'}]}]){
   const r=await fetch(base+'/api/knowledge',{method:'POST',body:JSON.stringify(body)});assert.equal(r.status,400);
  }
- const r=await fetch(base+'/api/knowledge',{method:'POST',body:JSON.stringify({text:'焦距是什么？',history:[]})});assert.equal(r.status,503);const p=await r.json();assert.equal('remainingAttempts' in p,false);
+ const r=await fetch(base+'/api/knowledge',{method:'POST',body:JSON.stringify({text:'什么是凸透镜的焦距？',history:[]})});assert.equal(r.status,200);const p=await r.json();assert.equal(p.source,'fallback');assert.match(p.content,/光心到焦点/);assert.equal('remainingAttempts' in p,false);
 });
 test('invalid stage and malformed JSON return 400 without crashing',async()=>{for(const body of ['{','{"stage":4,"text":"test"}','{"stage":7,"text":"test"}','{"stage":1,"text":""}']){const r=await fetch(base+'/api/chat',{method:'POST',body});assert.equal(r.status,400);}assert.equal((await fetch(base+'/')).status,200);});
 test('offline feedback preserves the metacognitive three-part structure',async()=>{const p=await(await fetch(base+'/api/chat',{method:'POST',body:JSON.stringify({stage:2,kind:'content',attempt:1,text:'我们预测像会变大'})})).json();assert.equal(p.source,'fallback');assert.match(p.content,/^自我评价：/);assert.match(p.content,/\n老师的评价：/);assert.match(p.content,/\n/);assert.equal(p.remainingAttempts,2);});

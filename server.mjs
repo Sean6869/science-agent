@@ -1,6 +1,6 @@
 import {lessons,defaultLessonId} from './lessons.mjs';
-import { completeFeedback } from './deepseek.mjs';
-import {answerKnowledge} from './knowledge-agent.mjs';
+import {cleanEnvValue,completeFeedback} from './deepseek.mjs';
+import {answerKnowledge,fallbackKnowledge} from './knowledge-agent.mjs';
 import {buildFeedbackMessages,exhaustedFeedback,fallbackFeedback,formatStructuredFeedback,isStructuredFeedbackComplete,MAX_CONTENT_SUBMISSIONS} from './metacognitive-agent.mjs';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -35,7 +35,7 @@ export function createApp() { return createServer(async (req,res)=>{
   if(url.pathname==='/api/knowledge' && req.method==='POST') {
    let p;try{p=await body(req);}catch{return json(res,400,{message:'请求格式无效'});}
    if(!p||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000||!Array.isArray(p.history)||p.history.length>8||p.history.some(m=>!m||!['user','agent'].includes(m.role)||typeof m.text!=='string'||m.text.length>2000))return json(res,400,{message:'请输入1至2000字问题'});
-   try{return json(res,200,await answerKnowledge(p));}catch{return json(res,503,{message:'知识答疑暂时无法连接，问题已保留，请稍后重试。'});}
+   try{return json(res,200,await answerKnowledge(p));}catch(error){console.error(`[knowledge] ${error?.name||'Error'}: ${error?.message||'unknown failure'}`);return json(res,200,fallbackKnowledge(p.text));}
   }
   if(url.pathname==='/api/chat' && req.method==='POST') {
    let p; try {p=await body(req);} catch {return json(res,400,{message:'请求格式无效或内容过长'});}
@@ -49,4 +49,8 @@ export function createApp() { return createServer(async (req,res)=>{
   try {const file=await readFile(path);const type=extname(path); const immutable=['.png','.mp3']; res.writeHead(200,{'content-type':({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.mp3':'audio/mpeg'})[type]||'application/octet-stream','cache-control':immutable.includes(type)?'public, max-age=31536000, immutable':'no-cache','x-content-type-options':'nosniff'});res.end(file);} catch {json(res,404,{message:'文件不存在'});}
  } catch {json(res,500,{message:'服务暂不可用'});}
 });}
-if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) createApp().listen(process.env.PORT||4173,()=>console.log('Science inquiry server ready'));
+if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+ const configuredPort=Number(cleanEnvValue(process.env.PORT));
+ const port=Number.isInteger(configuredPort)&&configuredPort>0?configuredPort:4173;
+ createApp().listen(port,()=>console.log(`Science inquiry server ready; DeepSeek ${cleanEnvValue(process.env.DEEPSEEK_API_KEY)?'configured':'not configured'}`));
+}

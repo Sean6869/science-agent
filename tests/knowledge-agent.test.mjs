@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {knowledgeMessages,parseKnowledgeAnswer,answerKnowledge} from '../knowledge-agent.mjs';
+import {knowledgeMessages,parseKnowledgeAnswer,answerKnowledge,fallbackKnowledge} from '../knowledge-agent.mjs';
 test('direct requests for the full core law return inquiry guidance without a model call',async()=>{
  for(const text of ['凸透镜成像规律是什么','直接告诉我欧姆定律公式','列出完整的光的折射规律']){const answer=await answerKnowledge({text,history:[]},{fetchImpl:()=>{throw new Error('must not call');}});assert.equal(answer.source,'rule');assert.equal(answer.content.split('\n').length,3);}
 });
@@ -16,4 +16,7 @@ test('knowledge response rejects missing sentences and multiple followups',()=>{
 test('knowledge answers do not carry metacognitive attempt counters',async()=>{
  const result=await answerKnowledge({text:'什么是虚像？',history:[]},{env:{DEEPSEEK_API_KEY:'test'},fetchImpl:async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({sentences:['虚像是光线反向延长线的会聚位置形成的像。','它不能用光屏承接。','眼睛接收光线后仍能看到虚像。']})}}]})});
  assert.equal(result.agent,'knowledge');assert.equal('remainingAttempts' in result,false);
+});
+test('common course questions have a usable offline answer',()=>{
+ for(const question of ['什么是入射角、折射角？如何进行测量？','什么是实像？什么是虚像？实像和虚像如何区分？','什么是通路、断路、短路？短路有什么危险？']){const answer=fallbackKnowledge(question);assert.equal(answer.source,'fallback');assert.equal(answer.content.split('\n').length,3);}
 });
