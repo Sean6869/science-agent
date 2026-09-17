@@ -26,7 +26,7 @@ export async function completeFeedback(messages, {env = process.env, fetchImpl =
   headers: {'content-type': 'application/json', authorization: `Bearer ${apiKey}`},
   body: JSON.stringify({...config, stream: false, messages, ...(responseFormat?{response_format:responseFormat}:{})})
  });
- if (!response.ok) throw new Error(`DeepSeek HTTP ${response.status}`);
+ if (!response.ok) {const error=new Error(`DeepSeek HTTP ${response.status}`);error.code=`http_${response.status}`;throw error;}
  const result = await response.json();
  const choice = result?.choices?.[0];
  const content = choice?.message?.content;
@@ -36,4 +36,19 @@ export async function completeFeedback(messages, {env = process.env, fetchImpl =
   throw error;
  }
  return content.trim();
+}
+
+// Both agents share the same model-first response validation and bounded retry policy.
+export async function completeStructured(messages,parse,options={}) {
+ let retryMessages=messages;
+ for(let attempt=0;attempt<2;attempt++){
+  try{
+   const raw=await completeFeedback(retryMessages,{...options,responseFormat:{type:'json_object'}});
+   try{return parse(raw);}catch{const error=new Error('Invalid structured response');error.code='invalid_response';throw error;}
+  }catch(error){
+   const retryable=['empty_response','incomplete_response','invalid_response','http_429','http_500','http_502','http_503','http_504'].includes(error.code)||['TimeoutError','TypeError'].includes(error.name);
+   if(attempt||!retryable)throw error;
+   if(['empty_response','invalid_response'].includes(error.code))retryMessages=[...messages,{role:'user',content:'请按系统要求返回完整非空 JSON，不要输出空白字符。'}];
+  }
+ }
 }

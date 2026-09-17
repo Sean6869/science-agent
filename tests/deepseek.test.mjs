@@ -1,6 +1,16 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanEnvValue,completeFeedback,deepseekConfig} from '../deepseek.mjs';
+import {cleanEnvValue,completeFeedback,completeStructured,deepseekConfig} from '../deepseek.mjs';
+
+test('shared agent pipeline retries invalid JSON and transient upstream failures',async()=>{
+ for(const first of [()=>new Response('',{status:503}),()=>Response.json({choices:[{finish_reason:'stop',message:{content:'not-json'}}]})]){
+  let calls=0;const value=await completeStructured([],JSON.parse,{env:{DEEPSEEK_API_KEY:'test'},fetchImpl:async()=>++calls===1?first():Response.json({choices:[{finish_reason:'stop',message:{content:'{"ok":true}'}}]})});
+  assert.equal(calls,2);assert.deepEqual(value,{ok:true});
+ }
+});
+test('shared agent pipeline does not retry authentication errors',async()=>{
+ let calls=0;await assert.rejects(completeStructured([],JSON.parse,{env:{DEEPSEEK_API_KEY:'test'},fetchImpl:async()=>{calls++;return new Response('',{status:401});}}),{code:'http_401'});assert.equal(calls,1);
+});
 
 test('default request explicitly disables thinking and exposes only final content', async () => {
  const messages = [{role:'user',content:'物距改变时，像的大小如何变化？'}];

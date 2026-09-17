@@ -1,5 +1,5 @@
 import {lessons,defaultLessonId} from './lessons.mjs';
-import {cleanEnvValue,completeFeedback} from './deepseek.mjs';
+import {cleanEnvValue,completeStructured} from './deepseek.mjs';
 import {answerKnowledge,fallbackKnowledge} from './knowledge-agent.mjs';
 import {buildFeedbackMessages,exhaustedFeedback,fallbackFeedback,formatStructuredFeedback,isStructuredFeedbackComplete,MAX_CONTENT_SUBMISSIONS} from './metacognitive-agent.mjs';
 import { createServer } from 'node:http';
@@ -19,12 +19,10 @@ async function evaluate(p) {
   conversation:Array.isArray(p.conversation)?p.conversation.filter(x=>x&&['user','agent'].includes(x.role)&&typeof x.text==='string').slice(-6).map(x=>({role:x.role,text:x.text.slice(0,1200)})):[],
   latestSubmission:typeof p.latestSubmission==='string'?p.latestSubmission.slice(0,2000):null
  };
- if (!process.env.DEEPSEEK_API_KEY) return {content:fallbackFeedback(clean),source:'fallback',remainingAttempts,exhausted:false,complete:false,kind:p.kind};
  try {
-  const raw = await completeFeedback(buildFeedbackMessages(clean),{responseFormat:{type:'json_object'}});
-  const content=formatStructuredFeedback(raw,clean);
-  return {content,source:'model',remainingAttempts,exhausted:false,complete:isStructuredFeedbackComplete(raw),kind:p.kind};
- } catch { return {content:fallbackFeedback(clean),source:'fallback',remainingAttempts,exhausted:false,complete:false,kind:p.kind}; }
+  const result=await completeStructured(buildFeedbackMessages(clean),raw=>({content:formatStructuredFeedback(raw,clean),complete:isStructuredFeedbackComplete(raw)}));
+  return {...result,source:'model',remainingAttempts,exhausted:false,kind:p.kind};
+ } catch(error) {console.error('[metacognitive]',error.code||error.name);return {content:fallbackFeedback(clean),source:'fallback',remainingAttempts,exhausted:false,complete:false,kind:p.kind}; }
 }
 export function createApp() { return createServer(async (req,res)=>{
  try {

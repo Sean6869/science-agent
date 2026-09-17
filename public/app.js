@@ -101,7 +101,7 @@ async function requestFeedback(turn){
  if(busy.has(id))return;busy.add(id);if(id===state.stage)render();
  const epoch=state;state.data[id].messages=state.data[id].messages.filter(m=>m.retry!==turn);const pending={role:'system',text:'小科正在对照量规阅读你们的产出…'};state.data[id].messages.push(pending);renderMessages();
  try {
- const r=await fetch('/api/chat',{method:'POST',signal:AbortSignal.timeout(65000),headers:{'content-type':'application/json'},body:JSON.stringify(turn)});
+ const r=await fetch('/api/chat',{method:'POST',signal:AbortSignal.timeout(130000),headers:{'content-type':'application/json'},body:JSON.stringify(turn)});
  const p=await r.json();if(!r.ok)throw new Error(p.message||'服务请求失败');if(state!==epoch)return;
  state.data[id].messages=state.data[id].messages.filter(m=>m!==pending);state.data[id].awaitingSelfAssessment=turn.kind==='content'&&!p.exhausted&&!p.complete;
  add(id,'agent',p.content,{turnId:turn.id,source:p.source,kind:turn.kind});

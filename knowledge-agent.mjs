@@ -1,4 +1,4 @@
-import {completeFeedback} from './deepseek.mjs';
+import {completeStructured} from './deepseek.mjs';
 
 export const knowledgeSystemPrompt = `你是小科科学概念基础知识答疑教师，面向七年级学生。课程涵盖光的折射、几何光学基础、电路组装和欧姆定律；根据学生问题判断主题，不假定学生正在进行凸透镜实验。
 使用温和、鼓励、平等的口吻；一次只解决一个核心问题，可用类比和生活例子。学生理解有误时，先肯定其愿意思考，再解释关键区别，不假装错误观点正确。
@@ -36,18 +36,6 @@ export function fallbackKnowledge(text){
 }
 
 export async function answerKnowledge(payload,options={}){
- if(/(?:成像规律|折射规律|欧姆定律)/.test(payload.text)&&/(?:是什么|告诉|完整|所有|公式|列出|总结|直接)/.test(payload.text)){
-  return {content:'这条核心规律需要由你们通过实验逐步得出。\n可以先选一组条件，记录改变前后的现象，再比较哪些量发生了变化。\n你们已经观察到什么变化呢？',source:'rule',agent:'knowledge'};
- }
- const messages=knowledgeMessages(payload);
- for(let attempt=0;attempt<2;attempt++){
-  try{
-   const raw=await completeFeedback(messages,{...options,responseFormat:{type:'json_object'}});
-   let content;try{content=parseKnowledgeAnswer(raw);}catch{const error=new Error('Invalid knowledge response');error.code='invalid_response';throw error;}
-   return {content,source:'model',agent:'knowledge'};
-  }catch(error){
-   if(attempt||!['empty_response','invalid_response'].includes(error.code))throw error;
-   messages.push({role:'user',content:'请直接输出非空 JSON 对象，sentences 数组包含3至4句完整回答，不要输出空白字符。'});
-  }
- }
+ const content=await completeStructured(knowledgeMessages(payload),parseKnowledgeAnswer,options);
+ return {content,source:'model',agent:'knowledge'};
 }
