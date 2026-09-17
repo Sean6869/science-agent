@@ -99,11 +99,17 @@ function invalidate(id){for(const s of stages)if(s.id>id&&state.data[s.id].submi
 async function requestFeedback(turn){
  const id=turn.stage;
  if(busy.has(id))return;busy.add(id);if(id===state.stage)render();
- const epoch=state;state.data[id].messages=state.data[id].messages.filter(m=>m.retry!==turn);const pending={role:'system',text:'小科正在对照量规阅读你们的产出…'};state.data[id].messages.push(pending);renderMessages();
+ const epoch=state;state.data[id].messages=state.data[id].messages.filter(m=>m.retry?.id!==turn.id);const pending={role:'system',text:'小科正在对照量规阅读你们的产出…'};state.data[id].messages.push(pending);renderMessages();
  try {
  const r=await fetch('/api/chat',{method:'POST',signal:AbortSignal.timeout(130000),headers:{'content-type':'application/json'},body:JSON.stringify(turn)});
  const p=await r.json();if(!r.ok)throw new Error(p.message||'服务请求失败');if(state!==epoch)return;
- state.data[id].messages=state.data[id].messages.filter(m=>m!==pending);state.data[id].awaitingSelfAssessment=turn.kind==='content'&&!p.exhausted&&!p.complete;
+ state.data[id].messages=state.data[id].messages.filter(m=>m!==pending);
+ if(p.source==='fallback'){
+  state.data[id].awaitingSelfAssessment=false;
+  add(id,'system','在线评价暂时未完成，产出已保存。请重试本次反馈，不会额外占用提交次数。',{retry:turn});
+  return;
+ }
+ state.data[id].awaitingSelfAssessment=turn.kind==='content'&&!p.exhausted&&!p.complete;
  add(id,'agent',p.content,{turnId:turn.id,source:p.source,kind:turn.kind});
  }catch{if(state!==epoch)return;state.data[id].messages=state.data[id].messages.filter(m=>m!==pending);add(id,'system','反馈暂不可用，产出已保存。可重试本次反馈。',{retry:turn});}
  finally{busy.delete(id);if(state===epoch){save();if(id===state.stage)render();}}
