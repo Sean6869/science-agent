@@ -5,7 +5,8 @@ import {createWorkspacePanels} from './workspace-panels.js';
 import {createKnowledgeChat} from './knowledge-chat.js';
 import {advanceTimer,createStageTimers,formatTime,pauseTimer,remainingSeconds,resetTimer,startTimer} from './stage-timer.js';
 import {isSelfAssessmentText} from './turn-kind.js';
-const KEY='science-session-v2';
+import {apiFetch} from './school.js';
+const KEY=`science-session-v2:${window.schoolUser.id}`;
 const fresh=()=>({version:3,stage:1,timers:createStageTimers(stages.map(s=>s.id)),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))});
 let state=fresh();
 try {
@@ -101,7 +102,7 @@ async function requestFeedback(turn){
  if(busy.has(id))return;busy.add(id);if(id===state.stage)render();
  const epoch=state;state.data[id].messages=state.data[id].messages.filter(m=>m.retry?.id!==turn.id);const pending={role:'system',text:'小科正在对照量规阅读你们的产出…'};state.data[id].messages.push(pending);renderMessages();
  try {
- const r=await fetch('/api/chat',{method:'POST',signal:AbortSignal.timeout(130000),headers:{'content-type':'application/json'},body:JSON.stringify(turn)});
+ const r=await apiFetch('/api/chat',{method:'POST',signal:AbortSignal.timeout(130000),headers:{'content-type':'application/json'},body:JSON.stringify(turn)});
  const p=await r.json();if(!r.ok)throw new Error(p.message||'服务请求失败');if(state!==epoch)return;
  state.data[id].messages=state.data[id].messages.filter(m=>m!==pending);
  if(p.source==='fallback'){
@@ -121,7 +122,7 @@ function submit(e){
  const kind=d.awaitingSelfAssessment&&isSelfAssessmentText(text)?'self_assessment':'content';
  const attempt=kind==='content'?d.submissions.length+1:d.submissions.length;
  const context=stages.filter(s=>s.id<id&&s.id!==4).map(s=>{const latest=state.data[s.id].submissions.at(-1);return latest?{stage:s.id,text:latest.text,id:latest.id}:null;}).filter(Boolean);
- const turn={id:crypto.randomUUID(),stage:id,kind,attempt,text,context,latestSubmission:kind==='self_assessment'?d.submissions.at(-1)?.text||null:text,conversation:d.messages.filter(m=>['user','agent'].includes(m.role)).slice(-6).map(({role,text})=>({role,text}))};
+ const turn={id:crypto.randomUUID(),lessonId:window.__scienceLesson?.id,stage:id,kind,attempt,text,context,latestSubmission:kind==='self_assessment'?d.submissions.at(-1)?.text||null:text,conversation:d.messages.filter(m=>['user','agent'].includes(m.role)).slice(-6).map(({role,text})=>({role,text}))};
  if(kind==='content'&&attempt<=3){d.submissions.push({id:turn.id,text,context,at:new Date().toISOString(),revision:attempt});d.stale=false;invalidate(id);}
  d.awaitingSelfAssessment=false;d.draft='';add(id,'user',kind==='self_assessment'?`星级自评\n${text}`:`第${attempt}次内容提交\n${text}`);requestFeedback(turn);
 }
@@ -137,7 +138,7 @@ $('timerSettingsPanel').onsubmit=e=>{e.preventDefault();const form=new FormData(
 const af=document.createElement('form');
 for(const a of assessments){const label=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='assessment';input.value=a.id;input.required=true;label.append(input,document.createTextNode(` ${a.label}：${a.detail}`));af.append(label);}
 const confirm=document.createElement('button');confirm.className='primary';confirm.textContent='确认小组自评';af.append(confirm);$('assessment').append(af);
-af.onsubmit=e=>{e.preventDefault();const option=new FormData(af).get('assessment'),a=assessments.find(a=>a.id===option),d=state.data[4];if(!a||d.submissions.at(-1)?.option===option)return;stopActiveTimer();d.submissions.push({id:crypto.randomUUID(),option,at:new Date().toISOString()});d.stale=false;invalidate(4);add(4,'user',a.label+'：'+a.detail);add(4,'agent',a.reply);render();};
+af.onsubmit=async e=>{e.preventDefault();const option=new FormData(af).get('assessment'),a=assessments.find(a=>a.id===option),d=state.data[4];if(!a||confirm.disabled||d.submissions.at(-1)?.option===option)return;confirm.disabled=true;const turnId=crypto.randomUUID();try{const response=await apiFetch('/api/assessment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:turnId,option,lessonId:window.__scienceLesson?.id})});const result=await response.json();if(!response.ok)throw new Error(result.message);stopActiveTimer();d.submissions.push({id:turnId,option,at:new Date().toISOString()});d.stale=false;invalidate(4);add(4,'user',a.label+'：'+a.detail);add(4,'agent',result.content);render();}catch{add(4,'system','自评暂未保存，请再次点击确认。');render();}finally{confirm.disabled=false;}};
 $('composer').onsubmit=submit;
 $('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e.target.value;save();};
 $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};

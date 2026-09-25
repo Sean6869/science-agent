@@ -1,0 +1,63 @@
+let identity=null,csrf='';
+const screen=document.getElementById('schoolScreen');
+const e=(tag,text,className)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;};
+export async function apiFetch(url,options={}){
+ const response=await fetch(url,{...options,headers:{...options.headers,...(identity?{'x-session-user':identity.id}:{}),...(options.method&&options.method!=='GET'?{'x-csrf-token':csrf}:{})}});
+ if((response.status===401&&url!=='/api/auth/login')||response.status===409){location.reload();throw new Error('登录已过期或账号已切换');}return response;
+}
+async function api(url,data,method='POST'){const r=await apiFetch(url,data===undefined?{}:{method,headers:{'content-type':'application/json'},body:JSON.stringify(data)});const result=await r.json();if(!r.ok)throw new Error(result.message||'操作未完成，请重试');return result;}
+function button(label,fn,className='school-button'){const b=e('button',label,className);b.type='button';b.onclick=fn;return b;}
+function message(text,error=false){const n=e('p',text,error?'school-error':'school-note');n.setAttribute('role',error?'alert':'status');return n;}
+function header(title,subtitle){const head=e('header',undefined,'school-heading');const logo=e('img');logo.src='/assets/xiaoke-logo-transparent.png?v=20260917';logo.alt='小科';head.append(logo,e('h1',title),e('p',subtitle));return head;}
+function field(form,label,name,type='text',value='',required=true){const wrap=e('label',undefined,'school-field');wrap.append(e('span',label));const input=e('input');Object.assign(input,{name,type,value,required});if(type==='password'){input.minLength=8;input.maxLength=128;input.autocomplete='new-password';}wrap.append(input);form.append(wrap);return input;}
+async function logout(){await api('/api/auth/logout',{});sessionStorage.clear();location.reload();}
+function accountBar(){const bar=e('div',undefined,'account-bar');bar.append(e('span',`${identity.name} · ${identity.role==='teacher'?'教师':identity.className}`),button('退出登录',()=>logout().catch(err=>alert(err.message)),'school-link'));return bar;}
+function login(){
+ screen.replaceChildren();const card=e('section',undefined,'login-card');card.append(header('欢迎来到科学实验室','学生与教师均使用自己的账号登录'));
+ const form=e('form');field(form,'账号','username').autocomplete='username';const pass=field(form,'密码','password','password');pass.minLength=1;pass.autocomplete='current-password';
+ const submit=e('button','登录','school-button primary');submit.type='submit';const status=message('学生账号由教师统一创建。');form.append(submit,status);card.append(form);screen.append(card);
+ form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;status.textContent='正在登录…';try{const result=await api('/api/auth/login',Object.fromEntries(new FormData(form)));csrf=result.csrf;await boot();}catch(err){status.textContent=err.message;status.className='school-error';}finally{submit.disabled=false;}};
+}
+async function studentTests(){
+ const {quizzes,scores}=await api('/api/quizzes');screen.replaceChildren(accountBar());
+ const complete=q=>scores.find(s=>s.quizId===q.id&&s.version===q.version);const next=quizzes.find(q=>!complete(q));
+ if(!next){const card=e('section',undefined,'school-card');card.append(header('测验已完成','成绩已保存，教师可以在管理端查看。'));for(const q of quizzes)card.append(e('p',`${q.title}：${complete(q).score} / 100 分`));card.append(button('进入实验室',()=>startWorkspace()));screen.append(card);return;}
+ const card=e('section',undefined,'school-card quiz-card');card.append(header(next.title,`入门测验 ${quizzes.indexOf(next)+1} / ${quizzes.length} · 每题10分，满分100分`));
+ for(const line of next.instructions)card.append(e('p',line,'school-note'));
+ if(scores.length)card.append(message(`已保存：${scores.map(s=>`${s.quizId==='lesson-1'?'第一节课':'第二节课'} ${s.score}分`).join('，')}`));
+ const form=e('form');const draftKey=`quiz-draft:${identity.id}:${next.id}:${next.version}`;let saved={};try{saved=JSON.parse(sessionStorage.getItem(draftKey)||'{}');}catch{}
+ const images=(parent,paths)=>{for(const path of paths){const img=e('img');img.src=path;img.alt='题目配图';img.className='quiz-diagram';parent.append(img);}};
+ for(const q of next.questions){const group=e('fieldset');group.append(e('legend',`${q.id}. ${q.text}`));images(group,q.images);for(const option of q.options){const label=e('label',undefined,'quiz-option');const radio=e('input');Object.assign(radio,{type:'radio',name:q.id,value:option.id,required:true,checked:saved[q.id]===option.id});const content=e('span',`${option.id}. ${option.text}`);images(content,option.images);label.append(radio,content);group.append(label);}form.append(group);}
+ const progress=message('请完成全部题目；提交后成绩会被保存，不可重复修改。');
+ const submit=e('button','提交测验并查看分数','school-button primary');submit.type='submit';form.append(progress,submit);card.append(form);screen.append(card);
+ form.onchange=()=>{const answers=Object.fromEntries(new FormData(form));try{sessionStorage.setItem(draftKey,JSON.stringify(answers));}catch{}progress.textContent=`已完成 ${Object.keys(answers).length} / ${next.questions.length} 题`;};
+ form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{const {result}=await api('/api/quizzes/submit',{quizId:next.id,answers:Object.fromEntries(new FormData(form))});sessionStorage.removeItem(draftKey);card.replaceChildren(header('测验已提交','分数已保存并同步到教师端'),e('p',`${result.score} / 100`,'score-number'),e('p',`答对 ${result.correct} / ${result.total} 题`),button(quizzes.indexOf(next)===0?'继续第二份测验':'查看测验汇总',()=>studentTests().catch(showError)));window.scrollTo(0,0);}catch(err){progress.textContent=err.message;progress.className='school-error';submit.disabled=false;}};
+}
+function showError(error){screen.append(message(error.message,true));}
+function table(columns,rows){const wrap=e('div',undefined,'school-table-wrap'),t=e('table'),thead=e('thead'),tr=e('tr');for(const [label] of columns)tr.append(e('th',label));thead.append(tr);const tbody=e('tbody');for(const row of rows){const line=e('tr');for(const [,key] of columns){const td=e('td');const value=typeof key==='function'?key(row):row[key];if(value instanceof Node)td.append(value);else td.textContent=String(value??'');line.append(td);}tbody.append(line);}t.append(thead,tbody);wrap.append(t);if(!rows.length)wrap.append(message('暂无记录'));return wrap;}
+const time=value=>value?new Date(value).toLocaleString('zh-CN'):'';
+async function teacher(){
+ screen.replaceChildren(accountBar());const card=e('section',undefined,'school-card teacher-card');card.append(header('教师管理','管理学生账号，查看测验成绩与两位智能体的完整对话'));
+ const nav=e('nav',undefined,'school-tabs'),panel=e('section');let selected='students';
+ const render=async tab=>{selected=tab;for(const b of nav.children)b.classList.toggle('selected',b.dataset.tab===tab);panel.replaceChildren(message('正在读取记录…'));try{if(tab==='students')await studentsPanel(panel);else if(tab==='scores')await scoresPanel(panel);else await conversationsPanel(panel);}catch(err){panel.replaceChildren(message(err.message,true));}};
+ for(const [key,label] of [['students','学生账号'],['scores','测验成绩'],['conversations','AI 对话记录']]){const b=button(label,()=>render(key));b.dataset.tab=key;nav.append(b);}nav.append(button('刷新',()=>render(selected),'school-link'));card.append(nav,panel);screen.append(card);await render('students');
+}
+async function studentsPanel(panel){
+ const {students}=await api('/api/teacher/students');panel.replaceChildren();const editor=e('section',undefined,'student-editor');
+ function edit(student){editor.replaceChildren(e('h2',student?'编辑学生账号':'创建学生账号'));const form=e('form',undefined,'student-form');field(form,'姓名','name','text',student?.name||'');field(form,'班级','className','text',student?.className||'');const label=e('label',undefined,'school-field');label.append(e('span','性别'));const select=e('select');select.name='gender';for(const value of ['未填写','男','女']){const option=e('option',value);option.value=value;option.selected=student?.gender===value;select.append(option);}label.append(select);form.append(label);const username=field(form,'账号（字母、数字、_ . -）','username','text',student?.username||'');username.pattern='[a-zA-Z0-9_.-]{3,40}';field(form,student?'新密码（留空则不修改）':'初始密码（至少8位）','password','password','',!student);
+ const activeLabel=e('label',undefined,'school-field');const active=e('input');active.type='checkbox';active.checked=student?.active!==false;activeLabel.append(active,e('span','启用账号'));if(student)form.append(activeLabel);
+ const submit=e('button',student?'保存修改':'创建账号','school-button primary');submit.type='submit';const status=message('密码只用于登录校验，教师端不会展示已保存的密码。');form.append(submit);if(student)form.append(button('取消编辑',()=>edit(null),'school-link'));editor.append(form,status);
+ form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{const values={...Object.fromEntries(new FormData(form)),active:active.checked};await api(student?`/api/teacher/students/${student.id}`:'/api/teacher/students',values,student?'PUT':'POST');await studentsPanel(panel);}catch(err){status.textContent=err.message;status.className='school-error';submit.disabled=false;}};
+ }
+ edit(null);panel.append(editor,e('h2',`学生列表 · ${students.length}人`),table([['姓名','name'],['性别','gender'],['班级','className'],['账号','username'],['状态',s=>s.active?'启用':'停用'],['操作',s=>button('编辑 / 重置密码',()=>{edit(s);editor.scrollIntoView({behavior:'smooth'});},'school-link')]],students));
+}
+function exportLink(type,student=''){const a=e('a','导出 CSV（Excel 可打开）','school-button');a.href=`/api/teacher/export?type=${type}&student=${encodeURIComponent(student)}`;return a;}
+async function scoresPanel(panel){const [{students},{scores}]=await Promise.all([api('/api/teacher/students'),api('/api/teacher/scores')]);panel.replaceChildren(exportLink('scores'),message('成绩提交后永久保留；未提交的测验显示“未完成”。'));const rows=students.flatMap(s=>[1,2].map(number=>{const result=scores.find(r=>r.studentId===s.id&&r.quizId===`lesson-${number}`);return {...s,lesson:`第${number}节课`,score:result?`${result.score} / 100`:'未完成',createdAt:time(result?.createdAt)};}));panel.append(table([['姓名','name'],['班级','className'],['账号','username'],['测验','lesson'],['分数','score'],['提交时间','createdAt']],rows));}
+async function conversationsPanel(panel){
+ const {students}=await api('/api/teacher/students');panel.replaceChildren();const filters=e('div',undefined,'school-tabs'),select=e('select');select.setAttribute('aria-label','筛选学生');const all=e('option','全部学生');all.value='';select.append(all);for(const s of students){const option=e('option',`${s.className} · ${s.name}（${s.username}）`);option.value=s.id;select.append(option);}const list=e('section'),pager=e('div',undefined,'school-tabs');let page=0;const exportArea=e('span');filters.append(select,exportArea);panel.append(filters,message('同时记录学生输入、AI回答及回答来源；请求中断或离线回复也会保留。'),list,pager);
+ const load=async()=>{list.replaceChildren(message('正在加载…'));pager.replaceChildren();exportArea.replaceChildren(exportLink('conversations',select.value));try{const {conversations}=await api(`/api/teacher/conversations?student=${encodeURIComponent(select.value)}&page=${page}`);list.replaceChildren();if(!conversations.length)list.append(message('暂无记录'));for(const row of conversations){const item=e('article',undefined,'conversation-record');item.append(e('h3',`${row.name} · ${row.className} · ${row.agent==='knowledge'?'知识答疑':'元认知支架'}`),e('small',`${time(row.createdAt)} · ${row.lessonId} ${row.stage?`· 环节${row.stage}`:''} · ${row.source==='model'?'DeepSeek在线回答':row.source==='fallback'?'离线备用回复':row.source==='rule'?'流程提示':row.status}`),e('h4','学生'),e('p',row.userText),e('h4','AI'),e('p',row.reply||'未收到回复'));list.append(item);}const prev=button('上一页',()=>{page--;void load();});prev.disabled=page===0;const next=button('下一页',()=>{page++;void load();});next.disabled=conversations.length<100;pager.append(prev,e('span',`第${page+1}页`),next);}catch(err){list.replaceChildren(message(err.message,true));}};
+ select.onchange=()=>{page=0;void load();};await load();
+}
+async function startWorkspace(){screen.hidden=true;document.body.classList.add('workspace-ready');window.schoolUser=identity;document.querySelector('.app').hidden=false;const bar=accountBar();bar.classList.add('workspace-account');document.querySelector('.panel-head').after(bar);await import('./app.js');}
+async function boot(){const session=await api('/api/me');if(!session.user){login();return;}identity=session.user;csrf=session.csrf;window.schoolUser=identity;if(identity.role==='teacher')await teacher();else if(session.ready)await startWorkspace();else await studentTests();}
+boot().catch(error=>{screen.replaceChildren(header('暂时无法连接','请确认服务已启动后重试'),message(error.message,true),button('重新连接',()=>location.reload()));});

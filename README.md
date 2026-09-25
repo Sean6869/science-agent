@@ -2,9 +2,13 @@
 
 面向初中学生的 Web 实验应用：左侧可切换三个 PhET 中文实验，右侧提供六阶段探究引导与对话式智能学伴“小科”。
 
-当前已包含一个轻量 Web 应用骨架：左侧嵌入 PhET 实验，右侧提供六阶段进度、阶段开场白和对话式智能学伴“小科”。
+包含学生登录、两份入门测验、教师账号管理、成绩与AI对话导出，以及三个 PhET 实验和两位智能体。
+
+**本次升级需先配置 Railway 持久卷和教师初始账号。** 完整步骤见 [教师端与测验部署说明](docs/SCHOOL_DEPLOYMENT.md)。
 
 ## 本地运行
+
+需要 Node.js 24。先在 `.env.local` 中设置 `TEACHER_USERNAME`、`TEACHER_PASSWORD`（至少12位），初次启动自动创建教师账号。学生账号由教师在网页创建。
 
 ```bash
 npm run dev
@@ -30,13 +34,13 @@ npm run check
 - `DEEPSEEK_THINKING`：`disabled`（默认）或 `enabled`。课堂短反馈默认关闭思考模式。
 - `DEEPSEEK_REASONING_EFFORT`：开启思考时使用 `low`（默认）、`high` 或 `max`。
 
-接入按 [2026-09-10 更新日志](https://api-docs.deepseek.com/zh-cn/updates/)及[思考模式文档](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode/)调整，继续使用 Chat Completions 接口。旧模型名自动迁移到 `deepseek-flash`；旧 `deepseek-reasoner` 在未明确设置模式时保留思考模式。非思考模式最多输出 700 token、超时 25 秒；思考模式使用 8192 token、超时 60 秒，浏览器等待上限 65 秒。只展示完整的最终回答，不展示推理内容；截断、空回答或接口故障均返回明确的自查提示。旧的 `AGENT_API_URL` / `AGENT_API_KEY` 未被实现，已从配置模板移除。
+接入使用 Chat Completions 接口。旧模型名自动迁移到 `deepseek-flash`；旧 `deepseek-reasoner` 在未明确设置模式时保留思考模式。非思考模式最多输出 700 token、单次超时25秒；思考模式使用8192 token、单次超时60秒。允许一次有界重试，浏览器等待上限130秒。两个智能体优先请求在线模型，失败后明确提示并允许重试。
 
 本地配置示例：
 
 ```bash
 cp .env.example .env.local
-# 然后只在 .env.local 中填写 DEEPSEEK_API_KEY
+# 在 .env.local 中填写教师账号密码及 DEEPSEEK_API_KEY
 npm run dev
 ```
 
@@ -48,11 +52,7 @@ npm run dev
 
 ## 输入材料与实验来源
 
-右侧结构和整体布局参考用户提供的 HTML 文件：
-
-- [/Users/gresonkwan/Downloads/deepseek_html_20260527_520198.html](/Users/gresonkwan/Downloads/deepseek_html_20260527_520198.html)
-
-左侧实验不基于该 HTML 编写或拆分，直接嵌入 PhET 第三方页面：
+左侧实验直接嵌入 PhET 第三方页面：
 
 - 用户提供的资源入口：[PhET 中文模拟平台](https://phet.colorado.edu/zh_CN/)
 
@@ -67,13 +67,13 @@ npm run dev
 
 ## 后续实现建议
 
-当前实现刻意保持零前端构建依赖，方便迁移到任意 Node 运行环境。DeepSeek 已通过服务端适配层接入；未配置 `DEEPSEEK_API_KEY` 时会自动使用本地规则兜底。
+当前实现保持零前端构建依赖，数据库使用 Node.js 24 的 SQLite 模块。DeepSeek 通过服务端适配层接入；未配置 `DEEPSEEK_API_KEY` 时会返回明确的离线状态。
 
 六个阶段的固定开场白使用随应用部署的“小晓”自然女声 MP3。浏览器直接播放 `/public/audio/stage-1.mp3` 至 `stage-6.mp3`，因此不会因操作系统或浏览器内置语音不同而改变音色，也不会在课堂播放时调用外部语音服务。
 
 六个阶段各有独立倒计时，默认 5 分钟。教师可在阶段进度条下方展开设置栏，将每个环节设为 1 至 60 分钟；切换环节会暂停上一环节并启动当前环节，最后 1 分钟以铃声和醒目状态提醒。
 
-两个智能体使用独立入口与会话：元认知支架可通过实验区右上方按钮收起，收起后实验占满可用宽度；点击左上角小科头像打开知识答疑。知识答疑支持基础概念解释，不消耗正式内容提交次数，遇到完整核心规律提问时引导学生回到实验。知识提示词集中在 knowledge-agent.mjs，前端会话在 public/knowledge-chat.js。
+两个智能体使用独立入口与会话：元认知支架可通过实验区右上方按钮收起，收起后实验占满可用宽度；点击可拖动的小科宠物打开知识答疑。知识答疑支持基础概念解释，不消耗正式内容提交次数。知识提示词集中在 knowledge-agent.mjs，前端会话在 public/knowledge-chat.js。两位智能体的输入和回答均按登录学生保存到服务器。
 输入区采用独立内容高度，约为原截图的一半，剩余高度用于聊天记录。
 
 ## 实验课程

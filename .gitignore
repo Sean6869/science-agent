@@ -12,3 +12,8 @@ coverage/
 # Tooling caches and logs
 *.log
 .vite/
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.school-qa/

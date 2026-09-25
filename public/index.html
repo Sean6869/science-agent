@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>小科｜虚拟科学探究平台</title>
 <link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/school.css">
 <link rel="icon" type="image/png" href="/assets/xiaoke-icon-transparent.png?v=20260917">
 <link rel="preconnect" href="https://phet.colorado.edu" crossorigin>
 <link rel="preload" as="image" href="/assets/xiaoke-pet-active.png?v=20260917">
@@ -13,7 +14,8 @@
 <link rel="preload" as="image" href="/assets/lesson-3.png?v=20260917">
 </head>
 <body>
-<main class="app">
+<main id="schoolScreen" aria-live="polite"><p>正在连接小科…</p></main>
+<main class="app" hidden>
 <section class="layout">
 <article class="experiment">
 <div class="panel-head">
@@ -95,7 +97,7 @@
 <details class="knowledge-prompts"><summary>本课典型问题</summary><div id="knowledgePromptList" class="knowledge-prompt-list"></div></details>
 <form id="knowledgeComposer" class="chat-composer"><textarea id="knowledgeDraft" aria-label="知识问题" placeholder="例如：实像和虚像有什么区别？" maxlength="2000" rows="2"></textarea><div class="composer-actions"><button class="icon-button primary" id="knowledgeSend" type="submit" aria-label="发送知识问题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></div></form>
 </section>
-<script type="module" src="/app.js">
+<script type="module" src="/school.js">
 </script>
 </body>
 </html>

@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+data
+node_modules
+.school-qa
+.codex-doc-review
+tests
+*.sqlite*
+*.log
