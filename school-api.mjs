@@ -1,4 +1,5 @@
 import {publicQuizzes} from './school-store.mjs';
+import {lessons} from './lessons.mjs';
 import {parseStudentsWorkbook,workbookBuffer} from './school-excel.mjs';
 export function createSchoolApi(store,{json,body}){
  const attempts=new Map();
@@ -45,11 +46,12 @@ export function createSchoolApi(store,{json,body}){
   if(path.startsWith('/api/teacher/')){
    if(!['admin','teacher'].includes(session.user.role)){json(res,403,{message:'仅教师或管理员可以访问'});return true;}
    const actor=session.user,classId=url.searchParams.get('class')||'';
+   if(path==='/api/teacher/knowledge/reset'&&req.method==='POST'){const p=await body(req);if(!lessons.some(l=>l.id===p?.lessonId)){json(res,400,{message:'请选择有效课程'});return true;}store.resetKnowledgeQuota(actor,p.classId,p.lessonId);json(res,200,{ok:true});return true;}
    if(req.method==='DELETE'){
     const target=/^\/api\/teacher\/(students|conversations)\/([^/]+)(\/scores)?$/.exec(path);
     if(target){if(target[1]==='conversations'&&!target[3])store.deleteConversation(target[2],actor);else if(target[1]==='students'){if(target[3])store.deleteScores(target[2],actor);else store.deleteStudent(target[2],actor);}else{json(res,404,{message:'接口不存在'});return true;}json(res,200,{ok:true});return true;}
    }
-   if(path==='/api/teacher/groups'&&req.method==='GET'){json(res,200,{classes:store.listGroups(actor,classId)});return true;}
+   if(path==='/api/teacher/groups'&&req.method==='GET'){json(res,200,{classes:store.listGroups(actor,classId),lessons});return true;}
    if(path==='/api/teacher/groups'&&req.method==='PUT'){const p=await body(req);store.editGroups(actor,p?.classId,p?.batchId,p?.groups);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/groups/approve'&&req.method==='POST'){const p=await body(req);store.approveGroups(actor,p?.classId,p?.batchId);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/groups.xlsx'&&req.method==='GET'){

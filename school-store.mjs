@@ -122,6 +122,8 @@ export async function openSchoolStore(filename,bootstrap={}){
   approveGroups(actor,classId,batchId){return groups.approve(actor,classId,batchId);},
   editGroups(actor,classId,batchId,assignments){return groups.edit(actor,classId,batchId,assignments);},
   groupStatus(userId){return groups.student(userId);},
+  knowledgeQuota(userId,lessonId,turn){return groups.quota(userId,lessonId,turn);},
+  resetKnowledgeQuota(actor,classId,lessonId){return groups.resetQuota(actor,classId,lessonId);},
   joinGroup(userId,code){return groups.join(userId,code);},
   listGroups(actor,classId=''){scope(actor,classId);return this.classes(actor).filter(c=>!classId||c.id===classId).map(c=>groups.report(c));},
   begin(userId,agent,p){const id=randomUUID();db.prepare('INSERT INTO conversations(id,user_id,turn_id,agent,lesson_id,stage,user_text,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)').run(id,userId,p.id||randomUUID(),agent,p.lessonId||'unknown',p.stage||null,p.text,'pending',now());return id;},

@@ -5,6 +5,20 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
  db.exec(`CREATE TABLE IF NOT EXISTS group_batches(class_id TEXT PRIMARY KEY REFERENCES classes(id),id TEXT NOT NULL,summary TEXT NOT NULL,approved_at TEXT,approved_by TEXT);
  CREATE TABLE IF NOT EXISTS student_groups(id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES classes(id),number INTEGER NOT NULL,type TEXT NOT NULL,code TEXT UNIQUE);
  CREATE TABLE IF NOT EXISTS group_members(user_id TEXT PRIMARY KEY REFERENCES users(id),group_id TEXT NOT NULL REFERENCES student_groups(id),total INTEGER NOT NULL,level TEXT NOT NULL,joined INTEGER NOT NULL DEFAULT 0);`);
+ db.exec('CREATE TABLE IF NOT EXISTS knowledge_usage(group_id TEXT NOT NULL REFERENCES student_groups(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,user_id TEXT NOT NULL,turn_id TEXT NOT NULL,question TEXT NOT NULL,PRIMARY KEY(group_id,lesson_id,user_id,turn_id))');
+ function quota(userId,lessonId,turn){
+  const group=db.prepare('SELECT g.id,g.type FROM student_groups g JOIN group_members m ON m.group_id=g.id WHERE m.user_id=? AND m.joined=1').get(userId);
+  if(!group||group.type!=='HH')return {limit:null,remaining:null};
+  return atomic(()=>{
+   let used=db.prepare('SELECT COUNT(*) AS n FROM knowledge_usage WHERE group_id=? AND lesson_id=?').get(group.id,lessonId).n;
+   if(turn){
+    const old=db.prepare('SELECT question FROM knowledge_usage WHERE group_id=? AND lesson_id=? AND user_id=? AND turn_id=?').get(group.id,lessonId,userId,turn.id);
+    if(old&&old.question!==turn.text)fail('重试的问题内容不能改变');
+    if(!old){if(used>=3)fail('本小组本节课的3次知识答疑机会已用完，请与组员讨论或向老师请教。',429);db.prepare('INSERT INTO knowledge_usage VALUES(?,?,?,?,?)').run(group.id,lessonId,userId,turn.id,turn.text);used++;}
+   }
+   return {limit:3,used,remaining:3-used};
+  });
+ }
  const roster=classId=>db.prepare("SELECT id,name,username,gender FROM users WHERE class_id=? AND role='student' AND active=1 ORDER BY username").all(classId).map(s=>{
   const scores=db.prepare('SELECT quiz_id,version,score FROM scores WHERE user_id=?').all(s.id),current=quizzes.map(q=>scores.find(r=>r.quiz_id===q.id&&r.version===q.version));return {...s,completed:current.every(Boolean),total:current.reduce((n,r)=>n+(r?.score||0),0)};
  });
@@ -50,5 +64,6 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
    for(const [i,g] of planned.entries()){const id=randomUUID();db.prepare('INSERT INTO student_groups VALUES(?,?,?,?,NULL)').run(id,classId,i+1,g.type);for(const s of g.members)db.prepare('INSERT INTO group_members VALUES(?,?,?,?,0)').run(s.id,id,s.total,level(s));}
   });
  }
- return {invalidate,ensure,student,report,approve,join,edit};
+ function resetQuota(actor,classId,lessonId){if(!classId)fail('请选择班级');scope(actor,classId);db.prepare('DELETE FROM knowledge_usage WHERE lesson_id=? AND group_id IN (SELECT id FROM student_groups WHERE class_id=?)').run(lessonId,classId);}
+ return {invalidate,ensure,student,report,approve,join,edit,quota,resetQuota};
 }

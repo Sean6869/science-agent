@@ -99,7 +99,7 @@ function editGroupDraft(card,c,panel){
  const cancel=button('取消编辑',()=>groupsPanel(panel));actions.append(save,cancel);card.append(area,actions,status);draw();
 }
 async function groupsPanel(panel){
- const {classes}=await api(scoped('/api/teacher/groups'));panel.replaceChildren();const download=e('a','导出小组码','school-button');download.href=scoped('/api/teacher/groups.xlsx');setExport(download);if(!classes.length)panel.append(message('暂无班级，请先导入学生名单。'));
+ const {classes,lessons}=await api(scoped('/api/teacher/groups'));panel.replaceChildren();const download=e('a','导出小组码','school-button');download.href=scoped('/api/teacher/groups.xlsx');setExport(download);if(!classes.length)panel.append(message('暂无班级，请先导入学生名单。'));
  for(const c of classes){const card=e('section',undefined,'conversation-record');card.append(e('h2',c.name),message('已完成全部测验：'+c.completed+' / '+c.total+' 人'));
   if(c.status==='waiting'){card.append(message('全班完成测验后自动生成分组草案。'));panel.append(card);continue;}
   const range=r=>r?r.join('–')+' 分':'无';card.append(message('三课总分：低分段 '+range(c.summary.lowRange)+'；高分段 '+range(c.summary.highRange)));
@@ -110,6 +110,11 @@ async function groupsPanel(panel){
   if(c.groups.some(g=>g.members.some(m=>m.gender==='未填写')))card.append(message('部分学生未填写性别，未推测其性别。'));
   card.append(table([['小组',g=>g.number],['类型',g=>({LL:'低低',HH:'高高',HL:'高低',single:'单人待补'})[g.type]],['成员',g=>g.members.map(m=>m.name+'（'+m.gender+'，'+m.total+'分）').join('、')],['小组码',g=>g.code||'待审核']],c.groups));
   if(c.status==='review')card.append(button('编辑分组',()=>editGroupDraft(card,c,panel)),button('确认分组并生成小组码',async event=>{if(!window.confirm('确认“'+c.name+'”的分组方案并生成小组码？'))return;event.currentTarget.disabled=true;try{await api('/api/teacher/groups/approve',{classId:c.id,batchId:c.batchId});await groupsPanel(panel);}catch(err){await groupsPanel(panel);panel.prepend(message(err.message,true));}},'school-button primary'));else card.append(message('已确认，可导出小组码。'));
+  if(c.status==='approved'){
+   const controls=e('div',undefined,'school-tabs'),lesson=e('select'),note=message('');lesson.setAttribute('aria-label',c.name+'重置答疑课程');
+   for(const item of lessons){const o=e('option','第'+item.number+'节课 · '+item.title);o.value=item.id;lesson.append(o);}
+   controls.append(lesson,button('重置答疑次数',async event=>{if(!confirm('重置“'+c.name+'”'+lesson.selectedOptions[0].textContent+'的知识答疑次数？高高组将重新获得3次机会，对话记录保留。'))return;const b=event.currentTarget;b.disabled=true;try{await api('/api/teacher/knowledge/reset',{classId:c.id,lessonId:lesson.value});note.textContent='答疑次数已重置';}catch(error){note.textContent=error.message;}finally{b.disabled=false;}}));card.append(controls,note);
+  }
   panel.append(card);
  }
 }

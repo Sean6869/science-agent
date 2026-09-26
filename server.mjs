@@ -55,11 +55,18 @@ export function createApp({store}={}) {
    const p=await body(req);const a=assessments.find(a=>a.id===p?.option);if(!a)return json(res,400,{message:'请选择有效的自评选项'});
    return json(res,200,await recorded(req,'metacognitive',{...p,stage:4,text:a.label+'：'+a.detail},async()=>({content:a.reply,source:'rule'})));
   }
+  if(url.pathname==='/api/knowledge' && req.method==='GET') {
+   const lessonId=url.searchParams.get('lesson');if(!lessons.some(l=>l.id===lessonId))return json(res,400,{message:'请选择有效课程'});
+   return json(res,200,store.knowledgeQuota(req.schoolUser.id,lessonId));
+  }
   if(url.pathname==='/api/knowledge' && req.method==='POST') {
    let p;try{p=await body(req);}catch{return json(res,400,{message:'请求格式无效'});}
    if(!p||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000||!Array.isArray(p.history)||p.history.length>8||p.history.some(m=>!m||!['user','agent'].includes(m.role)||typeof m.text!=='string'||m.text.length>2000))return json(res,400,{message:'请输入1至2000字问题'});
-   const result=await recorded(req,'knowledge',p,async()=>{try{return await answerKnowledge(p);}catch(error){console.error(`[knowledge] ${error?.name||'Error'}: ${error?.message||'unknown failure'}`);return fallbackKnowledge(p.text);}});
-   return json(res,200,result);
+   const lessonId=lessons.some(l=>l.id===p.lessonId)?p.lessonId:defaultLessonId;
+   const turn={id:typeof p.id==='string'&&p.id.length<=80?p.id:crypto.randomUUID(),text:p.text.trim()};
+   store.knowledgeQuota(req.schoolUser.id,lessonId,turn);
+   const result=await recorded(req,'knowledge',{...p,...turn,lessonId},async()=>{try{return await answerKnowledge(p);}catch(error){console.error(`[knowledge] ${error?.name||'Error'}: ${error?.message||'unknown failure'}`);return fallbackKnowledge(p.text);}});
+   return json(res,200,{...result,quota:store.knowledgeQuota(req.schoolUser.id,lessonId)});
   }
   if(url.pathname==='/api/chat' && req.method==='POST') {
    let p; try {p=await body(req);} catch {return json(res,400,{message:'请求格式无效或内容过长'});}
