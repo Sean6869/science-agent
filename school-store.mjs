@@ -105,12 +105,27 @@ export async function openSchoolStore(filename,bootstrap={}){
   fail(id){db.prepare("UPDATE conversations SET status='failed',answered_at=? WHERE id=?").run(now(),id);}
  };
  db.prepare("UPDATE conversations SET status='interrupted' WHERE status='pending'").run();
- if(!db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get()){
-  if(!bootstrap.username||!bootstrap.password||bootstrap.password.length<12){db.close();throw new Error('首次启动需设置 ADMIN_USERNAME 和 ADMIN_PASSWORD（密码至少12位）');}
-  db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,credential) VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(),bootstrap.username,await passwordHash(bootstrap.password),'admin','管理员','未填写','',now(),vault.encrypt(bootstrap.password));
- }
- // Recover only the known bootstrap password after verifying its existing hash.
- const legacy=db.prepare("SELECT * FROM users WHERE role='admin' AND username=? AND credential IS NULL").get(bootstrap.username||'');
- if(legacy&&bootstrap.password&&await matches(bootstrap.password,legacy.password))db.prepare('UPDATE users SET credential=? WHERE id=?').run(vault.encrypt(bootstrap.password),legacy.id);
+ // Railway configuration is authoritative for the deployment administrator.
+ try{
+  const admins=db.prepare("SELECT * FROM users WHERE role='admin'").all();
+  if(bootstrap.username!==undefined||bootstrap.password!==undefined||!admins.length){
+   const username=typeof bootstrap.username==='string'?bootstrap.username.trim():'',password=bootstrap.password;
+   if(!/^[a-zA-Z0-9_.-]{3,40}$/.test(username)||typeof password!=='string'||password.length<12||password.length>128)fail('请设置有效的 ADMIN_USERNAME 和 ADMIN_PASSWORD（密码12–128位）');
+   db.exec('CREATE TABLE IF NOT EXISTS deployment_admin(id INTEGER PRIMARY KEY CHECK(id=1),user_id TEXT NOT NULL REFERENCES users(id))');
+   const tracked=db.prepare('SELECT user_id FROM deployment_admin WHERE id=1').get();
+   const existing=tracked?getUser(tracked.user_id):(admins.find(u=>u.username.toLowerCase()===username.toLowerCase())||(admins.length===1?admins[0]:null));
+   if(admins.length&&!existing)fail('无法确定部署管理员，请使用现有管理员账号配置 ADMIN_USERNAME');
+   const collision=db.prepare('SELECT id FROM users WHERE username=?').get(username);
+   if(collision&&collision.id!==existing?.id)fail('ADMIN_USERNAME 与其他账号重复，请使用独立的管理员账号');
+   const changed=!existing||existing.username!==username||!existing.active||!await matches(password,existing.password);
+   const hash=changed?await passwordHash(password):existing.password;
+   transaction(()=>{
+    const id=existing?.id||randomUUID();
+    if(existing){if(!existing.credential)db.prepare('UPDATE users SET credential=? WHERE id=?').run(vault.encrypt(password),id);if(changed){db.prepare('UPDATE users SET username=?,password=?,credential=?,active=1 WHERE id=?').run(username,hash,vault.encrypt(password),id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);}}
+    else db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,credential) VALUES(?,?,?,?,?,?,?,?,?)').run(id,username,hash,'admin','管理员','未填写','',now(),vault.encrypt(password));
+    db.prepare('INSERT INTO deployment_admin VALUES(1,?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id').run(id);
+   });
+  }
+ }catch(error){db.close();throw error;}
  return store;
 }
