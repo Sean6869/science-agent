@@ -8,7 +8,7 @@
 
 ## 本地运行
 
-需要 Node.js 24。先在 `.env.local` 中设置 `ADMIN_USERNAME`、`ADMIN_PASSWORD`（至少12位），初次启动自动创建管理员。原TEACHER变量兼容，旧教师管理员账号自动迁移。教师在登录页注册，学生由教师创建或批量导入。
+需要 Node.js 24。先在 `.env.local` 中设置 `ADMIN_USERNAME`、`ADMIN_PASSWORD`（至少12位），初次启动自动创建管理员。旧教师管理员账号自动迁移；部署变量统一使用 ADMIN_USERNAME、ADMIN_PASSWORD。教师在登录页注册，学生由教师创建或批量导入。
 
 ```bash
 pnpm install --frozen-lockfile

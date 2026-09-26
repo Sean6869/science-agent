@@ -30,7 +30,7 @@ async function evaluate(p) {
 export async function defaultSchoolStore(){
  const dataDir=process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR;
  if(process.env.RAILWAY_ENVIRONMENT_ID&&!process.env.RAILWAY_VOLUME_MOUNT_PATH)throw new Error('请先为 Railway 服务挂载持久化 Volume，建议挂载到 /data，以保存账号、成绩和对话');
- return openSchoolStore(resolve(dataDir||resolve(root,'data'),'school.sqlite'),{username:process.env.ADMIN_USERNAME||process.env.TEACHER_USERNAME,password:process.env.ADMIN_PASSWORD||process.env.TEACHER_PASSWORD});
+ return openSchoolStore(resolve(dataDir||resolve(root,'data'),'school.sqlite'),{username:process.env.ADMIN_USERNAME,password:process.env.ADMIN_PASSWORD});
 }
 export function createApp({store}={}) {
  if(!store)throw new Error('createApp requires a school store');

@@ -3,7 +3,7 @@
 ## Railway 部署
 
 1. 为应用挂载 Volume 到 `/data`，保留现有卷。使用仓库 Dockerfile，Node.js 24，单副本，健康检查 `/health`。
-2. 新数据库设置 `ADMIN_USERNAME`、`ADMIN_PASSWORD`（至少12位）。已有服务的 `TEACHER_USERNAME`、`TEACHER_PASSWORD` 仍然兼容，不必重新设置。
+2. 设置 `ADMIN_USERNAME`、`ADMIN_PASSWORD`（至少12位）。升级已有服务时，将旧变量 TEACHER_USERNAME、TEACHER_PASSWORD 分别改名为 ADMIN_USERNAME、ADMIN_PASSWORD，值保持不变，然后删除旧变量。应用只读取 ADMIN_* 管理员配置。
 3. 保留 `DEEPSEEK_API_KEY` 等模型变量。部署后原初始教师账号自动升级为管理员，账号、密码、学生、成绩和对话保持不变。
 
 Railway 自动注入 `RAILWAY_VOLUME_MOUNT_PATH`。缺少实际挂载卷时应用拒绝启动，不要手工伪造该变量。初始化密码只用于首次创建管理员；以后修改环境变量不会覆盖数据库中的账号。

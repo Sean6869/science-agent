@@ -105,7 +105,7 @@ export async function openSchoolStore(filename,bootstrap={}){
  };
  db.prepare("UPDATE conversations SET status='interrupted' WHERE status='pending'").run();
  if(!db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get()){
-  if(!bootstrap.username||!bootstrap.password||bootstrap.password.length<12){db.close();throw new Error('首次启动需设置管理员账号和至少12位的密码');}
+  if(!bootstrap.username||!bootstrap.password||bootstrap.password.length<12){db.close();throw new Error('首次启动需设置 ADMIN_USERNAME 和 ADMIN_PASSWORD（密码至少12位）');}
   db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,credential) VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(),bootstrap.username,await passwordHash(bootstrap.password),'admin','管理员','未填写','',now(),vault.encrypt(bootstrap.password));
  }
  // Recover only the known bootstrap password after verifying its existing hash.
