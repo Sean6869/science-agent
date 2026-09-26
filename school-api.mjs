@@ -30,6 +30,7 @@ export function createSchoolApi(store,{json,body}){
   if(path==='/api/auth/logout'&&req.method==='POST'){store.logout(token(req));res.setHeader('Set-Cookie',cookie(req,'',0));json(res,200,{ok:true});return true;}
   if(path.startsWith('/api/admin/')){
    if(session.user.role!=='admin'){json(res,403,{message:'仅管理员可以访问'});return true;}
+   if(/^\/api\/admin\/classes\/[^/]+$/.test(path)&&req.method==='DELETE'){store.deleteClass(path.split('/').at(-1),session.user);json(res,200,{ok:true});return true;}
    if(path==='/api/admin/teachers'&&req.method==='GET'){json(res,200,{teachers:store.teachers(session.user)});return true;}
    if(/^\/api\/admin\/teachers\/[^/]+$/.test(path)&&req.method==='DELETE'){store.deleteTeacher(path.split('/').at(-1),session.user);json(res,200,{ok:true});return true;}
    if(path==='/api/admin/classes/assign'&&req.method==='POST'){const p=await body(req);store.assignClass(p?.classId,p?.teacherId,session.user);json(res,200,{ok:true});return true;}

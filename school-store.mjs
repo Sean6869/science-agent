@@ -58,6 +58,17 @@ export async function openSchoolStore(filename,bootstrap={}){
  const groups=createGroupStore(db,{quizzes,getUser,scope,fail});
  const store={
   close(){db.close();},
+  deleteClass(id,actor){
+   if(manager(actor).role!=='admin')fail('仅管理员可以删除班级',403);
+   if(!id||!db.prepare('SELECT id FROM classes WHERE id=?').get(id))fail('班级不存在',404);
+   return transaction(()=>{
+    groups.invalidate(id);
+    for(const table of ['sessions','scores','conversations'])db.prepare(`DELETE FROM ${table} WHERE user_id IN (SELECT id FROM users WHERE class_id=? AND role='student')`).run(id);
+    db.prepare('DELETE FROM imports WHERE class_id=?').run(id);
+    db.prepare("DELETE FROM users WHERE class_id=? AND role='student'").run(id);
+    db.prepare('DELETE FROM classes WHERE id=?').run(id);
+   });
+  },
   classes(actor){const u=manager(actor);return db.prepare("SELECT c.id,c.name,u.name AS teacherName,u.username AS teacherUsername FROM classes c LEFT JOIN users u ON u.id=c.teacher_id WHERE (?='admin' OR c.teacher_id=?) ORDER BY c.name,c.created_at").all(u.role,u.id);},
   assignClass(classId,teacherId,actor){if(manager(actor).role!=='admin')fail('仅管理员可以分配班级',403);scope(actor,classId);const t=getUser(teacherId);if(!classId||!t||t.role!=='teacher'||!t.active)fail('请选择班级和启用的教师');db.prepare('UPDATE classes SET teacher_id=? WHERE id=?').run(t.id,classId);},
   students(actor,classId=''){return db.prepare("SELECT u.* FROM users u WHERE u.role='student' AND "+scopedWhere+" ORDER BY u.class_name,u.name,u.username").all(...scopeArgs(actor,classId)).map(profile);},
