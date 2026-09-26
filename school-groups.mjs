@@ -34,5 +34,21 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
   atomic(()=>{for(const g of db.prepare('SELECT id FROM student_groups WHERE class_id=?').all(classId)){let code;do{code=randomBytes(4).toString('hex').toUpperCase();}while(db.prepare('SELECT id FROM student_groups WHERE code=?').get(code));db.prepare('UPDATE student_groups SET code=? WHERE id=?').run(code,g.id);}db.prepare('UPDATE group_batches SET approved_at=?,approved_by=? WHERE class_id=?').run(new Date().toISOString(),actor.id,classId);});
  }
  function join(userId,code){const g=db.prepare('SELECT g.id FROM student_groups g JOIN group_members m ON m.group_id=g.id JOIN group_batches b ON b.class_id=g.class_id WHERE m.user_id=? AND g.code=? AND b.approved_at IS NOT NULL').get(userId,String(code||'').trim().toUpperCase());if(!g)fail('小组码不正确，或教师尚未确认分组');db.prepare('UPDATE group_members SET joined=1 WHERE user_id=?').run(userId);return student(userId);}
- return {invalidate,ensure,student,report,approve,join};
+ function edit(actor,classId,batchId,assignments){
+  if(typeof classId!=='string'||!classId)fail('请选择班级');scope(actor,classId);
+  const batch=db.prepare('SELECT * FROM group_batches WHERE class_id=?').get(classId);
+  if(!batch||batch.id!==batchId)fail('分组草案已改变，请刷新后重新编辑',409);
+  if(batch.approved_at)fail('分组已确认，不能修改已发放的小组码对应成员');
+  const people=roster(classId),byId=new Map(people.map(s=>[s.id,s]));
+  if(!Array.isArray(assignments)||assignments.length!==Math.ceil(people.length/2)||assignments.some(g=>!Array.isArray(g)||g.length<1||g.length>2))fail('每组须为两人，奇数人数仅保留一个单人组');
+  const ids=assignments.flat();if(ids.length!==people.length||new Set(ids).size!==people.length||ids.some(id=>!byId.has(id))||people.some(s=>!s.completed))fail('成员须包含本班全部已完成测验的学生，且不能重复');
+  const summary=JSON.parse(batch.summary),level=s=>s.total<=summary.threshold?'low':'high';summary.counts={LL:0,HH:0,HL:0};summary.edited=true;
+  const planned=assignments.map(ids=>{const members=ids.map(id=>byId.get(id)),type=members.length===1?'single':level(members[0])===level(members[1])?(level(members[0])==='low'?'LL':'HH'):'HL';if(type!=='single')summary.counts[type]++;return {members,type};});
+  atomic(()=>{
+   invalidate(classId);
+   db.prepare('INSERT INTO group_batches VALUES(?,?,?,NULL,NULL)').run(classId,randomUUID(),JSON.stringify(summary));
+   for(const [i,g] of planned.entries()){const id=randomUUID();db.prepare('INSERT INTO student_groups VALUES(?,?,?,?,NULL)').run(id,classId,i+1,g.type);for(const s of g.members)db.prepare('INSERT INTO group_members VALUES(?,?,?,?,0)').run(s.id,id,s.total,level(s));}
+  });
+ }
+ return {invalidate,ensure,student,report,approve,join,edit};
 }

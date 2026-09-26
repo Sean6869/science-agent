@@ -50,6 +50,7 @@ export function createSchoolApi(store,{json,body}){
     if(target){if(target[1]==='conversations'&&!target[3])store.deleteConversation(target[2],actor);else if(target[1]==='students'){if(target[3])store.deleteScores(target[2],actor);else store.deleteStudent(target[2],actor);}else{json(res,404,{message:'接口不存在'});return true;}json(res,200,{ok:true});return true;}
    }
    if(path==='/api/teacher/groups'&&req.method==='GET'){json(res,200,{classes:store.listGroups(actor,classId)});return true;}
+   if(path==='/api/teacher/groups'&&req.method==='PUT'){const p=await body(req);store.editGroups(actor,p?.classId,p?.batchId,p?.groups);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/groups/approve'&&req.method==='POST'){const p=await body(req);store.approveGroups(actor,p?.classId,p?.batchId);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/groups.xlsx'&&req.method==='GET'){
     const rows=store.listGroups(actor,classId).filter(c=>c.status==='approved').flatMap(c=>c.groups.map(g=>({className:c.name,number:g.number,code:g.code,type:({LL:'低低',HH:'高高',HL:'高低',single:'单人待补'})[g.type],names:g.members.map(s=>s.name).join('、'),usernames:g.members.map(s=>s.username).join('、'),scores:g.members.map(s=>s.total).join('、'),low:c.summary.lowRange?.join('–'),high:c.summary.highRange?.join('–')||'无'})));

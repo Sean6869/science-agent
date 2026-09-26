@@ -90,18 +90,26 @@ async function studentsPanel(panel){
 let refreshButton=null;function setExport(node){const nav=screen.querySelector('.management-nav');nav.querySelector('[data-export]')?.remove();node.dataset.export='true';nav.append(node);if(refreshButton)nav.append(refreshButton);}
 function exportLink(type,student=''){const a=e('a','导出记录','school-button');a.dataset.export='true';a.href=scoped(`/api/teacher/export?type=${type}&student=${encodeURIComponent(student)}`);return a;}
 async function scoresPanel(panel){const [{students},{scores,quizzes}]=await Promise.all([api(scoped('/api/teacher/students')),api(scoped('/api/teacher/scores'))]);panel.replaceChildren();setExport(exportLink('scores'));const rows=students.flatMap(s=>quizzes.map(q=>{const result=scores.find(r=>r.studentId===s.id&&r.quizId===q.id&&r.version===q.version);return {...s,lesson:q.title,score:result?result.score+' / 100':'未完成',createdAt:time(result?.createdAt)};}));panel.append(table([['姓名','name'],['班级','className'],['账号','username'],['测验','lesson'],['分数','score'],['提交时间','createdAt'],['操作',s=>deleteButton('清除测验','将清除学生“'+s.name+'”全部测验成绩，并使本班分组及小组码失效。','/api/teacher/students/'+s.id+'/scores',()=>scoresPanel(panel))]],rows));}
+function editGroupDraft(card,c,panel){
+ const members=c.groups.flatMap(g=>g.members),byId=new Map(members.map(m=>[m.id,m])),draft=c.groups.map(g=>g.members.map(m=>m.id));
+ card.replaceChildren(e('h2',c.name+' · 编辑分组'),message('选择学生即可与其原位置的成员互换。保存后仍需确认，才会生成小组码。'));
+ const area=e('div'),status=message(''),actions=e('div',undefined,'school-tabs');
+ function draw(){const rows=draft.map((ids,i)=>({number:i+1,ids}));area.replaceChildren(table([['小组','number'],['类型',g=>g.ids.length===1?'单人待补':byId.get(g.ids[0]).level===byId.get(g.ids[1]).level?(byId.get(g.ids[0]).level==='low'?'低低':'高高'):'高低'],['成员',g=>{const wrap=e('div',undefined,'group-member-edit');g.ids.forEach((id,j)=>{const select=e('select');select.setAttribute('aria-label',`第${g.number}组成员${j+1}`);for(const m of members){const option=e('option',`${m.name}（${m.username} · ${m.gender} · ${m.total}分）`);option.value=m.id;select.append(option);}select.value=id;select.onchange=()=>{const target=select.value;for(const other of draft){const index=other.indexOf(target);if(index!==-1){other[index]=id;break;}}g.ids[j]=target;draw();};wrap.append(select);});return wrap;}]],rows));}
+ const save=button('保存分组草案',async()=>{save.disabled=true;cancel.disabled=true;try{await api('/api/teacher/groups',{classId:c.id,batchId:c.batchId,groups:draft},'PUT');await groupsPanel(panel);}catch(error){status.textContent=error.message;save.disabled=false;cancel.disabled=false;}},'school-button primary');
+ const cancel=button('取消编辑',()=>groupsPanel(panel));actions.append(save,cancel);card.append(area,actions,status);draw();
+}
 async function groupsPanel(panel){
  const {classes}=await api(scoped('/api/teacher/groups'));panel.replaceChildren();const download=e('a','导出小组码','school-button');download.href=scoped('/api/teacher/groups.xlsx');setExport(download);if(!classes.length)panel.append(message('暂无班级，请先导入学生名单。'));
  for(const c of classes){const card=e('section',undefined,'conversation-record');card.append(e('h2',c.name),message('已完成全部测验：'+c.completed+' / '+c.total+' 人'));
   if(c.status==='waiting'){card.append(message('全班完成测验后自动生成分组草案。'));panel.append(card);continue;}
   const range=r=>r?r.join('–')+' 分':'无';card.append(message('三课总分：低分段 '+range(c.summary.lowRange)+'；高分段 '+range(c.summary.highRange)));
   const counts=c.summary.counts;card.append(message('低低 '+counts.LL+' 组 · 高高 '+counts.HH+' 组 · 高低 '+counts.HL+' 组'));
-  if(Math.max(...Object.values(counts))-Math.min(...Object.values(counts))>1)card.append(message('受性别人数或同分分布限制，三类组数未能完全均衡。'));
+  if(Math.max(...Object.values(counts))-Math.min(...Object.values(counts))>1)card.append(message(c.summary.edited?'当前方案的三类组数未能完全均衡。':'受性别人数或同分分布限制，三类组数未能完全均衡。'));
   if(!c.summary.highRange)card.append(message('全班总分相同，无法按成绩区分高低。'));
   if(c.groups.some(g=>g.type==='single'))card.append(message('本班人数为奇数，有一名单人待补；确认后同样生成小组码。'));
   if(c.groups.some(g=>g.members.some(m=>m.gender==='未填写')))card.append(message('部分学生未填写性别，未推测其性别。'));
   card.append(table([['小组',g=>g.number],['类型',g=>({LL:'低低',HH:'高高',HL:'高低',single:'单人待补'})[g.type]],['成员',g=>g.members.map(m=>m.name+'（'+m.gender+'，'+m.total+'分）').join('、')],['小组码',g=>g.code||'待审核']],c.groups));
-  if(c.status==='review')card.append(button('确认分组并生成小组码',async event=>{if(!window.confirm('确认“'+c.name+'”的分组方案并生成小组码？'))return;event.currentTarget.disabled=true;try{await api('/api/teacher/groups/approve',{classId:c.id,batchId:c.batchId});await groupsPanel(panel);}catch(err){await groupsPanel(panel);panel.prepend(message(err.message,true));}},'school-button primary'));else card.append(message('已确认，可导出小组码。'));
+  if(c.status==='review')card.append(button('编辑分组',()=>editGroupDraft(card,c,panel)),button('确认分组并生成小组码',async event=>{if(!window.confirm('确认“'+c.name+'”的分组方案并生成小组码？'))return;event.currentTarget.disabled=true;try{await api('/api/teacher/groups/approve',{classId:c.id,batchId:c.batchId});await groupsPanel(panel);}catch(err){await groupsPanel(panel);panel.prepend(message(err.message,true));}},'school-button primary'));else card.append(message('已确认，可导出小组码。'));
   panel.append(card);
  }
 }

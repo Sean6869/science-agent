@@ -113,6 +113,7 @@ export async function openSchoolStore(filename,bootstrap={}){
   conversations(userId='',limit=500,offset=0,actor,classId=''){const args=scopeArgs(actor,classId);if(userId)targetStudent(userId,actor);return db.prepare("SELECT c.id,u.name,u.gender,u.class_name AS className,u.username,c.agent,c.lesson_id AS lessonId,c.stage,c.user_text AS userText,c.reply,c.source,c.status,c.created_at AS createdAt,c.answered_at AS answeredAt FROM conversations c JOIN users u ON u.id=c.user_id WHERE (?='' OR c.user_id=?) AND "+scopedWhere+' ORDER BY c.created_at DESC LIMIT ? OFFSET ?').all(userId,userId,...args,limit,offset);},
   completed(userId){return this.scores(userId).map(({quizId,version})=>({quizId,version}));},
   approveGroups(actor,classId,batchId){return groups.approve(actor,classId,batchId);},
+  editGroups(actor,classId,batchId,assignments){return groups.edit(actor,classId,batchId,assignments);},
   groupStatus(userId){return groups.student(userId);},
   joinGroup(userId,code){return groups.join(userId,code);},
   listGroups(actor,classId=''){scope(actor,classId);return this.classes(actor).filter(c=>!classId||c.id===classId).map(c=>groups.report(c));},
