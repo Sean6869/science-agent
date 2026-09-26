@@ -22,7 +22,14 @@ export function validateStudent(p,creating=true){
  if(!['男','女','未填写'].includes(p.gender))fail('请选择有效的性别');
  if(p.age!==undefined&&p.age!==null&&p.age!==''&&(!Number.isInteger(Number(p.age))||Number(p.age)<1||Number(p.age)>120))fail('年龄须为1–120的整数');
 }
-export function studentAccountBase(name){return pinyin(name,{toneType:'none',surname:'head',type:'array'}).join('').replaceAll('ü','v').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,25)||'student';}
+export function studentAccountBase(name){
+ const text=name.trim(),options={toneType:'none',surname:'head',type:'array'};
+ // A two-character familiar address has its surname after the prefix.
+ const parts=/^[小老阿][\u4e00-\u9fff]$/.test(text)
+  ? [...pinyin(text[0],{toneType:'none',type:'array'}),...pinyin(text.slice(1),options)]
+  : pinyin(text,options);
+ return parts.join('').replaceAll('ü','v').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,25)||'student';
+}
 
 export async function openSchoolStore(filename,bootstrap={}){
  if(filename!==':memory:')mkdirSync(dirname(resolve(filename)),{recursive:true});
@@ -143,6 +150,16 @@ export async function openSchoolStore(filename,bootstrap={}){
     db.prepare('INSERT INTO deployment_admin VALUES(1,?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id').run(id);
    });
   }
+  db.exec('CREATE TABLE IF NOT EXISTS school_migrations(name TEXT PRIMARY KEY)');
+  if(!db.prepare('SELECT name FROM school_migrations WHERE name=?').get('surname-address-accounts-v1'))transaction(()=>{
+   for(const user of db.prepare("SELECT id,name,username FROM users WHERE role='student' ORDER BY created_at,id").all()){
+    const base=studentAccountBase(user.name),oldBase=pinyin(user.name,{toneType:'none',surname:'head',type:'array'}).join('').replaceAll('ü','v').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,25)||'student';
+    if(base===oldBase||!new RegExp('^'+oldBase+'(?:[2-9]|[1-9][0-9]+)?_student$','i').test(user.username))continue;
+    let username=base+'_student',n=2;while(db.prepare('SELECT id FROM users WHERE username=?').get(username))username=base+(n++)+'_student';
+    db.prepare('UPDATE users SET username=? WHERE id=?').run(username,user.id);
+   }
+   db.prepare('INSERT INTO school_migrations VALUES(?)').run('surname-address-accounts-v1');
+  });
  }catch(error){db.close();throw error;}
  return store;
 }
