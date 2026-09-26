@@ -81,3 +81,18 @@ test('legacy users migrate without losing grades, conversations or sessions; cre
   store=await openSchoolStore(file,bootstrap);assert.equal(store.teachers(admin.user)[0].password,teacherData('a').password);assert.equal(store.classes(admin.user).length,1);
  }finally{store?.close();await rm(dir,{recursive:true,force:true});}
 });
+
+test('legacy class assignment preserves records and same names across classes get unique accounts',async()=>{
+ const store=await openSchoolStore(':memory:',bootstrap);
+ try{
+ const admin=(await store.login(bootstrap.username,bootstrap.password)).user,teacher=await store.registerTeacher({name:'教师',username:'new_teacher',password:'Teacher-password'});
+ const old=await store.addStudent({name:'陈辉',username:'chenhui_student',password:'12345678',gender:'男',className:'旧班级'},admin);
+ const q=quizzes[0];store.submit(old.id,q.id,Object.fromEntries(q.questions.map(x=>[x.id,x.answer])));const turn=store.begin(old.id,'knowledge',{text:'旧问题'});store.finish(turn,{content:'旧回答',source:'model'});
+ assert.equal(store.students(teacher).length,0);
+ await assert.rejects(store.addStudent({name:'陈辉',username:'chenhui_student',password:'12345678',gender:'男',className:'旧班级'},teacher),/未归属当前教师/);
+ assert.throws(()=>store.assignClass(old.classId,teacher.id,teacher),/仅管理员/);
+ store.assignClass(old.classId,teacher.id,admin);assert.equal(store.students(teacher)[0].id,old.id);assert.equal(store.allScores(teacher)[0].score,100);assert.equal(store.conversations(old.id,10,0,teacher)[0].reply,'旧回答');
+ await store.importStudents([{name:'陈辉',gender:'男',className:'新一班',age:14},{name:'陈辉',gender:'女',className:'新二班',age:14}],'unique-test',teacher);
+ assert.deepEqual(store.students(teacher).map(s=>s.username).sort(),['chenhui2_student','chenhui3_student','chenhui_student']);assert.ok(await store.login('chenhui_student','12345678'));
+ }finally{store.close();}
+});

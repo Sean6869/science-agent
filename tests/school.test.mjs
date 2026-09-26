@@ -5,7 +5,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {openSchoolStore,quizzes} from '../school-store.mjs';
 import {createApp} from '../server.mjs';
-import {csv} from '../school-api.mjs';
+import ExcelJS from 'exceljs';
+import {workbookBuffer} from '../school-excel.mjs';
+async function workbookText(response){assert.match(response.headers.get('content-type'),/spreadsheetml/);const book=new ExcelJS.Workbook();await book.xlsx.load(Buffer.from(await response.arrayBuffer()));return JSON.stringify(book.worksheets[0].getSheetValues());}
 let store,server,base,teacher,student,other,dir,file;
 const bootstrap={username:'teacher',password:'Teacher-password-123'};
 async function request(path,session,data,method='POST') {const headers={...(session?{cookie:`xiaoke_session=${session.token}`,'x-csrf-token':session.csrf}:{})};return fetch(base+path,{method:data===undefined?'GET':method,headers,body:data===undefined?undefined:JSON.stringify(data)});}
@@ -36,14 +38,14 @@ test('both agents persist student input and returned replies tied to authenticat
  for(const [path,p] of [['/api/knowledge',{text:'什么是焦距？',history:[],lessonId:'geometric-optics-basics'}],['/api/chat',{text:'物距变化影响像的大小',stage:1,kind:'content',attempt:1,lessonId:'geometric-optics-basics'}],['/api/assessment',{option:'sufficient',lessonId:'geometric-optics-basics'}]]){
   const r=await request(path,student,{...p,userId:other.user.id});assert.equal(r.status,200);const reply=await r.json();assert.ok(reply.content);const rows=store.conversations(student.user.id,500,0,teacher.user);assert.equal(rows[0].reply,reply.content);assert.equal(rows[0].status,'complete');assert.equal(rows[0].username,'student1');
  }
- assert.equal(store.conversations(other.user.id,500,0,teacher.user).length,0);const exported=await request('/api/teacher/export?type=conversations',teacher);assert.equal(exported.status,200);const data=await exported.text();assert.match(data,/知识|knowledge/);assert.match(data,/metacognitive/);assert.match(data,/物距变化影响像的大小/);
- const scoreCSV=await(await request('/api/teacher/export?type=scores',teacher)).text();assert.match(scoreCSV,/90/);assert.match(scoreCSV,/100/);
+ assert.equal(store.conversations(other.user.id,500,0,teacher.user).length,0);const exported=await request('/api/teacher/export?type=conversations',teacher);assert.equal(exported.status,200);const data=await workbookText(exported);assert.match(data,/知识|knowledge/);assert.match(data,/metacognitive/);assert.match(data,/物距变化影响像的大小/);
+ const scoreCSV=await workbookText(await request('/api/teacher/export?type=scores',teacher));assert.match(scoreCSV,/90/);assert.match(scoreCSV,/100/);
 });
 test('teacher updates student profiles and resets passwords without exposing hashes',async()=>{
  const result=await request(`/api/teacher/students/${other.user.id}`,teacher,{name:'学生乙改',gender:'未填写',className:'七年级三班',username:'student2',password:'New-password-789',active:true},'PUT');assert.equal(result.status,200);const p=await result.json();assert.equal('password' in p.student,false);assert.equal(store.session(other.token),null);assert.equal(await store.login('student2','Student-password-456'),null);assert.ok(await store.login('student2','New-password-789'));assert.equal((await request('/api/teacher/students',student,{name:'伪造'})).status,403);
 });
-test('records survive database reopen and CSV escapes formula cells',async()=>{
- const snapshot=store.scores(student.user.id);const reopened=await openSchoolStore(file);try{assert.deepEqual(reopened.scores(student.user.id),snapshot);assert.ok(reopened.conversations(student.user.id,500,0,teacher.user).length>=3);}finally{reopened.close();}assert.match(csv([['内容','value']],[{value:' =HYPERLINK("evil")'}]),/"' =HYPERLINK/);
+test('records survive database reopen and XLSX keeps user text as text',async()=>{
+ const snapshot=store.scores(student.user.id);const reopened=await openSchoolStore(file);try{assert.deepEqual(reopened.scores(student.user.id),snapshot);assert.ok(reopened.conversations(student.user.id,500,0,teacher.user).length>=3);}finally{reopened.close();}const book=new ExcelJS.Workbook();await book.xlsx.load(await workbookBuffer([['内容','value']],[{value:'=HYPERLINK("evil")'}]));assert.equal(book.worksheets[0].getCell('A2').type,ExcelJS.ValueType.String);
 });
 test('successful model replies are recorded without substituting local answers',async()=>{
  const original=globalThis.fetch;const originalKey=process.env.DEEPSEEK_API_KEY;let calls=0;

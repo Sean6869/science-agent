@@ -35,7 +35,7 @@ export async function workbookBuffer(columns,rows,title='学生账号'){
  for(const row of rows)sheet.addRow(Object.fromEntries(columns.map(([,key])=>[key,row[key]??''])));
  sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF376DDB'}};sheet.getRow(1).height=26;
  sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,rows.length+1),column:columns.length}};
- sheet.eachRow((row,index)=>{if(index>1){row.height=23;row.alignment={vertical:'middle',wrapText:true};}});
+ sheet.eachRow((row,index)=>{if(index>1){row.height=Math.min(409,23*Math.max(1,...columns.map(([,key,width=20],i)=>String(row.getCell(i+1).value??'').split('\n').reduce((n,line)=>n+Math.max(1,Math.ceil(line.length*1.7/width)),0))));row.alignment={vertical:'middle',wrapText:true};}});
  for(const key of ['username','password'])if(columns.some(c=>c[1]===key))sheet.getColumn(key).numFmt='@';
  return Buffer.from(await book.xlsx.writeBuffer());
 }

@@ -58,6 +58,7 @@ export async function openSchoolStore(filename,bootstrap={}){
  const store={
   close(){db.close();},
   classes(actor){const u=manager(actor);return db.prepare("SELECT c.id,c.name,u.name AS teacherName,u.username AS teacherUsername FROM classes c LEFT JOIN users u ON u.id=c.teacher_id WHERE (?='admin' OR c.teacher_id=?) ORDER BY c.name,c.created_at").all(u.role,u.id);},
+  assignClass(classId,teacherId,actor){if(manager(actor).role!=='admin')fail('仅管理员可以分配班级',403);scope(actor,classId);const t=getUser(teacherId);if(!classId||!t||t.role!=='teacher'||!t.active)fail('请选择班级和启用的教师');db.prepare('UPDATE classes SET teacher_id=? WHERE id=?').run(t.id,classId);},
   students(actor,classId=''){return db.prepare("SELECT u.* FROM users u WHERE u.role='student' AND "+scopedWhere+" ORDER BY u.class_name,u.name,u.username").all(...scopeArgs(actor,classId)).map(profile);},
   studentCredentials(actor,classId=''){return this.students(actor,classId).map(s=>({...s,password:vault.decrypt(getUser(s.id).credential)||'未保存'}));},
   teachers(actor){if(manager(actor).role!=='admin')fail('仅管理员可以访问',403);return db.prepare("SELECT * FROM users WHERE role='teacher' ORDER BY created_at").all().map(u=>({...profile(u),className:db.prepare('SELECT name FROM classes WHERE teacher_id=? ORDER BY name').all(u.id).map(c=>c.name).join('、'),password:vault.decrypt(u.credential)}));},
@@ -67,7 +68,7 @@ export async function openSchoolStore(filename,bootstrap={}){
    const hash=p.password?await passwordHash(p.password):u.password;
    return transaction(()=>{db.prepare('UPDATE users SET username=?,name=?,password=?,credential=?,active=? WHERE id=?').run(p.username,p.name.trim(),hash,p.password?vault.encrypt(p.password):u.credential,p.active===false?0:1,id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return profile(getUser(id));});
   },
-  async addStudent(p,actor){validateStudent(p);const hash=await passwordHash(p.password);return transaction(()=>insertStudent(p,hash,classroom(actor,p)));},
+  async addStudent(p,actor){validateStudent(p);const duplicate=db.prepare('SELECT * FROM users WHERE username=?').get(p.username);if(duplicate){const owner=manager(actor);if(owner.role==='teacher'&&duplicate.role==='student'){const c=db.prepare('SELECT teacher_id FROM classes WHERE id=?').get(duplicate.class_id);if(c?.teacher_id!==owner.id)fail('账号已存在，但未归属当前教师，请联系管理员在班级归属中核查分配');}fail('账号已存在，请在学生列表中编辑原账号');}const hash=await passwordHash(p.password);return transaction(()=>insertStudent(p,hash,classroom(actor,p)));},
   deleteStudent(id,actor){return transaction(()=>{groups.invalidate(targetStudent(id,actor).class_id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);db.prepare('DELETE FROM scores WHERE user_id=?').run(id);db.prepare('DELETE FROM conversations WHERE user_id=?').run(id);db.prepare('DELETE FROM users WHERE id=?').run(id);});},
   deleteScores(id,actor){transaction(()=>{groups.invalidate(targetStudent(id,actor).class_id);db.prepare('DELETE FROM scores WHERE user_id=?').run(id);});},
   deleteConversation(id,actor){const row=db.prepare('SELECT user_id FROM conversations WHERE id=?').get(id);if(!row)fail('记录不存在',404);targetStudent(row.user_id,actor);db.prepare('DELETE FROM conversations WHERE id=?').run(id);},
