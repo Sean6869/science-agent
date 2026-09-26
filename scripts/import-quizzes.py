@@ -1,4 +1,4 @@
-"""Import the two approved Word questionnaires, preserving inline diagrams."""
+"""Import the approved Word questionnaires, preserving inline diagrams."""
 from pathlib import Path
 from zipfile import ZipFile
 from lxml import etree
@@ -8,7 +8,7 @@ root = Path(__file__).resolve().parents[1]
 source = Path(sys.argv[1])
 ns = {'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'a':'http://schemas.openxmlformats.org/drawingml/2006/main', 'r':'http://schemas.openxmlformats.org/officeDocument/2006/relationships'}
 quizzes = []
-for number, word in enumerate(['一','二'], 1):
+for number, word in enumerate(['一','二','三'], 1):
     path = source / f'科学概念知识理解测试-第{word}节课（标注答案版）.docx'
     with ZipFile(path) as z:
         rels = {x.get('Id'):x.get('Target') for x in etree.fromstring(z.read('word/_rels/document.xml.rels'))}
@@ -36,10 +36,10 @@ for number, word in enumerate(['一','二'], 1):
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 contents=z.read('word/'+media)
                 dest.write_bytes(contents)
-                image_target = quiz['questions'][-1] if number == 1 else target
+                image_target = quiz['questions'][-1] if number in (1, 3) else target
                 image_target['images'].append('/quiz-images/'+name+'?v='+hashlib.sha256(contents).hexdigest()[:12])
         assert len(quiz['questions']) == 10
         assert all(q['answer'] in [o['id'] for o in q['options']] for q in quiz['questions'])
         quizzes.append(quiz)
 (root / 'quizzes.json').write_text(json.dumps(quizzes,ensure_ascii=False,indent=2),encoding='utf-8')
-print('Imported 2 quizzes, 20 questions; answers saved outside public.')
+print('Imported 3 quizzes, 30 questions; answers saved outside public.')

@@ -20,14 +20,16 @@ test('login is required; students cannot bypass quiz gate or read teacher export
  const cross=await fetch(base+'/api/auth/login',{method:'POST',headers:{origin:'https://other.example'},body:'{}'});assert.equal(cross.status,403);
  const switched=await fetch(base+'/api/config',{headers:{cookie:`xiaoke_session=${student.token}`,'x-session-user':other.user.id}});assert.equal(switched.status,409);
 });
-test('quiz API preserves all diagrams and options without leaking answers',async()=>{const r=await request('/api/quizzes',student);assert.equal(r.status,200);const p=await r.json();assert.equal(p.quizzes.length,2);assert.equal(p.quizzes[1].questions[6].options.length,7);for(const q of p.quizzes.flatMap(q=>q.questions)){assert.equal('answer' in q,false);assert.doesNotMatch(q.text,/（\s*[A-G]\s*）/);for(const path of [...q.images,...q.options.flatMap(o=>o.images)])assert.equal((await request(path)).status,200);}assert.equal((await request('/quizzes.json')).status,404);assert.equal((await request('/data/school.sqlite')).status,404);});
+test('quiz API preserves all diagrams and options without leaking answers',async()=>{const r=await request('/api/quizzes',student);assert.equal(r.status,200);const p=await r.json();assert.equal(p.quizzes.length,3);assert.equal(p.quizzes[1].questions[6].options.length,7);for(const q of p.quizzes.flatMap(q=>q.questions)){assert.equal('answer' in q,false);assert.doesNotMatch(q.text,/（\s*[A-G]\s*）/);for(const path of [...q.images,...q.options.flatMap(o=>o.images)])assert.equal((await request(path)).status,200);}assert.equal((await request('/quizzes.json')).status,404);assert.equal((await request('/data/school.sqlite')).status,404);});
 test('server grades in order, rejects incomplete submissions, and cannot overwrite scores',async()=>{
  const answers=q=>Object.fromEntries(q.questions.map(item=>[item.id,item.answer]));
  assert.equal((await request('/api/quizzes/submit',student,{quizId:'lesson-2',answers:answers(quizzes[1])})).status,400);
  assert.equal((await request('/api/quizzes/submit',student,{quizId:'lesson-1',answers:{}})).status,400);
- const first=answers(quizzes[0]);first['1']='E';const p=await(await request('/api/quizzes/submit',student,{quizId:'lesson-1',answers:first,score:100,userId:other.user.id})).json();assert.equal(p.result.score,90);assert.equal(p.ready,false);assert.equal(store.scores(other.user.id).length,0);
- const repeated=await(await request('/api/quizzes/submit',student,{quizId:'lesson-1',answers:answers(quizzes[0])})).json();assert.equal(repeated.result.score,90);
- const second=await(await request('/api/quizzes/submit',student,{quizId:'lesson-2',answers:answers(quizzes[1])})).json();assert.equal(second.result.score,100);assert.equal(second.ready,true);assert.equal((await request('/api/config',student)).status,200);
+ const first=answers(quizzes[0]);first['1']='E';const p=await(await request('/api/quizzes/submit',student,{quizId:'lesson-1',answers:first,score:100,userId:other.user.id})).json();assert.equal(store.scores(student.user.id)[0].score,90);assert.equal(p.result,undefined);assert.equal(p.ready,false);assert.equal(store.scores(other.user.id).length,0);
+ const repeated=await(await request('/api/quizzes/submit',student,{quizId:'lesson-1',answers:answers(quizzes[0])})).json();assert.equal(store.scores(student.user.id)[0].score,90);assert.equal(repeated.result,undefined);
+ const second=await(await request('/api/quizzes/submit',student,{quizId:'lesson-2',answers:answers(quizzes[1])})).json();assert.equal(store.scores(student.user.id)[1].score,100);assert.equal(second.ready,false);
+ const third=await(await request('/api/quizzes/submit',student,{quizId:'lesson-3',answers:answers(quizzes[2])})).json();assert.equal(third.ready,true);assert.equal((await request('/api/config',student)).status,403);
+ const c=store.listGroups(teacher.user,student.user.classId)[0];store.approveGroups(teacher.user,c.id,c.batchId);store.joinGroup(student.user.id,store.listGroups(teacher.user,c.id)[0].groups[0].code);assert.equal((await request('/api/config',student)).status,200);
 });
 test('both agents persist student input and returned replies tied to authenticated identity',async()=>{
  delete process.env.DEEPSEEK_API_KEY;
@@ -41,7 +43,7 @@ test('teacher updates student profiles and resets passwords without exposing has
  const result=await request(`/api/teacher/students/${other.user.id}`,teacher,{name:'学生乙改',gender:'未填写',className:'七年级三班',username:'student2',password:'New-password-789',active:true},'PUT');assert.equal(result.status,200);const p=await result.json();assert.equal('password' in p.student,false);assert.equal(store.session(other.token),null);assert.equal(await store.login('student2','Student-password-456'),null);assert.ok(await store.login('student2','New-password-789'));assert.equal((await request('/api/teacher/students',student,{name:'伪造'})).status,403);
 });
 test('records survive database reopen and CSV escapes formula cells',async()=>{
- const snapshot=store.scores(student.user.id);const reopened=await openSchoolStore(file);assert.deepEqual(reopened.scores(student.user.id),snapshot);assert.ok(reopened.conversations(student.user.id,500,0,teacher.user).length>=3);reopened.close();assert.match(csv([['内容','value']],[{value:' =HYPERLINK("evil")'}]),/"' =HYPERLINK/);
+ const snapshot=store.scores(student.user.id);const reopened=await openSchoolStore(file);try{assert.deepEqual(reopened.scores(student.user.id),snapshot);assert.ok(reopened.conversations(student.user.id,500,0,teacher.user).length>=3);}finally{reopened.close();}assert.match(csv([['内容','value']],[{value:' =HYPERLINK("evil")'}]),/"' =HYPERLINK/);
 });
 test('successful model replies are recorded without substituting local answers',async()=>{
  const original=globalThis.fetch;const originalKey=process.env.DEEPSEEK_API_KEY;let calls=0;

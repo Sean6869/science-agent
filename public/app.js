@@ -6,7 +6,7 @@ import {createKnowledgeChat} from './knowledge-chat.js';
 import {advanceTimer,createStageTimers,formatTime,pauseTimer,remainingSeconds,resetTimer,startTimer} from './stage-timer.js';
 import {isSelfAssessmentText} from './turn-kind.js';
 import {apiFetch} from './school.js';
-const KEY=`science-session-v2:${window.schoolUser.id}`;
+const KEY=`science-session-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const fresh=()=>({version:3,stage:1,timers:createStageTimers(stages.map(s=>s.id)),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))});
 let state=fresh();
 try {

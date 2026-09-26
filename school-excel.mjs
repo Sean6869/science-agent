@@ -14,15 +14,17 @@ export async function parseStudentsWorkbook(data){
  const book=new ExcelJS.Workbook();try{await book.xlsx.load(buffer);}catch{throw new Error('无法读取Excel文件，请使用 .xlsx 模板');}
  const sheet=book.worksheets[0];if(!sheet||sheet.rowCount>201||sheet.columnCount>20)throw new Error('每次最多导入200名学生');
  const headers=new Map();sheet.getRow(1).eachCell(cell=>headers.set(text(cell),cell.col));
- if(['姓名','性别','年龄'].some(h=>!headers.has(h)))throw new Error('模板首行需要包含：姓名、性别、年龄');
+ if(['姓名','性别','年龄','班级'].some(h=>!headers.has(h)))throw new Error('模板首行需要包含：姓名、性别、年龄、班级');
  const rows=[];
  for(let index=2;index<=sheet.rowCount;index++){
-  const row=sheet.getRow(index),name=text(row.getCell(headers.get('姓名'))),gender=text(row.getCell(headers.get('性别')))||'未填写',age=text(row.getCell(headers.get('年龄')));
-  if(!name&&gender==='未填写'&&!age)continue;
+  const row=sheet.getRow(index),name=text(row.getCell(headers.get('姓名'))),gender=text(row.getCell(headers.get('性别')))||'未填写',age=text(row.getCell(headers.get('年龄'))),className=text(row.getCell(headers.get('班级')));
+  if(row.cellCount>4&&/示例|例子/.test(text(row.getCell(5))))throw new Error('请删除模板中的示例行后再上传');
+  if(!name&&gender==='未填写'&&!age&&!className)continue;
   if(!name||name.length>80)throw new Error(`第${index}行姓名不能为空，且不超过80字`);
   if(!['男','女','未填写'].includes(gender))throw new Error(`第${index}行性别请填写男或女`);
   if(age&&(!/^\d{1,3}$/.test(age)||Number(age)<1||Number(age)>120))throw new Error(`第${index}行年龄须为1–120的整数`);
-  rows.push({name,gender,age:age?Number(age):null});
+  if(!className||className.length>80)throw new Error(`第${index}行请填写班级（不超过80字）`);
+  rows.push({name,gender,age:age?Number(age):null,className});
  }
  if(!rows.length)throw new Error('模板中还没有学生，请在第二行开始填写');
  return {rows,fingerprint:createHash('sha256').update(JSON.stringify(rows)).digest('hex')};

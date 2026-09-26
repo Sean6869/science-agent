@@ -24,7 +24,7 @@ export function createSchoolApi(store,{json,body}){
    const auth=await store.login(p.username.trim(),p.password);if(!auth){json(res,401,{message:'账号或密码错误，或账号已停用'});return true;}
    attempts.delete(ip);res.setHeader('Set-Cookie',cookie(req,auth.token,43200));json(res,200,{user:auth.user,csrf:auth.csrf});return true;
   }
-  if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,scores:store.scores(session.user.id),ready:session.user.role!=='student'||store.ready(session.user.id)}:{user:null});return true;}
+  if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,completed:store.completed(session.user.id),group:session.user.role==='student'?store.groupStatus(session.user.id):null,ready:session.user.role!=='student'||store.ready(session.user.id)}:{user:null});return true;}
   if(!path.startsWith('/api/'))return false;
   if(!session){json(res,401,{message:'请先登录'});return true;}
   if(path==='/api/auth/logout'&&req.method==='POST'){store.logout(token(req));res.setHeader('Set-Cookie',cookie(req,'',0));json(res,200,{ok:true});return true;}
@@ -34,11 +34,12 @@ export function createSchoolApi(store,{json,body}){
    if(/^\/api\/admin\/teachers\/[^/]+$/.test(path)&&req.method==='DELETE'){store.deleteTeacher(path.split('/').at(-1),session.user);json(res,200,{ok:true});return true;}
    if(path.startsWith('/api/admin/teachers/')&&req.method==='PUT'){try{json(res,200,{teacher:await store.editTeacher(path.split('/').at(-1),await body(req),session.user)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
   }
-  if(path==='/api/quizzes'&&req.method==='GET'){json(res,200,{quizzes:publicQuizzes,scores:store.scores(session.user.id)});return true;}
+  if(path==='/api/quizzes'&&req.method==='GET'){json(res,200,{quizzes:publicQuizzes,completed:store.completed(session.user.id)});return true;}
   if(path==='/api/quizzes/submit'&&req.method==='POST'){
    if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号作答'});return true;}
-   const p=await body(req);try{json(res,200,{result:store.submit(session.user.id,p?.quizId,p?.answers),ready:store.ready(session.user.id)});}catch(e){json(res,400,{message:e.message});}return true;
+   const p=await body(req);try{store.submit(session.user.id,p?.quizId,p?.answers);json(res,200,{saved:true,completed:store.completed(session.user.id),ready:store.ready(session.user.id)});}catch(e){json(res,400,{message:e.message});}return true;
   }
+  if(path==='/api/groups/join'&&req.method==='POST'){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}const p=await body(req);json(res,200,{group:store.joinGroup(session.user.id,p?.code)});return true;}
   if(path.startsWith('/api/teacher/')){
    if(!['admin','teacher'].includes(session.user.role)){json(res,403,{message:'仅教师或管理员可以访问'});return true;}
    const actor=session.user,classId=url.searchParams.get('class')||'';
@@ -46,9 +47,15 @@ export function createSchoolApi(store,{json,body}){
     const target=/^\/api\/teacher\/(students|conversations)\/([^/]+)(\/scores)?$/.exec(path);
     if(target){if(target[1]==='conversations'&&!target[3])store.deleteConversation(target[2],actor);else if(target[1]==='students'){if(target[3])store.deleteScores(target[2],actor);else store.deleteStudent(target[2],actor);}else{json(res,404,{message:'接口不存在'});return true;}json(res,200,{ok:true});return true;}
    }
+   if(path==='/api/teacher/groups'&&req.method==='GET'){json(res,200,{classes:store.listGroups(actor,classId)});return true;}
+   if(path==='/api/teacher/groups/approve'&&req.method==='POST'){const p=await body(req);store.approveGroups(actor,p?.classId,p?.batchId);json(res,200,{ok:true});return true;}
+   if(path==='/api/teacher/groups.xlsx'&&req.method==='GET'){
+    const rows=store.listGroups(actor,classId).filter(c=>c.status==='approved').flatMap(c=>c.groups.map(g=>({className:c.name,number:g.number,code:g.code,type:({LL:'低低',HH:'高高',HL:'高低',single:'单人待补'})[g.type],names:g.members.map(s=>s.name).join('、'),usernames:g.members.map(s=>s.username).join('、'),scores:g.members.map(s=>s.total).join('、'),low:c.summary.lowRange?.join('–'),high:c.summary.highRange?.join('–')||'无'})));
+    const file=await workbookBuffer([['班级','className'],['小组','number',10],['小组码','code'],['类型','type'],['成员','names',28],['账号','usernames',40],['三课总分','scores'],['低分段','low'],['高分段','high']],rows,'分组名单');res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':'attachment; filename="student-groups.xlsx"','cache-control':'no-store'});res.end(file);return true;
+   }
    if(path==='/api/teacher/classes'&&req.method==='GET'){json(res,200,{classes:store.classes(actor)});return true;}
    if(path==='/api/teacher/import'&&req.method==='POST'){
-    try{const p=await body(req,1500000);const parsed=await parseStudentsWorkbook(p?.data);json(res,200,await store.importStudents(parsed.rows,parsed.fingerprint,actor,p.classId));}catch(e){json(res,e.status||400,{message:e.message});}return true;
+    try{const p=await body(req,1500000);const parsed=await parseStudentsWorkbook(p?.data);json(res,200,await store.importStudents(parsed.rows,parsed.fingerprint,actor));}catch(e){json(res,e.status||400,{message:e.message});}return true;
    }
    if(path==='/api/teacher/accounts.xlsx'&&req.method==='GET'){
     const rows=store.studentCredentials(actor,classId);const file=await workbookBuffer([['姓名','name'],['性别','gender',10],['年龄','age',10],['班级','className'],['账号','username',30],['密码','password',20]],rows);
@@ -59,7 +66,7 @@ export function createSchoolApi(store,{json,body}){
     if(req.method==='POST'){try{json(res,201,{student:await store.addStudent(await body(req),actor)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
    }
    if(path.startsWith('/api/teacher/students/')&&req.method==='PUT'){try{json(res,200,{student:await store.editStudent(path.split('/').at(-1),await body(req),actor)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
-   if(path==='/api/teacher/scores'&&req.method==='GET'){json(res,200,{scores:store.allScores(actor,classId)});return true;}
+   if(path==='/api/teacher/scores'&&req.method==='GET'){json(res,200,{scores:store.allScores(actor,classId),quizzes:publicQuizzes.map(({id,title,version})=>({id,title,version}))});return true;}
    if(path==='/api/teacher/conversations'&&req.method==='GET'){const page=Math.max(0,Math.min(100000,Math.floor(Number(url.searchParams.get('page')))||0));json(res,200,{conversations:store.conversations(url.searchParams.get('student')||'',100,page*100,actor,classId),page});return true;}
    if(path==='/api/teacher/export'&&req.method==='GET'){
     const type=url.searchParams.get('type');if(!['scores','conversations'].includes(type)){json(res,400,{message:'请选择导出内容'});return true;}
@@ -74,7 +81,8 @@ export function createSchoolApi(store,{json,body}){
     }return true;
    }
   }
-  if(['/api/chat','/api/knowledge','/api/assessment','/api/config'].includes(path)&&session.user.role==='student'&&!store.ready(session.user.id)){json(res,403,{message:'请先完成两份入门测验'});return true;}
+  if(['/api/chat','/api/knowledge','/api/assessment','/api/config'].includes(path)&&session.user.role==='student'&&!store.ready(session.user.id)){json(res,403,{message:'请先完成全部入门测验'});return true;}
+  if(['/api/chat','/api/knowledge','/api/assessment','/api/config'].includes(path)&&session.user.role==='student'&&store.groupStatus(session.user.id).status!=='joined'){json(res,403,{message:'请等待教师确认分组，再输入本组小组码进入实验'});return true;}
   return false;
  };
 }

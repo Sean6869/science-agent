@@ -29,9 +29,16 @@ export function migrateSchool(db){
   catch(error){db.exec('ROLLBACK');throw error;}
   finally{db.exec('PRAGMA foreign_keys=ON');}
  }
- db.exec(`CREATE TABLE IF NOT EXISTS classes(id TEXT PRIMARY KEY,name TEXT NOT NULL,teacher_id TEXT UNIQUE REFERENCES users(id),created_at TEXT NOT NULL);
+ db.exec(`CREATE TABLE IF NOT EXISTS classes(id TEXT PRIMARY KEY,name TEXT NOT NULL,teacher_id TEXT REFERENCES users(id),created_at TEXT NOT NULL);
  CREATE INDEX IF NOT EXISTS student_class ON users(class_id);
  CREATE TABLE IF NOT EXISTS imports(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),fingerprint TEXT NOT NULL,class_id TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(class_id,fingerprint));`);
+ const classSchema=db.prepare("SELECT sql FROM sqlite_master WHERE name='classes'").get().sql;
+ if(/teacher_id TEXT UNIQUE/i.test(classSchema)){
+  db.exec('PRAGMA foreign_keys=OFF; BEGIN IMMEDIATE');
+  try{db.exec(`CREATE TABLE classes_next(id TEXT PRIMARY KEY,name TEXT NOT NULL,teacher_id TEXT REFERENCES users(id),created_at TEXT NOT NULL);INSERT INTO classes_next SELECT * FROM classes;DROP TABLE classes;ALTER TABLE classes_next RENAME TO classes;COMMIT;`);}
+  catch(error){db.exec('ROLLBACK');throw error;}finally{db.exec('PRAGMA foreign_keys=ON');}
+ }
+ db.exec("UPDATE users SET class_id=NULL,class_name='' WHERE role!='student'; CREATE INDEX IF NOT EXISTS class_owner ON classes(teacher_id);");
  for(const row of db.prepare("SELECT DISTINCT class_name FROM users WHERE role='student' AND class_id IS NULL").all()){
   const id=randomBytes(16).toString('hex');db.prepare('INSERT INTO classes VALUES(?,?,NULL,?)').run(id,row.class_name,new Date().toISOString());db.prepare("UPDATE users SET class_id=? WHERE role='student' AND class_id IS NULL AND class_name=?").run(id,row.class_name);
  }

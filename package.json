@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "check": "node --check deepseek.mjs && node --check metacognitive-agent.mjs && node --check server.mjs && node --check public/app.js && node --check public/content.js && node --check public/narration.js && node --check public/stage-timer.js && node --check public/turn-kind.js && node --check knowledge-agent.mjs && node --check public/knowledge-chat.js && node --check public/workspace-panels.js && node --check lessons.mjs && node --check public/experiment-workspace.js && node --check school-store.mjs && node --check school-api.mjs && node --check public/school.js && node --check school-excel.mjs && node --check school-credentials.mjs",
+    "check": "node --check deepseek.mjs && node --check metacognitive-agent.mjs && node --check server.mjs && node --check public/app.js && node --check public/content.js && node --check public/narration.js && node --check public/stage-timer.js && node --check public/turn-kind.js && node --check knowledge-agent.mjs && node --check public/knowledge-chat.js && node --check public/workspace-panels.js && node --check lessons.mjs && node --check public/experiment-workspace.js && node --check school-store.mjs && node --check school-api.mjs && node --check public/school.js && node --check school-excel.mjs && node --check school-credentials.mjs && node --check grouping.mjs && node --check school-groups.mjs",
     "test": "node --test --test-isolation=none tests/*.test.mjs"
   },
   "engines": {

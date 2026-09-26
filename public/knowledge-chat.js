@@ -1,6 +1,6 @@
 import {apiFetch} from './school.js';
 export function createKnowledgeChat(){
- const KEY=`science-knowledge-v1:${window.schoolUser.id}`;
+ const KEY=`science-knowledge-v1:${window.schoolUser.id}:${window.schoolGroup.id}`;
  const promptList=document.getElementById('knowledgePromptList'),list=document.getElementById('knowledgeMessages'),draft=document.getElementById('knowledgeDraft'),form=document.getElementById('knowledgeComposer'),send=document.getElementById('knowledgeSend');
  let state={draft:'',messages:[]},busy=false;
  function setLesson(lesson){promptList.replaceChildren(...(lesson.questions||[]).map(question=>{const b=document.createElement('button');b.type='button';b.textContent=question;b.setAttribute('aria-label',`直接提问：${question}`);b.onclick=()=>{const details=promptList.closest('details');if(details)details.open=false;submitText(question);};return b;}));}

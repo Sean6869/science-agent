@@ -4,6 +4,7 @@ import {promisify} from 'node:util';
 import {mkdirSync,readFileSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
 import {pinyin} from 'pinyin-pro';
+import {createGroupStore} from './school-groups.mjs';
 import {credentialVault,migrateSchool} from './school-credentials.mjs';
 const scrypt=promisify(scryptCallback),now=()=>new Date().toISOString();
 export const quizzes=JSON.parse(readFileSync(new URL('./quizzes.json',import.meta.url),'utf8'));
@@ -40,38 +41,35 @@ export async function openSchoolStore(filename,bootstrap={}){
  function transaction(fn){db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');if(String(error.message).includes('UNIQUE'))fail('账号已存在');throw error;}}
  function manager(actor){const current=actor?getUser(actor.id):null;if(!current?.active||!['admin','teacher'].includes(current.role))fail('没有管理权限',403);return current;}
  function scope(actor,classId=''){
-  const u=manager(actor);if(u.role==='teacher'){if(classId&&classId!==u.class_id)fail('不能访问其他班级',403);return {role:u.role,classId:u.class_id||'none'};}
-  return {role:classId?'filtered':'admin',classId};
+  const u=manager(actor);if(classId){const c=db.prepare('SELECT * FROM classes WHERE id=?').get(classId);if(!c||(u.role!=='admin'&&c.teacher_id!==u.id))fail('不能访问其他班级',403);}
+  return {owner:u.role==='admin'?'':u.id,classId};
  }
  function classroom(actor,p){
-  const u=manager(actor);if(u.role==='teacher'){if(p.classId&&p.classId!==u.class_id)fail('不能访问其他班级',403);return db.prepare('SELECT * FROM classes WHERE id=? AND teacher_id=?').get(u.class_id,u.id)||fail('班级不存在');}
-  if(p.classId)return db.prepare('SELECT * FROM classes WHERE id=?').get(p.classId)||fail('请选择有效班级');
+  const u=manager(actor);if(p.classId){scope(actor,p.classId);return db.prepare('SELECT * FROM classes WHERE id=?').get(p.classId);}
   if(typeof p.className!=='string'||!p.className.trim()||p.className.length>80)fail('请填写班级');
-  const name=p.className.trim(),existing=db.prepare('SELECT * FROM classes WHERE name=? AND teacher_id IS NULL').get(name);if(existing)return existing;
-  const c={id:randomUUID(),name};db.prepare('INSERT INTO classes VALUES(?,?,NULL,?)').run(c.id,name,now());return c;
+  const name=p.className.trim(),owner=u.role==='teacher'?u.id:null,existing=db.prepare('SELECT * FROM classes WHERE name=? AND teacher_id IS ?').get(name,owner);if(existing)return existing;
+  const c={id:randomUUID(),name};db.prepare('INSERT INTO classes VALUES(?,?,?,?)').run(c.id,name,owner,now());return c;
  }
- function targetStudent(id,actor){const u=getUser(id),s=scope(actor);if(!u||u.role!=='student'||(s.role!=='admin'&&u.class_id!==s.classId))fail('学生不存在或无权访问',403);return u;}
- function insertStudent(p,hash,c){const id=randomUUID();db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,class_id,age,credential) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,p.username,hash,'student',p.name.trim(),p.gender,c.name,now(),c.id,p.age?Number(p.age):null,vault.encrypt(p.password));return profile(getUser(id));}
+ function targetStudent(id,actor){const u=getUser(id);if(!u||u.role!=='student')fail('学生不存在或无权访问',403);scope(actor,u.class_id);return u;}
+ const scopedWhere="(?='' OR u.class_id IN (SELECT id FROM classes WHERE teacher_id=?)) AND (?='' OR u.class_id=?)";
+ const scopeArgs=(actor,classId='')=>{const s=scope(actor,classId);return [s.owner,s.owner,s.classId,s.classId];};
+ function insertStudent(p,hash,c){const id=randomUUID();groups.invalidate(c.id);db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,class_id,age,credential) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,p.username,hash,'student',p.name.trim(),p.gender,c.name,now(),c.id,p.age?Number(p.age):null,vault.encrypt(p.password));return profile(getUser(id));}
+ const groups=createGroupStore(db,{quizzes,getUser,scope,fail});
  const store={
   close(){db.close();},
   classes(actor){const u=manager(actor);return db.prepare("SELECT c.id,c.name,u.name AS teacherName,u.username AS teacherUsername FROM classes c LEFT JOIN users u ON u.id=c.teacher_id WHERE (?='admin' OR c.teacher_id=?) ORDER BY c.name,c.created_at").all(u.role,u.id);},
-  students(actor,classId=''){const s=scope(actor,classId);return db.prepare("SELECT * FROM users WHERE role='student' AND (?='admin' OR class_id=?) ORDER BY class_name,name,username").all(s.role,s.classId).map(profile);},
+  students(actor,classId=''){return db.prepare("SELECT u.* FROM users u WHERE u.role='student' AND "+scopedWhere+" ORDER BY u.class_name,u.name,u.username").all(...scopeArgs(actor,classId)).map(profile);},
   studentCredentials(actor,classId=''){return this.students(actor,classId).map(s=>({...s,password:vault.decrypt(getUser(s.id).credential)||'未保存'}));},
-  teachers(actor){if(manager(actor).role!=='admin')fail('仅管理员可以访问',403);return db.prepare("SELECT * FROM users WHERE role='teacher' ORDER BY created_at").all().map(u=>({...profile(u),password:vault.decrypt(u.credential)}));},
-  async registerTeacher(p){
-   validateAccount(p);if(typeof p.className!=='string'||!p.className.trim()||p.className.length>80)fail('请填写班级');
-   const hash=await passwordHash(p.password);
-   return transaction(()=>{const id=randomUUID(),classId=randomUUID();db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,class_id,credential) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id,p.username,hash,'teacher',p.name.trim(),'未填写',p.className.trim(),now(),classId,vault.encrypt(p.password));db.prepare('INSERT INTO classes VALUES(?,?,?,?)').run(classId,p.className.trim(),id,now());return profile(getUser(id));});
-  },
+  teachers(actor){if(manager(actor).role!=='admin')fail('仅管理员可以访问',403);return db.prepare("SELECT * FROM users WHERE role='teacher' ORDER BY created_at").all().map(u=>({...profile(u),className:db.prepare('SELECT name FROM classes WHERE teacher_id=? ORDER BY name').all(u.id).map(c=>c.name).join('、'),password:vault.decrypt(u.credential)}));},
+  async registerTeacher(p){validateAccount(p);const hash=await passwordHash(p.password);return transaction(()=>{const id=randomUUID();db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,credential) VALUES(?,?,?,?,?,?,?,?,?)').run(id,p.username,hash,'teacher',p.name.trim(),'未填写','',now(),vault.encrypt(p.password));return profile(getUser(id));});},
   async editTeacher(id,p,actor){
    if(manager(actor).role!=='admin')fail('仅管理员可以访问',403);const u=getUser(id);if(!u||u.role!=='teacher')fail('教师不存在',404);validateAccount({...u,...p,password:p.password||''},false);
-   if(typeof p.className!=='string'||!p.className.trim()||p.className.length>80)fail('请填写班级');
    const hash=p.password?await passwordHash(p.password):u.password;
-   return transaction(()=>{db.prepare('UPDATE users SET username=?,name=?,password=?,credential=?,active=?,class_name=? WHERE id=?').run(p.username,p.name.trim(),hash,p.password?vault.encrypt(p.password):u.credential,p.active===false?0:1,p.className.trim(),id);db.prepare('UPDATE classes SET name=? WHERE id=?').run(p.className.trim(),u.class_id);db.prepare("UPDATE users SET class_name=? WHERE role='student' AND class_id=?").run(p.className.trim(),u.class_id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return profile(getUser(id));});
+   return transaction(()=>{db.prepare('UPDATE users SET username=?,name=?,password=?,credential=?,active=? WHERE id=?').run(p.username,p.name.trim(),hash,p.password?vault.encrypt(p.password):u.credential,p.active===false?0:1,id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return profile(getUser(id));});
   },
   async addStudent(p,actor){validateStudent(p);const hash=await passwordHash(p.password);return transaction(()=>insertStudent(p,hash,classroom(actor,p)));},
-  deleteStudent(id,actor){return transaction(()=>{targetStudent(id,actor);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);db.prepare('DELETE FROM scores WHERE user_id=?').run(id);db.prepare('DELETE FROM conversations WHERE user_id=?').run(id);db.prepare('DELETE FROM users WHERE id=?').run(id);});},
-  deleteScores(id,actor){targetStudent(id,actor);db.prepare('DELETE FROM scores WHERE user_id=?').run(id);},
+  deleteStudent(id,actor){return transaction(()=>{groups.invalidate(targetStudent(id,actor).class_id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);db.prepare('DELETE FROM scores WHERE user_id=?').run(id);db.prepare('DELETE FROM conversations WHERE user_id=?').run(id);db.prepare('DELETE FROM users WHERE id=?').run(id);});},
+  deleteScores(id,actor){transaction(()=>{groups.invalidate(targetStudent(id,actor).class_id);db.prepare('DELETE FROM scores WHERE user_id=?').run(id);});},
   deleteConversation(id,actor){const row=db.prepare('SELECT user_id FROM conversations WHERE id=?').get(id);if(!row)fail('记录不存在',404);targetStudent(row.user_id,actor);db.prepare('DELETE FROM conversations WHERE id=?').run(id);},
   deleteTeacher(id,actor){
    const admin=manager(actor);if(admin.role!=='admin')fail('仅管理员可以访问',403);
@@ -79,26 +77,29 @@ export async function openSchoolStore(filename,bootstrap={}){
   },
   async editStudent(id,p,actor){
    const u=targetStudent(id,actor);validateStudent(p,false);const hash=p.password?await passwordHash(p.password):u.password;
-   return transaction(()=>{targetStudent(id,actor);const c=classroom(actor,{...p,classId:p.classId||u.class_id});db.prepare('UPDATE users SET username=?,password=?,credential=?,name=?,gender=?,class_name=?,class_id=?,age=?,active=? WHERE id=?').run(p.username,hash,p.password?vault.encrypt(p.password):u.credential,p.name.trim(),p.gender,c.name,c.id,p.age?Number(p.age):null,p.active===false?0:1,id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return profile(getUser(id));});
+   return transaction(()=>{targetStudent(id,actor);const c=classroom(actor,{...p,classId:p.classId||(!p.className?u.class_id:undefined)});if(c.id!==u.class_id||p.gender!==u.gender||(p.active!==false)!==!!u.active){groups.invalidate(u.class_id);groups.invalidate(c.id);}db.prepare('UPDATE users SET username=?,password=?,credential=?,name=?,gender=?,class_name=?,class_id=?,age=?,active=? WHERE id=?').run(p.username,hash,p.password?vault.encrypt(p.password):u.credential,p.name.trim(),p.gender,c.name,c.id,p.age?Number(p.age):null,p.active===false?0:1,id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return profile(getUser(id));});
   },
-  async importStudents(rows,fingerprint,actor,classId){
-   const c=classroom(actor,{classId});
-   if(db.prepare('SELECT id FROM imports WHERE class_id=? AND fingerprint=?').get(c.id,fingerprint))return {created:0,alreadyImported:true};
-   const prepared=[];for(const row of rows){const password=String(randomInt(10000000,100000000));prepared.push({...row,password,hash:await passwordHash(password)});}
-   return transaction(()=>{
-    classroom(actor,{classId:c.id});if(db.prepare('SELECT id FROM imports WHERE class_id=? AND fingerprint=?').get(c.id,fingerprint))return {created:0,alreadyImported:true};
-    for(const row of prepared){const base=studentAccountBase(row.name);let username=base+'_student',n=2;while(db.prepare('SELECT id FROM users WHERE username=?').get(username))username=`${base}${n++}_student`;insertStudent({...row,username},row.hash,c);}
-    db.prepare('INSERT INTO imports VALUES(?,?,?,?,?)').run(randomUUID(),actor.id,fingerprint,c.id,now());return {created:rows.length,alreadyImported:false};
-   });
+  async importStudents(rows,fingerprint,actor){
+   manager(actor);const prepared=[];for(const row of rows){const password=String(randomInt(10000000,100000000));prepared.push({...row,password,hash:await passwordHash(password)});}
+   return transaction(()=>{let created=0;const batches=Map.groupBy(prepared,row=>row.className);
+    for(const [className,batch] of batches){const c=classroom(actor,{className});if(db.prepare('SELECT id FROM imports WHERE class_id=? AND fingerprint=?').get(c.id,fingerprint))continue;
+     for(const row of batch){const base=studentAccountBase(row.name);let username=base+'_student',n=2;while(db.prepare('SELECT id FROM users WHERE username=?').get(username))username=base+(n++)+'_student';insertStudent({...row,username},row.hash,c);created++;}
+     db.prepare('INSERT INTO imports VALUES(?,?,?,?,?)').run(randomUUID(),actor.id,fingerprint,c.id,now());
+    }return {created,alreadyImported:created===0};});
   },
   async login(username,password){const u=db.prepare('SELECT * FROM users WHERE username=?').get(username);if(!u||!u.active){await scrypt(password,'unknown-user-timing',64);return null;}if(!await matches(password,u.password))return null;db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token),u.id,csrf,Date.now()+12*60*60*1000);return {token,csrf,user:profile(u)};},
   session(token){if(!token)return null;const s=db.prepare('SELECT s.csrf,u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1').get(hashToken(token),Date.now());return s?{user:profile(s),csrf:s.csrf}:null;},
   logout(token){db.prepare('DELETE FROM sessions WHERE token=?').run(hashToken(token));},
   scores(userId){return db.prepare('SELECT quiz_id AS quizId,version,score,correct,total,created_at AS createdAt FROM scores WHERE user_id=? ORDER BY created_at').all(userId);},
   ready(userId){return quizzes.every(q=>this.scores(userId).some(s=>s.quizId===q.id&&s.version===q.version));},
-  submit(userId,quizId,answers){const q=quizzes.find(q=>q.id===quizId);if(!q)fail('测验不存在');const old=this.scores(userId).find(s=>s.quizId===q.id&&s.version===q.version);if(old)return old;if(quizzes.slice(0,quizzes.indexOf(q)).some(p=>!this.scores(userId).some(s=>s.quizId===p.id&&s.version===p.version)))fail('请先完成上一份测验');if(!answers||Array.isArray(answers)||Object.keys(answers).length!==q.questions.length||q.questions.some(item=>!item.options.some(o=>o.id===answers[item.id])))fail('请完成全部题目，不会的题目可选“我不知道”');const correct=q.questions.filter(item=>answers[item.id]===item.answer).length;db.prepare('INSERT INTO scores VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(),userId,q.id,q.version,correct*10,correct,q.questions.length,JSON.stringify(answers),now());return this.scores(userId).find(s=>s.quizId===q.id&&s.version===q.version);},
-  allScores(actor,classId=''){const scopeValue=scope(actor,classId);return db.prepare(`SELECT u.id AS studentId,u.name,u.gender,u.class_name AS className,u.username,s.quiz_id AS quizId,s.version,s.score,s.correct,s.total,s.answers,s.created_at AS createdAt FROM scores s JOIN users u ON u.id=s.user_id WHERE (?='admin' OR u.class_id=?) ORDER BY s.created_at DESC`).all(scopeValue.role,scopeValue.classId);},
-  conversations(userId='',limit=500,offset=0,actor,classId=''){const s=scope(actor,classId);if(userId)targetStudent(userId,actor);return db.prepare(`SELECT c.id,u.name,u.gender,u.class_name AS className,u.username,c.agent,c.lesson_id AS lessonId,c.stage,c.user_text AS userText,c.reply,c.source,c.status,c.created_at AS createdAt,c.answered_at AS answeredAt FROM conversations c JOIN users u ON u.id=c.user_id WHERE (?='' OR c.user_id=?) AND (?='admin' OR u.class_id=?) ORDER BY c.created_at DESC LIMIT ? OFFSET ?`).all(userId,userId,s.role,s.classId,limit,offset);},
+  submit(userId,quizId,answers){const q=quizzes.find(q=>q.id===quizId);if(!q)fail('测验不存在');const old=this.scores(userId).find(s=>s.quizId===q.id&&s.version===q.version);if(old)return old;if(quizzes.slice(0,quizzes.indexOf(q)).some(p=>!this.scores(userId).some(s=>s.quizId===p.id&&s.version===p.version)))fail('请先完成上一份测验');if(!answers||Array.isArray(answers)||Object.keys(answers).length!==q.questions.length||q.questions.some(item=>!item.options.some(o=>o.id===answers[item.id])))fail('请完成全部题目，不会的题目可选“我不知道”');const correct=q.questions.filter(item=>answers[item.id]===item.answer).length;db.prepare('INSERT INTO scores VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(),userId,q.id,q.version,correct*10,correct,q.questions.length,JSON.stringify(answers),now());groups.ensure(getUser(userId).class_id);return this.scores(userId).find(s=>s.quizId===q.id&&s.version===q.version);},
+  allScores(actor,classId=''){return db.prepare('SELECT u.id AS studentId,u.name,u.gender,u.class_name AS className,u.username,s.quiz_id AS quizId,s.version,s.score,s.correct,s.total,s.answers,s.created_at AS createdAt FROM scores s JOIN users u ON u.id=s.user_id WHERE '+scopedWhere+' ORDER BY s.created_at DESC').all(...scopeArgs(actor,classId));},
+  conversations(userId='',limit=500,offset=0,actor,classId=''){const args=scopeArgs(actor,classId);if(userId)targetStudent(userId,actor);return db.prepare("SELECT c.id,u.name,u.gender,u.class_name AS className,u.username,c.agent,c.lesson_id AS lessonId,c.stage,c.user_text AS userText,c.reply,c.source,c.status,c.created_at AS createdAt,c.answered_at AS answeredAt FROM conversations c JOIN users u ON u.id=c.user_id WHERE (?='' OR c.user_id=?) AND "+scopedWhere+' ORDER BY c.created_at DESC LIMIT ? OFFSET ?').all(userId,userId,...args,limit,offset);},
+  completed(userId){return this.scores(userId).map(({quizId,version})=>({quizId,version}));},
+  approveGroups(actor,classId,batchId){return groups.approve(actor,classId,batchId);},
+  groupStatus(userId){return groups.student(userId);},
+  joinGroup(userId,code){return groups.join(userId,code);},
+  listGroups(actor,classId=''){scope(actor,classId);return this.classes(actor).filter(c=>!classId||c.id===classId).map(c=>groups.report(c));},
   begin(userId,agent,p){const id=randomUUID();db.prepare('INSERT INTO conversations(id,user_id,turn_id,agent,lesson_id,stage,user_text,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)').run(id,userId,p.id||randomUUID(),agent,p.lessonId||'unknown',p.stage||null,p.text,'pending',now());return id;},
   finish(id,result){db.prepare('UPDATE conversations SET reply=?,source=?,status=?,answered_at=? WHERE id=?').run(result.content,result.source,'complete',now(),id);},
   fail(id){db.prepare("UPDATE conversations SET status='failed',answered_at=? WHERE id=?").run(now(),id);}
