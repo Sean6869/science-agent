@@ -35,9 +35,9 @@ export async function openSchoolStore(filename,bootstrap={}){
  CREATE INDEX IF NOT EXISTS conversation_user ON conversations(user_id,created_at);
  CREATE INDEX IF NOT EXISTS conversation_turn ON conversations(user_id,agent,turn_id);`);
  migrateSchool(db);
- for(const column of [['subject',"TEXT NOT NULL DEFAULT ''"],['school',"TEXT NOT NULL DEFAULT ''"],['avatar','TEXT']]){if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE users ADD COLUMN '+column[0]+' '+column[1]);}
+ for(const column of [['subject',"TEXT NOT NULL DEFAULT ''"],['school',"TEXT NOT NULL DEFAULT ''"]]){if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE users ADD COLUMN '+column[0]+' '+column[1]);}
  const vault=credentialVault(filename,!!db.prepare('SELECT id FROM users WHERE credential IS NOT NULL LIMIT 1').get());
- const profile=u=>u&&({id:u.id,username:u.username,role:u.role,name:u.name,gender:u.gender,className:u.class_name,classId:u.class_id,age:u.age,active:!!u.active,subject:u.subject||'',school:u.school||'',avatar:u.avatar||null});
+ const profile=u=>u&&({id:u.id,username:u.username,role:u.role,name:u.name,gender:u.gender,className:u.class_name,classId:u.class_id,age:u.age,active:!!u.active,subject:u.subject||'',school:u.school||''});
  const getUser=id=>db.prepare('SELECT * FROM users WHERE id=?').get(id);
  function transaction(fn){db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');if(String(error.message).includes('UNIQUE'))fail('账号已存在');throw error;}}
  function manager(actor){const current=actor?getUser(actor.id):null;if(!current?.active||!['admin','teacher'].includes(current.role))fail('没有管理权限',403);return current;}
@@ -70,7 +70,7 @@ export async function openSchoolStore(filename,bootstrap={}){
    return transaction(()=>{db.prepare('UPDATE users SET username=?,name=?,password=?,credential=?,active=? WHERE id=?').run(p.username,p.name.trim(),hash,p.password?vault.encrypt(p.password):u.credential,p.active===false?0:1,id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return profile(getUser(id));});
   },
   updateTeacherProfile(id,p,actor){
-   const u=manager(actor);if(u.role!=='teacher'||u.id!==id)fail('只能编辑自己的教师资料',403);const subject=String(p?.subject||'').trim(),school=String(p?.school||'').trim(),avatar=p?.avatar==null?'':String(p.avatar);if(subject.length>80||school.length>120)fail('资料文字过长');if(avatar&&(!/^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/.test(avatar)||avatar.length>500000))fail('头像格式或大小不符合要求');db.prepare('UPDATE users SET subject=?,school=?,avatar=? WHERE id=?').run(subject,school,avatar||null,id);return profile(getUser(id));
+   const u=manager(actor);if(u.role!=='teacher'||u.id!==id)fail('只能编辑自己的教师资料',403);const subject=String(p?.subject||'').trim(),school=String(p?.school||'').trim();if(subject.length>80||school.length>120)fail('资料文字过长');db.prepare('UPDATE users SET subject=?,school=? WHERE id=?').run(subject,school,id);return profile(getUser(id));
   },
   async addStudent(p,actor){validateStudent(p);const duplicate=db.prepare('SELECT * FROM users WHERE username=?').get(p.username);if(duplicate){const owner=manager(actor);if(owner.role==='teacher'&&duplicate.role==='student'){const c=db.prepare('SELECT teacher_id FROM classes WHERE id=?').get(duplicate.class_id);if(c?.teacher_id!==owner.id)fail('账号已存在，但未归属当前教师，请联系管理员在班级归属中核查分配');}fail('账号已存在，请在学生列表中编辑原账号');}const hash=await passwordHash(p.password);return transaction(()=>insertStudent(p,hash,classroom(actor,p)));},
   deleteStudent(id,actor){return transaction(()=>{groups.invalidate(targetStudent(id,actor).class_id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);db.prepare('DELETE FROM scores WHERE user_id=?').run(id);db.prepare('DELETE FROM conversations WHERE user_id=?').run(id);db.prepare('DELETE FROM users WHERE id=?').run(id);});},

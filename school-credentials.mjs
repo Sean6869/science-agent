@@ -39,6 +39,8 @@ export function migrateSchool(db){
   catch(error){db.exec('ROLLBACK');throw error;}finally{db.exec('PRAGMA foreign_keys=ON');}
  }
  db.exec("UPDATE users SET class_id=NULL,class_name='' WHERE role!='student'; CREATE INDEX IF NOT EXISTS class_owner ON classes(teacher_id);");
+ const userColumns=db.prepare('PRAGMA table_info(users)').all();
+ if(userColumns.some(c=>c.name==='avatar')) db.exec('ALTER TABLE users DROP COLUMN avatar');
  for(const row of db.prepare("SELECT DISTINCT class_name FROM users WHERE role='student' AND class_id IS NULL").all()){
   const id=randomBytes(16).toString('hex');db.prepare('INSERT INTO classes VALUES(?,?,NULL,?)').run(id,row.class_name,new Date().toISOString());db.prepare("UPDATE users SET class_id=? WHERE role='student' AND class_id IS NULL AND class_name=?").run(id,row.class_name);
  }

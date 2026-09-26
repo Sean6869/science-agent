@@ -23,7 +23,7 @@ export function createSchoolApi(store,{json,body}){
    const auth=await store.login(p.username.trim(),p.password);if(!auth){json(res,401,{message:'账号或密码错误，或账号已停用'});return true;}
    attempts.delete(ip);res.setHeader('Set-Cookie',cookie(req,auth.token,43200));json(res,200,{user:auth.user,csrf:auth.csrf});return true;
   }
-  if(path==='/api/teacher/profile'&&req.method==='PUT'){try{if(session.user.role!=='teacher')throw Object.assign(new Error('仅教师可以编辑资料'),{status:403});json(res,200,{user:store.updateTeacherProfile(session.user.id,await body(req,510000),session.user)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
+  if(path==='/api/teacher/profile'&&req.method==='PUT'){try{if(session.user.role!=='teacher')throw Object.assign(new Error('仅教师可以编辑资料'),{status:403});json(res,200,{user:store.updateTeacherProfile(session.user.id,await body(req),session.user)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
   if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,completed:store.completed(session.user.id),group:session.user.role==='student'?store.groupStatus(session.user.id):null,ready:session.user.role!=='student'||store.ready(session.user.id)}:{user:null});return true;}
   if(!path.startsWith('/api/'))return false;
   if(!session){json(res,401,{message:'请先登录'});return true;}
