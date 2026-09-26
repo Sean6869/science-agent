@@ -2,16 +2,17 @@
 
 面向初中学生的 Web 实验应用：左侧可切换三个 PhET 中文实验，右侧提供六阶段探究引导与对话式智能学伴“小科”。
 
-包含学生登录、两份入门测验、教师账号管理、成绩与AI对话导出，以及三个 PhET 实验和两位智能体。
+包含学生登录、两份入门测验、管理员与教师分班管理、Excel学生导入、成绩与AI对话导出，以及三个 PhET 实验和两位智能体。
 
-**本次升级需先配置 Railway 持久卷和教师初始账号。** 完整步骤见 [教师端与测验部署说明](docs/SCHOOL_DEPLOYMENT.md)。
+**本次升级需先配置 Railway 持久卷和管理员初始账号。** 完整步骤见 [教师端与测验部署说明](docs/SCHOOL_DEPLOYMENT.md)。
 
 ## 本地运行
 
-需要 Node.js 24。先在 `.env.local` 中设置 `TEACHER_USERNAME`、`TEACHER_PASSWORD`（至少12位），初次启动自动创建教师账号。学生账号由教师在网页创建。
+需要 Node.js 24。先在 `.env.local` 中设置 `ADMIN_USERNAME`、`ADMIN_PASSWORD`（至少12位），初次启动自动创建管理员。原TEACHER变量兼容，旧教师管理员账号自动迁移。教师在登录页注册，学生由教师创建或批量导入。
 
 ```bash
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
 默认访问地址：
@@ -21,7 +22,7 @@ npm run dev
 运行检查：
 
 ```bash
-npm run check
+pnpm check
 ```
 
 ## 环境变量
@@ -40,8 +41,8 @@ npm run check
 
 ```bash
 cp .env.example .env.local
-# 在 .env.local 中填写教师账号密码及 DEEPSEEK_API_KEY
-npm run dev
+# 在 .env.local 中填写管理员账号密码及 DEEPSEEK_API_KEY
+pnpm dev
 ```
 
 ## 设计交付物
@@ -82,7 +83,7 @@ npm run dev
 
 1. 光的折射
 2. 几何光学：基础
-3. 电路组装和欧姆定律
+3. 能量滑板公园（动能、重力势能与摩擦）
 
 首次进入默认第一节；刷新恢复所选课程。切换时保留已加载实验的 iframe，返回时继续操作；刷新页面会重置实验内部状态。探究支架、计时和对话不因实验切换而清空。
 

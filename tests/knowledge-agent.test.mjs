@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {knowledgeMessages,parseKnowledgeAnswer,answerKnowledge,fallbackKnowledge} from '../knowledge-agent.mjs';
 test('core law questions call the model with the teaching boundary in its prompt',async()=>{
- for(const text of ['凸透镜成像规律是什么','直接告诉我欧姆定律公式','列出完整的光的折射规律']){let calls=0;const answer=await answerKnowledge({text,history:[]},{env:{DEEPSEEK_API_KEY:'test'},fetchImpl:async(_url,init)=>{calls++;assert.match(JSON.parse(init.body).messages[0].content,/不直接给出/);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({sentences:['先观察实验现象。','比较实验条件。','你观察到了什么？']})}}]});}});assert.equal(calls,1);assert.equal(answer.source,'model');}
+ for(const text of ['凸透镜成像规律是什么','直接告诉我机械能转化规律','列出完整的光的折射规律']){let calls=0;const answer=await answerKnowledge({text,history:[]},{env:{DEEPSEEK_API_KEY:'test'},fetchImpl:async(_url,init)=>{calls++;assert.match(JSON.parse(init.body).messages[0].content,/不直接给出/);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({sentences:['先观察实验现象。','比较实验条件。','你观察到了什么？']})}}]});}});assert.equal(calls,1);assert.equal(answer.source,'model');}
 });
 test('knowledge dialogue has an independent policy and bounded history',()=>{
  const messages=knowledgeMessages({text:'什么是焦距？',history:Array.from({length:12},()=>({role:'agent',text:'旧回答'}))});

@@ -13,7 +13,7 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 try { process.loadEnvFile(resolve(root, '.env.local')); } catch {}
 const pub = resolve(root, 'public');
 function json(res, status, data) { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(data)); }
-async function body(req) { let raw = ''; for await (const c of req) { raw += c; if (Buffer.byteLength(raw) > 64000) throw new Error('请求内容过长'); } return JSON.parse(raw); }
+async function body(req,limit=64000) { let raw = ''; for await (const c of req) { raw += c; if (Buffer.byteLength(raw) > limit) throw new Error('请求内容过长'); } return JSON.parse(raw); }
 async function evaluate(p) {
  const remainingAttempts=Math.max(0,MAX_CONTENT_SUBMISSIONS-p.attempt);
  if(p.kind==='content'&&p.attempt>MAX_CONTENT_SUBMISSIONS)return {content:exhaustedFeedback(),source:'rule',remainingAttempts:0,exhausted:true,complete:true,kind:p.kind};
@@ -30,7 +30,7 @@ async function evaluate(p) {
 export async function defaultSchoolStore(){
  const dataDir=process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR;
  if(process.env.RAILWAY_ENVIRONMENT_ID&&!process.env.RAILWAY_VOLUME_MOUNT_PATH)throw new Error('请先为 Railway 服务挂载持久化 Volume，建议挂载到 /data，以保存账号、成绩和对话');
- return openSchoolStore(resolve(dataDir||resolve(root,'data'),'school.sqlite'),{username:process.env.TEACHER_USERNAME,password:process.env.TEACHER_PASSWORD});
+ return openSchoolStore(resolve(dataDir||resolve(root,'data'),'school.sqlite'),{username:process.env.ADMIN_USERNAME||process.env.TEACHER_USERNAME,password:process.env.ADMIN_PASSWORD||process.env.TEACHER_PASSWORD});
 }
 export function createApp({store}={}) {
  if(!store)throw new Error('createApp requires a school store');
@@ -70,8 +70,8 @@ export function createApp({store}={}) {
   if(req.method!=='GET') return json(res,405,{message:'不支持此请求'});
   const path=resolve(pub,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
   if(!path.startsWith(pub+sep)) return json(res,403,{message:'禁止访问'});
-  try {const file=await readFile(path);const type=extname(path); const immutable=['.png','.mp3']; res.writeHead(200,{'content-type':({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.jpeg':'image/jpeg','.jpg':'image/jpeg','.mp3':'audio/mpeg'})[type]||'application/octet-stream','cache-control':immutable.includes(type)?'public, max-age=31536000, immutable':'no-cache','x-content-type-options':'nosniff'});res.end(file);} catch {json(res,404,{message:'文件不存在'});}
- } catch(error) {console.error('[request]',error.name);json(res,error instanceof SyntaxError?400:500,{message:error instanceof SyntaxError?'请求格式无效':'服务暂不可用'});}
+  try {const file=await readFile(path);const type=extname(path); const immutable=['.png','.mp3']; res.writeHead(200,{'content-type':({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.jpeg':'image/jpeg','.jpg':'image/jpeg','.mp3':'audio/mpeg','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})[type]||'application/octet-stream','cache-control':immutable.includes(type)?'public, max-age=31536000, immutable':'no-cache','x-content-type-options':'nosniff'});res.end(file);} catch {json(res,404,{message:'文件不存在'});}
+ } catch(error) {console.error('[request]',error.name);json(res,error.status||(error instanceof SyntaxError?400:500),{message:error.status?error.message:error instanceof SyntaxError?'请求格式无效':'服务暂不可用'});}
 });}
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
  const configuredPort=Number(cleanEnvValue(process.env.PORT));
