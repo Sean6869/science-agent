@@ -28,16 +28,15 @@ export function createSpeech({directory,voice=101026,env=process.env,request=fet
   const task=(async()=>{
    const id=env.TENCENTCLOUD_SECRET_ID?.trim(),key=env.TENCENTCLOUD_SECRET_KEY?.trim();
    if(!id||!key)throw Object.assign(new Error('请在 Railway 配置腾讯云语音密钥'),{status:503});
-   const chunks=[];
-   for(const segment of splitSpeech(text)){
+   const chunks=await Promise.all(splitSpeech(text).map(async segment=>{
     const payload=JSON.stringify({Text:segment,SessionId:randomUUID(),VoiceType:voice,Codec:'pcm',SampleRate:16000,PrimaryLanguage:1,Speed:0,Volume:0});
     const response=await request('https://tts.tencentcloudapi.com/',{method:'POST',headers:speechHeaders(payload,id,key),body:payload,signal:AbortSignal.timeout(30000)});
     if(!response.ok)throw Object.assign(new Error('腾讯云语音服务暂不可用'),{status:502});
     const result=(await response.json()).Response;
     if(result?.Error)throw Object.assign(new Error(`腾讯云语音合成失败（${result.Error.Code}）`),{status:502});
     if(typeof result?.Audio!=='string'||!result.Audio)throw new Error('腾讯云未返回音频');
-    const pcm=Buffer.from(result.Audio,'base64');if(!pcm.length||pcm.length%2)throw new Error('腾讯云返回的音频无效');chunks.push(pcm);
-   }
+    const pcm=Buffer.from(result.Audio,'base64');if(!pcm.length||pcm.length%2)throw new Error('腾讯云返回的音频无效');return pcm;
+   }));
    const wav=pcmWave(Buffer.concat(chunks));await mkdir(directory,{recursive:true});const temp=file+'.'+randomUUID()+'.tmp';await writeFile(temp,wav);await rename(temp,file);return wav;
   })();pending.set(file,task);
   try{return await task;}finally{pending.delete(file);}

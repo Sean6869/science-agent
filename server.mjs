@@ -11,6 +11,7 @@ import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {openSchoolStore} from './school-store.mjs';
 import {createSchoolApi} from './school-api.mjs';
+import {roleGuidance} from './social-roles.mjs';
 import {assessments,stages} from './public/content.js';
 const root = fileURLToPath(new URL('.', import.meta.url));
 try { process.loadEnvFile(resolve(root, '.env.local')); } catch {}
@@ -37,8 +38,16 @@ export async function defaultSchoolStore(){
 }
 export function createApp({store,synthesize}={}) {
  if(!store)throw new Error('createApp requires a school store');
- const schoolApi=createSchoolApi(store,{json,body});
  const speechAudio=synthesize||createSpeech({directory:resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR||resolve(root,'data'),'speech-audio')});
+ const warming=new Set();
+ function warmRoleSpeech(roles){
+  const members=roles.members||[],texts=[];
+  if(roles.guidance)texts.push(roles.guidance);
+  else if(members.length===1)texts.push(roleGuidance(roles.type,members,members[0].id,members[0].id));
+  else if(members.length===2){texts.push(roleGuidance(roles.type,members,members[0].id,members[1].id),roleGuidance(roles.type,members,members[1].id,members[0].id));}
+  for(const text of texts){if(warming.has(text))continue;warming.add(text);speechAudio(text).catch(error=>console.error('[speech-warmup]',error.code||error.name)).finally(()=>warming.delete(text));}
+ }
+ const schoolApi=createSchoolApi(store,{json,body,onRoles:warmRoleSpeech});
  async function recorded(req,agent,p,run){
   const safe={...p,id:typeof p.id==='string'?p.id.slice(0,80):undefined,lessonId:lessons.some(l=>l.id===p.lessonId)?p.lessonId:'unknown'};
   const id=store.begin(req.schoolUser.id,agent,safe);
@@ -52,20 +61,26 @@ export function createApp({store,synthesize}={}) {
   const url = new URL(req.url,'http://localhost');
   if(url.pathname==='/health'&&req.method==='GET')return json(res,200,{ok:true});
   if(await schoolApi(req,res,url))return;
-  if((url.pathname==='/audio/roles.wav'||/^\/audio\/stages\/\d+\.wav$/.test(url.pathname))&&req.method==='GET'){
+  if((url.pathname==='/audio/roles.wav'||url.pathname==='/audio/roles-preview.wav'||/^\/audio\/stages\/\d+\.wav$/.test(url.pathname))&&req.method==='GET'){
    if(!req.schoolUser||req.schoolUser.role!=='student')return json(res,403,{message:'请使用学生账号'});
    const roles=store.groupRoles(req.schoolUser.id);
-   if(!roles.guidance)return json(res,409,{message:'请先完成角色分工'});
    let text;
-   if(url.pathname==='/audio/roles.wav'){
+   if(url.pathname==='/audio/roles-preview.wav'){
+    if(url.searchParams.get('version')!==String(roles.version))return json(res,409,{message:'角色分工已变化'});
+    const leaderId=url.searchParams.get('leader'),challengerId=url.searchParams.get('challenger');
+    if(!roles.members.some(member=>member.id===leaderId)||!roles.members.some(member=>member.id===challengerId)||(roles.members.length>1&&leaderId===challengerId))return json(res,400,{message:'请选择有效的角色分工'});
+    text=roleGuidance(roles.type,roles.members,leaderId,challengerId);
+   }else if(url.pathname==='/audio/roles.wav'){
+    if(!roles.guidance)return json(res,409,{message:'请先完成角色分工'});
     if(url.searchParams.get('version')!==String(roles.version))return json(res,409,{message:'角色分工已变化，请重新打开合作建议'});
     text=roles.guidance;
    }else{
+    if(!roles.guidance)return json(res,409,{message:'请先完成角色分工'});
     if(!req.schoolUser.aiEnabled)return json(res,403,{message:'静态组不使用探究支架'});
     text=stages.find(s=>s.id===Number(url.pathname.match(/\d+/)[0]))?.brief;
     if(!text)return json(res,404,{message:'播报内容不存在'});
    }
-   try{const audio=await speechAudio(text);res.writeHead(200,{'content-type':'audio/wav','cache-control':'private, no-store'});res.end(audio);}catch(e){json(res,e.status||502,{message:e.message});}return;
+   try{const audio=await speechAudio(text);res.writeHead(200,{'content-type':'audio/wav','cache-control':url.pathname==='/audio/roles-preview.wav'?'private, max-age=3600':'private, no-store'});res.end(audio);}catch(e){json(res,e.status||502,{message:e.message});}return;
   }
   if (url.pathname==='/api/config' && req.method==='GET') {
    return json(res,200,{lessons,defaultLessonId});

@@ -5,17 +5,18 @@ export async function setupRoles(api,bar){
  let state=await api('/api/groups/roles');
  const display=node('span');display.className='group-role-display';bar.append(display);
 
- function showGuidance(dialog,form,done=()=>{}){
+ function showGuidance(dialog,form,done=()=>{},preparedSource=null){
   form.replaceChildren(heading('🤝 合作建议'));const text=node('p',state.guidance);text.className='social-guidance';form.append(text);
   const replay=node('button','重新朗读');replay.type='button';replay.className='school-button';
   const status=node('span');status.className='school-note';status.setAttribute('role','status');
   const narrator=createNarrator({onState:playing=>{status.textContent=playing?'正在播放':'';},onLoading:()=>{status.textContent='正在准备语音…';},onError:()=>{status.textContent='语音暂不可用，请点击重新朗读';}});
-  const source='/audio/roles.wav?version='+state.version;
-  replay.onclick=()=>narrator.play(source);
+  const source='/audio/roles.wav?version='+state.version;let localSource=null;
+  const playPrepared=async()=>{try{localSource=await preparedSource;if(localSource)narrator.play(localSource);else narrator.play(source);}catch{narrator.play(source);}};
+  replay.onclick=()=>localSource?narrator.play(localSource):void playPrepared();
   const enter=node('button','开始探究');enter.type='button';enter.className='school-button primary';
-  enter.onclick=()=>{narrator.stop();dialog.close();dialog.remove();done();};
+  enter.onclick=()=>{narrator.stop();if(localSource?.startsWith('blob:'))URL.revokeObjectURL(localSource);dialog.close();dialog.remove();done();};
   window.addEventListener('pagehide',()=>narrator.stop(),{once:true});
-  form.append(replay,status,enter);narrator.play(source);
+  form.append(replay,status,enter);void playPrepared();
  }
  function render(){
   display.replaceChildren();if(!state.leaderId)return;
@@ -29,12 +30,15 @@ export async function setupRoles(api,bar){
   form.append(heading('🤝 小组角色分工'),node('p','请明确你们的角色分工：'));
   function select(label,index){const wrap=node('label',label),input=node('select');input.required=true;for(const m of state.members){const o=node('option',m.name);o.value=m.id;input.append(o);}input.value=state.members[Math.min(index,state.members.length-1)].id;wrap.append(input);form.append(wrap);return input;}
   const leader=select('领航发言员',0),challenger=select('记录与质疑员',1);
-  if(state.members.length===2){leader.onchange=()=>{challenger.value=state.members.find(m=>m.id!==leader.value).id;};challenger.onchange=()=>{leader.value=state.members.find(m=>m.id!==challenger.value).id;};}
+  let previewGeneration=0,preparedAudio=Promise.resolve(null);
+  const prepareAudio=()=>{const generation=++previewGeneration,params=new URLSearchParams({version:state.version,leader:leader.value,challenger:challenger.value});preparedAudio=fetch('/audio/roles-preview.wav?'+params).then(response=>{if(!response.ok)throw new Error('preview');return response.blob();}).then(blob=>{const url=URL.createObjectURL(blob);if(generation!==previewGeneration){URL.revokeObjectURL(url);return null;}return url;}).catch(()=>null);};
+  if(state.members.length===2){leader.onchange=()=>{challenger.value=state.members.find(m=>m.id!==leader.value).id;prepareAudio();};challenger.onchange=()=>{leader.value=state.members.find(m=>m.id!==challenger.value).id;prepareAudio();};}
+  prepareAudio();
   form.append(node('p','领航发言员：带领小组开展科学实验、组织讨论，每次讨论率先提出观点。'),node('p','记录与质疑员：用笔记录小组共识，在领航发言员之后提出观点和质疑。'));
   const error=node('p');error.setAttribute('role','alert');error.className='school-error';const submit=node('button','提交分工');submit.className='school-button primary';form.append(error,submit);dialog.append(form);document.body.append(dialog);dialog.addEventListener('cancel',e=>e.preventDefault());dialog.showModal();
   form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{
    state=await api('/api/groups/roles',{leaderId:leader.value,challengerId:challenger.value,version:state.version});render();
-   showGuidance(dialog,form,resolve);
+   showGuidance(dialog,form,resolve,preparedAudio);
   }catch(err){error.textContent=err.message;submit.disabled=false;}};
  });
  render();

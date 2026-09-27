@@ -1,7 +1,7 @@
 import {publicQuizzes} from './school-store.mjs';
 import {lessons} from './lessons.mjs';
 import {parseStudentsWorkbook,workbookBuffer} from './school-excel.mjs';
-export function createSchoolApi(store,{json,body}){
+export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
  const attempts=new Map();
  function token(req){return /(?:^|;\s*)xiaoke_session=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie||'')?.[1];}
  const cookie=(req,value,age)=>`xiaoke_session=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${req.headers['x-forwarded-proto']==='https'||req.socket.encrypted?'; Secure':''}`;
@@ -43,8 +43,8 @@ export function createSchoolApi(store,{json,body}){
    if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号作答'});return true;}
    const p=await body(req);try{store.submit(session.user.id,p?.quizId,p?.answers);json(res,200,{saved:true,completed:store.completed(session.user.id),ready:store.ready(session.user.id)});}catch(e){json(res,400,{message:e.message});}return true;
   }
-  if(path==='/api/groups/roles'&&['GET','POST'].includes(req.method)){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}const change=req.method==='POST'?await body(req):undefined;if(req.method==='POST'&&(!change||typeof change!=='object'||Array.isArray(change))){json(res,400,{message:'请提交有效的角色分工'});return true;}json(res,200,store.groupRoles(session.user.id,change));return true;}
-  if(path==='/api/groups/join'&&req.method==='POST'){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}const p=await body(req);json(res,200,{group:store.joinGroup(session.user.id,p?.code)});return true;}
+  if(path==='/api/groups/roles'&&['GET','POST'].includes(req.method)){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}const change=req.method==='POST'?await body(req):undefined;if(req.method==='POST'&&(!change||typeof change!=='object'||Array.isArray(change))){json(res,400,{message:'请提交有效的角色分工'});return true;}const roles=store.groupRoles(session.user.id,change);onRoles(roles);json(res,200,roles);return true;}
+  if(path==='/api/groups/join'&&req.method==='POST'){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}const p=await body(req),group=store.joinGroup(session.user.id,p?.code);onRoles(store.groupRoles(session.user.id));json(res,200,{group});return true;}
   if(path.startsWith('/api/teacher/')){
    if(!['admin','teacher'].includes(session.user.role)){json(res,403,{message:'仅教师或管理员可以访问'});return true;}
    const actor=session.user,classId=url.searchParams.get('class')||'';
