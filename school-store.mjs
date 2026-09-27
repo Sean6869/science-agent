@@ -19,6 +19,7 @@ function validateAccount(p,creating=true){
 }
 export function validateStudent(p,creating=true){
  validateAccount(p,creating);
+ if(p.aiEnabled!==undefined&&typeof p.aiEnabled!=='boolean')fail('请选择有效的AI权限');
  if(!['男','女','未填写'].includes(p.gender))fail('请选择有效的性别');
  if(p.age!==undefined&&p.age!==null&&p.age!==''&&(!Number.isInteger(Number(p.age))||Number(p.age)<1||Number(p.age)>120))fail('年龄须为1–120的整数');
 }
@@ -42,9 +43,9 @@ export async function openSchoolStore(filename,bootstrap={}){
  CREATE INDEX IF NOT EXISTS conversation_user ON conversations(user_id,created_at);
  CREATE INDEX IF NOT EXISTS conversation_turn ON conversations(user_id,agent,turn_id);`);
  migrateSchool(db);
- for(const column of [['subject',"TEXT NOT NULL DEFAULT ''"],['school',"TEXT NOT NULL DEFAULT ''"]]){if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE users ADD COLUMN '+column[0]+' '+column[1]);}
+ for(const column of [['ai_enabled','INTEGER NOT NULL DEFAULT 1'],['subject',"TEXT NOT NULL DEFAULT ''"],['school',"TEXT NOT NULL DEFAULT ''"]]){if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE users ADD COLUMN '+column[0]+' '+column[1]);}
  const vault=credentialVault(filename,!!db.prepare('SELECT id FROM users WHERE credential IS NOT NULL LIMIT 1').get());
- const profile=u=>u&&({id:u.id,username:u.username,role:u.role,name:u.name,gender:u.gender,className:u.class_name,classId:u.class_id,age:u.age,active:!!u.active,subject:u.subject||'',school:u.school||''});
+ const profile=u=>u&&({id:u.id,username:u.username,role:u.role,name:u.name,gender:u.gender,className:u.class_name,classId:u.class_id,age:u.age,active:!!u.active,aiEnabled:!!u.ai_enabled,subject:u.subject||'',school:u.school||''});
  const getUser=id=>db.prepare('SELECT * FROM users WHERE id=?').get(id);
  function transaction(fn){db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');if(String(error.message).includes('UNIQUE'))fail('账号已存在');throw error;}}
  function manager(actor){const current=actor?getUser(actor.id):null;if(!current?.active||!['admin','teacher'].includes(current.role))fail('没有管理权限',403);return current;}
@@ -61,7 +62,7 @@ export async function openSchoolStore(filename,bootstrap={}){
  function targetStudent(id,actor){const u=getUser(id);if(!u||u.role!=='student')fail('学生不存在或无权访问',403);scope(actor,u.class_id);return u;}
  const scopedWhere="(?='' OR u.class_id IN (SELECT id FROM classes WHERE teacher_id=?)) AND (?='' OR u.class_id=?)";
  const scopeArgs=(actor,classId='')=>{const s=scope(actor,classId);return [s.owner,s.owner,s.classId,s.classId];};
- function insertStudent(p,hash,c){const id=randomUUID();groups.invalidate(c.id);db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,class_id,age,credential) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,p.username,hash,'student',p.name.trim(),p.gender,c.name,now(),c.id,p.age?Number(p.age):null,vault.encrypt(p.password));return profile(getUser(id));}
+ function insertStudent(p,hash,c){const id=randomUUID();groups.invalidate(c.id);db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,class_id,age,credential,ai_enabled) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id,p.username,hash,'student',p.name.trim(),p.gender,c.name,now(),c.id,p.age?Number(p.age):null,vault.encrypt(p.password),p.aiEnabled===false?0:1);return profile(getUser(id));}
  const groups=createGroupStore(db,{quizzes,getUser,scope,fail});
  const store={
   close(){db.close();},
@@ -79,6 +80,7 @@ export async function openSchoolStore(filename,bootstrap={}){
   classes(actor){const u=manager(actor);return db.prepare("SELECT c.id,c.name,u.name AS teacherName,u.username AS teacherUsername FROM classes c LEFT JOIN users u ON u.id=c.teacher_id WHERE (?='admin' OR c.teacher_id=?) ORDER BY c.name,c.created_at").all(u.role,u.id);},
   assignClass(classId,teacherId,actor){if(manager(actor).role!=='admin')fail('仅管理员可以分配班级',403);scope(actor,classId);const t=getUser(teacherId);if(!classId||!t||t.role!=='teacher'||!t.active)fail('请选择班级和启用的教师');db.prepare('UPDATE classes SET teacher_id=? WHERE id=?').run(t.id,classId);},
   students(actor,classId=''){return db.prepare("SELECT u.* FROM users u WHERE u.role='student' AND "+scopedWhere+" ORDER BY u.class_name,u.name,u.username").all(...scopeArgs(actor,classId)).map(profile);},
+  setAiPermission(actor,classId,aiEnabled){if(!classId||typeof aiEnabled!=='boolean')fail('请选择班级和AI权限');scope(actor,classId);db.prepare("UPDATE users SET ai_enabled=? WHERE class_id=? AND role='student'").run(Number(aiEnabled),classId);},
   studentCredentials(actor,classId=''){return this.students(actor,classId).map(s=>({...s,password:vault.decrypt(getUser(s.id).credential)||'未保存'}));},
   teachers(actor){if(manager(actor).role!=='admin')fail('仅管理员可以访问',403);return db.prepare("SELECT * FROM users WHERE role='teacher' ORDER BY created_at").all().map(u=>({...profile(u),className:db.prepare('SELECT name FROM classes WHERE teacher_id=? ORDER BY name').all(u.id).map(c=>c.name).join('、'),password:vault.decrypt(u.credential)}));},
   async registerTeacher(p){validateAccount(p);const hash=await passwordHash(p.password);return transaction(()=>{const id=randomUUID();db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,credential) VALUES(?,?,?,?,?,?,?,?,?)').run(id,p.username,hash,'teacher',p.name.trim(),'未填写','',now(),vault.encrypt(p.password));return profile(getUser(id));});},
@@ -100,13 +102,14 @@ export async function openSchoolStore(filename,bootstrap={}){
   },
   async editStudent(id,p,actor){
    const u=targetStudent(id,actor);validateStudent(p,false);const hash=p.password?await passwordHash(p.password):u.password;
-   return transaction(()=>{targetStudent(id,actor);const c=classroom(actor,{...p,classId:p.classId||(!p.className?u.class_id:undefined)});if(c.id!==u.class_id||p.gender!==u.gender||(p.active!==false)!==!!u.active){groups.invalidate(u.class_id);groups.invalidate(c.id);}db.prepare('UPDATE users SET username=?,password=?,credential=?,name=?,gender=?,class_name=?,class_id=?,age=?,active=? WHERE id=?').run(p.username,hash,p.password?vault.encrypt(p.password):u.credential,p.name.trim(),p.gender,c.name,c.id,p.age?Number(p.age):null,p.active===false?0:1,id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return profile(getUser(id));});
+   return transaction(()=>{targetStudent(id,actor);const c=classroom(actor,{...p,classId:p.classId||(!p.className?u.class_id:undefined)});if(c.id!==u.class_id||p.gender!==u.gender||(p.active!==false)!==!!u.active){groups.invalidate(u.class_id);groups.invalidate(c.id);}db.prepare('UPDATE users SET username=?,password=?,credential=?,name=?,gender=?,class_name=?,class_id=?,age=?,active=?,ai_enabled=? WHERE id=?').run(p.username,hash,p.password?vault.encrypt(p.password):u.credential,p.name.trim(),p.gender,c.name,c.id,p.age?Number(p.age):null,p.active===false?0:1,p.aiEnabled===undefined?u.ai_enabled:Number(p.aiEnabled),id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return profile(getUser(id));});
   },
-  async importStudents(rows,fingerprint,actor){
+  async importStudents(rows,fingerprint,actor,aiEnabled=true){
+   if(typeof aiEnabled!=='boolean')fail('请选择有效的AI权限');
    manager(actor);const prepared=[];for(const row of rows){const password=String(randomInt(10000000,100000000));prepared.push({...row,password,hash:await passwordHash(password)});}
    return transaction(()=>{let created=0;const batches=Map.groupBy(prepared,row=>row.className);
     for(const [className,batch] of batches){const c=classroom(actor,{className});if(db.prepare('SELECT id FROM imports WHERE class_id=? AND fingerprint=?').get(c.id,fingerprint))continue;
-     for(const row of batch){const base=studentAccountBase(row.name);let username=base+'_student',n=2;while(db.prepare('SELECT id FROM users WHERE username=?').get(username))username=base+(n++)+'_student';insertStudent({...row,username},row.hash,c);created++;}
+     for(const row of batch){const base=studentAccountBase(row.name);let username=base+'_student',n=2;while(db.prepare('SELECT id FROM users WHERE username=?').get(username))username=base+(n++)+'_student';insertStudent({...row,username,aiEnabled},row.hash,c);created++;}
      db.prepare('INSERT INTO imports VALUES(?,?,?,?,?)').run(randomUUID(),actor.id,fingerprint,c.id,now());
     }return {created,alreadyImported:created===0};});
   },
