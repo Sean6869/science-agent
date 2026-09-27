@@ -85,9 +85,15 @@ export function createApp({store,synthesize}={}) {
   if (url.pathname==='/api/config' && req.method==='GET') {
    return json(res,200,{lessons,defaultLessonId});
   }
+  if(url.pathname==='/api/group-conversations'&&req.method==='GET'){
+   if(req.schoolUser?.role!=='student')return json(res,403,{message:'请使用学生账号'});
+   const agent=url.searchParams.get('agent'),lessonId=url.searchParams.get('lesson');
+   if(!['knowledge','metacognitive'].includes(agent)||!lessons.some(lesson=>lesson.id===lessonId))return json(res,400,{message:'请选择有效的会话'});
+   return json(res,200,{conversations:store.groupConversations(req.schoolUser.id,agent,lessonId)});
+  }
   if(url.pathname==='/api/assessment'&&req.method==='POST'){
    const p=await body(req);const a=assessments.find(a=>a.id===p?.option);if(!a)return json(res,400,{message:'请选择有效的自评选项'});
-   return json(res,200,await recorded(req,'metacognitive',{...p,stage:4,text:a.label+'：'+a.detail},async()=>({content:a.reply,source:'rule'})));
+   return json(res,200,await recorded(req,'metacognitive',{...p,stage:4,kind:'assessment',text:a.label+'：'+a.detail},async()=>({content:a.reply,source:'rule',complete:true})));
   }
   if(url.pathname==='/api/knowledge' && req.method==='GET') {
    const lessonId=url.searchParams.get('lesson');if(!lessons.some(l=>l.id===lessonId))return json(res,400,{message:'请选择有效课程'});
@@ -98,14 +104,19 @@ export function createApp({store,synthesize}={}) {
    if(!p||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000||!Array.isArray(p.history)||p.history.length>8||p.history.some(m=>!m||!['user','agent'].includes(m.role)||typeof m.text!=='string'||m.text.length>2000))return json(res,400,{message:'请输入1至2000字问题'});
    const lessonId=lessons.some(l=>l.id===p.lessonId)?p.lessonId:defaultLessonId;
    const turn={id:typeof p.id==='string'&&p.id.length<=80?p.id:crypto.randomUUID(),text:p.text.trim()};
+   if(req.schoolUser.role==='student'&&store.groupHasPending(req.schoolUser.id,'knowledge',lessonId,null,turn.id))return json(res,423,{message:'请等待小组当前问题回答完成'});
    store.knowledgeQuota(req.schoolUser.id,lessonId,turn);
-   const result=await recorded(req,'knowledge',{...p,...turn,lessonId},async()=>{try{return await answerKnowledge(p);}catch(error){console.error(`[knowledge] ${error?.name||'Error'}: ${error?.message||'unknown failure'}`);return fallbackKnowledge(p.text);}});
+   const shared={...p,...turn,lessonId,history:req.schoolUser.role==='student'?store.groupPromptHistory(req.schoolUser.id,'knowledge',lessonId,null,8):p.history};
+   const result=await recorded(req,'knowledge',shared,async()=>{try{return await answerKnowledge(shared);}catch(error){console.error(`[knowledge] ${error?.name||'Error'}: ${error?.message||'unknown failure'}`);return fallbackKnowledge(shared.text);}});
    return json(res,200,{...result,quota:store.knowledgeQuota(req.schoolUser.id,lessonId)});
   }
   if(url.pathname==='/api/chat' && req.method==='POST') {
    let p; try {p=await body(req);} catch {return json(res,400,{message:'请求格式无效或内容过长'});}
    if(!p||!Number.isInteger(p.stage)||![1,2,3,5,6].includes(p.stage)||!['content','self_assessment'].includes(p.kind)||!Number.isInteger(p.attempt)||p.attempt<0||p.attempt>MAX_CONTENT_SUBMISSIONS+1||(p.kind==='content'&&p.attempt<1)||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000) return json(res,400,{message:'请选择有效阶段并输入1至2000字产出'});
-   return json(res,200,await recorded(req,'metacognitive',p,()=>evaluate(p)));
+   const lessonId=lessons.some(lesson=>lesson.id===p.lessonId)?p.lessonId:defaultLessonId,state=req.schoolUser.role==='student'?store.groupInquiryState(req.schoolUser.id,lessonId,p.stage,p.id):p;
+   if(req.schoolUser.role==='student'&&store.groupHasPending(req.schoolUser.id,'metacognitive',lessonId,p.stage,p.id))return json(res,423,{message:'请等待小组当前反馈完成'});
+   const shared={...p,...state,lessonId,latestSubmission:p.kind==='self_assessment'?state.latestSubmission:p.text};
+   return json(res,200,await recorded(req,'metacognitive',shared,()=>evaluate(shared)));
   }
   if(url.pathname.startsWith('/api/')) return json(res,404,{message:'接口不存在'});
   if(req.method!=='GET') return json(res,405,{message:'不支持此请求'});

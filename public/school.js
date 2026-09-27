@@ -5,7 +5,7 @@ const screen=document.getElementById('schoolScreen');
 const e=(tag,text,className)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;};
 export async function apiFetch(url,options={}){
  const response=await fetch(url,{...options,headers:{...options.headers,...(identity?{'x-session-user':identity.id}:{}),...(options.method&&options.method!=='GET'?{'x-csrf-token':csrf}:{})}});
- if(response.status===403&&['/api/chat','/api/knowledge','/api/assessment','/api/config'].includes(url)){location.reload();throw new Error('测验或分组状态已更新');}
+ if(response.status===403&&(['/api/chat','/api/knowledge','/api/assessment','/api/config'].includes(url)||url.startsWith('/api/group-conversations'))){location.reload();throw new Error('测验、分组或权限状态已更新');}
  if((response.status===401&&url!=='/api/auth/login')||response.status===409){location.reload();throw new Error('登录已过期或账号已切换');}return response;
 }
 async function api(url,data,method='POST'){const r=await apiFetch(url,data===undefined?{}:{method,headers:{'content-type':'application/json'},body:JSON.stringify(data)});const result=await r.json();if(!r.ok)throw new Error(result.message||'操作未完成，请重试');return result;}

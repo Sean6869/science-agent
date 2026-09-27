@@ -27,7 +27,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
   if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,completed:store.completed(session.user.id),group:session.user.role==='student'?store.groupStatus(session.user.id):null,ready:session.user.role!=='student'||store.ready(session.user.id)}:{user:null});return true;}
   if(!path.startsWith('/api/'))return false;
   if(!session){json(res,401,{message:'请先登录'});return true;}
-  if(session.user.role==='student'&&!session.user.aiEnabled&&['/api/chat','/api/knowledge','/api/assessment'].includes(path)){json(res,403,{message:'静态组不使用知识答疑和探究支架',code:'AI_DISABLED'});return true;}
+  if(session.user.role==='student'&&!session.user.aiEnabled&&['/api/chat','/api/knowledge','/api/assessment','/api/group-conversations'].includes(path)){json(res,403,{message:'静态组不使用知识答疑和探究支架',code:'AI_DISABLED'});return true;}
   if(path==='/api/teacher/profile'&&req.method==='PUT'){try{if(session.user.role!=='teacher')throw Object.assign(new Error('仅教师可以编辑资料'),{status:403});json(res,200,{user:store.updateTeacherProfile(session.user.id,await body(req),session.user)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
   if(path==='/api/auth/logout'&&req.method==='POST'){store.logout(token(req));res.setHeader('Set-Cookie',cookie(req,'',0));json(res,200,{ok:true});return true;}
   if(path.startsWith('/api/admin/')){
@@ -89,8 +89,8 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
     return true;
    }
   }
-  if(['/api/chat','/api/knowledge','/api/assessment','/api/config'].includes(path)&&session.user.role==='student'&&!store.ready(session.user.id)){json(res,403,{message:'请先完成全部入门测验'});return true;}
-  if(['/api/chat','/api/knowledge','/api/assessment','/api/config'].includes(path)&&session.user.role==='student'&&store.groupStatus(session.user.id).status!=='joined'){json(res,403,{message:'请等待教师确认分组，再输入本组小组码进入实验'});return true;}
+  if(['/api/chat','/api/knowledge','/api/assessment','/api/config','/api/group-conversations'].includes(path)&&session.user.role==='student'&&!store.ready(session.user.id)){json(res,403,{message:'请先完成全部入门测验'});return true;}
+  if(['/api/chat','/api/knowledge','/api/assessment','/api/config','/api/group-conversations'].includes(path)&&session.user.role==='student'&&store.groupStatus(session.user.id).status!=='joined'){json(res,403,{message:'请等待教师确认分组，再输入本组小组码进入实验'});return true;}
   if(['/api/chat','/api/assessment'].includes(path)&&session.user.role==='student'&&!store.groupRoles(session.user.id).leaderId){json(res,403,{message:'请先完成小组角色分工'});return true;}
   return false;
  };

@@ -6,6 +6,7 @@ import {dirname,resolve} from 'node:path';
 import {pinyin} from 'pinyin-pro';
 import {createGroupStore} from './school-groups.mjs';
 import {credentialVault,migrateSchool} from './school-credentials.mjs';
+import {isSelfAssessmentText} from './public/turn-kind.js';
 const scrypt=promisify(scryptCallback),now=()=>new Date().toISOString();
 export const quizzes=JSON.parse(readFileSync(new URL('./quizzes.json',import.meta.url),'utf8'));
 export const publicQuizzes=quizzes.map(q=>({...q,questions:q.questions.map(({answer,...question})=>question)}));
@@ -44,6 +45,8 @@ export async function openSchoolStore(filename,bootstrap={}){
  CREATE INDEX IF NOT EXISTS conversation_turn ON conversations(user_id,agent,turn_id);`);
  migrateSchool(db);
  for(const column of [['ai_enabled','INTEGER NOT NULL DEFAULT 1'],['subject',"TEXT NOT NULL DEFAULT ''"],['school',"TEXT NOT NULL DEFAULT ''"]]){if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE users ADD COLUMN '+column[0]+' '+column[1]);}
+ for(const column of [['kind','TEXT'],['complete','INTEGER']]){if(!db.prepare('PRAGMA table_info(conversations)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE conversations ADD COLUMN '+column[0]+' '+column[1]);}
+ const setLegacyKind=db.prepare('UPDATE conversations SET kind=? WHERE id=?');for(const row of db.prepare("SELECT id,stage,user_text AS text FROM conversations WHERE agent='metacognitive' AND kind IS NULL").all())setLegacyKind.run(row.stage===4?'assessment':isSelfAssessmentText(row.text)?'self_assessment':'content',row.id);
  const vault=credentialVault(filename,!!db.prepare('SELECT id FROM users WHERE credential IS NOT NULL LIMIT 1').get());
  const profile=u=>u&&({id:u.id,username:u.username,role:u.role,name:u.name,gender:u.gender,className:u.class_name,classId:u.class_id,age:u.age,active:!!u.active,aiEnabled:!!u.ai_enabled,subject:u.subject||'',school:u.school||''});
  const getUser=id=>db.prepare('SELECT * FROM users WHERE id=?').get(id);
@@ -121,6 +124,21 @@ export async function openSchoolStore(filename,bootstrap={}){
   submit(userId,quizId,answers){const q=quizzes.find(q=>q.id===quizId);if(!q)fail('测验不存在');const old=this.scores(userId).find(s=>s.quizId===q.id&&s.version===q.version);if(old)return old;if(quizzes.slice(0,quizzes.indexOf(q)).some(p=>!this.scores(userId).some(s=>s.quizId===p.id&&s.version===p.version)))fail('请先完成上一份测验');if(!answers||Array.isArray(answers)||Object.keys(answers).length!==q.questions.length||q.questions.some(item=>!item.options.some(o=>o.id===answers[item.id])))fail('请完成全部题目，不会的题目可选“我不知道”');const correct=q.questions.filter(item=>answers[item.id]===item.answer).length;db.prepare('INSERT INTO scores VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(),userId,q.id,q.version,correct*10,correct,q.questions.length,JSON.stringify(answers),now());groups.ensure(getUser(userId).class_id);return this.scores(userId).find(s=>s.quizId===q.id&&s.version===q.version);},
   allScores(actor,classId=''){return db.prepare('SELECT u.id AS studentId,u.name,u.gender,u.class_name AS className,u.username,s.quiz_id AS quizId,s.version,s.score,s.correct,s.total,s.answers,s.created_at AS createdAt FROM scores s JOIN users u ON u.id=s.user_id WHERE '+scopedWhere+' ORDER BY s.created_at DESC').all(...scopeArgs(actor,classId));},
   conversations(userId='',limit=500,offset=0,actor,classId=''){const args=scopeArgs(actor,classId);if(userId)targetStudent(userId,actor);return db.prepare("SELECT c.id,u.name,u.gender,u.class_name AS className,u.username,c.agent,c.lesson_id AS lessonId,c.stage,c.user_text AS userText,c.reply,c.source,c.status,c.created_at AS createdAt,c.answered_at AS answeredAt FROM conversations c JOIN users u ON u.id=c.user_id WHERE (?='' OR c.user_id=?) AND "+scopedWhere+' ORDER BY c.created_at DESC LIMIT ? OFFSET ?').all(userId,userId,...args,limit,offset);},
+  groupConversations(userId,agent,lessonId,limit=200){
+   if(!['knowledge','metacognitive'].includes(agent)||typeof lessonId!=='string')fail('请选择有效的会话');
+   const group=db.prepare('SELECT gm.group_id AS id FROM group_members gm JOIN student_groups g ON g.id=gm.group_id JOIN group_batches b ON b.class_id=g.class_id WHERE gm.user_id=? AND gm.joined=1 AND b.approved_at IS NOT NULL').get(userId);
+   if(!group)fail('请先加入已审核的小组',403);
+   const rows=db.prepare(`SELECT c.id,c.turn_id AS turnId,c.user_id AS userId,u.name AS senderName,c.agent,c.lesson_id AS lessonId,c.stage,c.kind,c.user_text AS userText,c.reply,c.source,c.status,c.complete,c.created_at AS createdAt,c.answered_at AS answeredAt
+    FROM conversations c JOIN users u ON u.id=c.user_id WHERE c.user_id IN (SELECT user_id FROM group_members WHERE group_id=?) AND c.agent=? AND c.lesson_id=? ORDER BY c.rowid DESC LIMIT ?`).all(group.id,agent,lessonId,Math.max(1,Math.min(500,limit))).reverse();
+   return [...new Map(rows.map(row=>[row.turnId,row])).values()];
+  },
+  groupPromptHistory(userId,agent,lessonId,stage,limit=8){const rows=this.groupConversations(userId,agent,lessonId,500).filter(row=>!stage||row.stage===stage),messages=[];for(const row of rows){messages.push({role:'user',text:row.userText});if(row.reply&&row.status==='complete')messages.push({role:'agent',text:row.reply});}return messages.slice(-limit);},
+  groupHasPending(userId,agent,lessonId,stage,turnId){return this.groupConversations(userId,agent,lessonId,500).some(row=>row.status==='pending'&&(!stage||row.stage===stage)&&row.turnId!==turnId);},
+  groupInquiryState(userId,lessonId,stage,turnId){
+   const rows=this.groupConversations(userId,'metacognitive',lessonId,500),unique=values=>[...new Map(values.map(row=>[row.turnId,row])).values()],content=unique(rows.filter(row=>row.kind==='content'&&row.stage===stage));
+   const context=[];for(const prior of [1,2,3,5,6].filter(value=>value<stage)){const latest=unique(rows.filter(row=>row.kind==='content'&&row.stage===prior)).at(-1);if(latest)context.push({stage:prior,text:latest.userText,id:latest.turnId});}
+   return {attempt:content.some(row=>row.turnId===turnId)?content.findIndex(row=>row.turnId===turnId)+1:content.length+1,latestSubmission:content.at(-1)?.userText||null,context,conversation:this.groupPromptHistory(userId,'metacognitive',lessonId,stage,6)};
+  },
   completed(userId){return this.scores(userId).map(({quizId,version})=>({quizId,version}));},
   approveGroups(actor,classId,batchId){return groups.approve(actor,classId,batchId);},
   editGroups(actor,classId,batchId,assignments){return groups.edit(actor,classId,batchId,assignments);},
@@ -130,8 +148,8 @@ export async function openSchoolStore(filename,bootstrap={}){
   resetKnowledgeQuota(actor,classId,lessonId){return groups.resetQuota(actor,classId,lessonId);},
   joinGroup(userId,code){return groups.join(userId,code);},
   listGroups(actor,classId=''){scope(actor,classId);return this.classes(actor).filter(c=>!classId||c.id===classId).map(c=>groups.report(c));},
-  begin(userId,agent,p){const id=randomUUID();db.prepare('INSERT INTO conversations(id,user_id,turn_id,agent,lesson_id,stage,user_text,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)').run(id,userId,p.id||randomUUID(),agent,p.lessonId||'unknown',p.stage||null,p.text,'pending',now());return id;},
-  finish(id,result){db.prepare('UPDATE conversations SET reply=?,source=?,status=?,answered_at=? WHERE id=?').run(result.content,result.source,'complete',now(),id);},
+  begin(userId,agent,p){const id=randomUUID();db.prepare('INSERT INTO conversations(id,user_id,turn_id,agent,lesson_id,stage,user_text,status,created_at,kind) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id,userId,p.id||randomUUID(),agent,p.lessonId||'unknown',p.stage||null,p.text,'pending',now(),p.kind||null);return id;},
+  finish(id,result){db.prepare('UPDATE conversations SET reply=?,source=?,status=?,answered_at=?,complete=? WHERE id=?').run(result.content,result.source,'complete',now(),result.complete===undefined?null:Number(!!result.complete),id);},
   fail(id){db.prepare("UPDATE conversations SET status='failed',answered_at=? WHERE id=?").run(now(),id);}
  };
  db.prepare("UPDATE conversations SET status='interrupted' WHERE status='pending'").run();
