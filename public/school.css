@@ -27,7 +27,6 @@ body:not(.workspace-ready)>.knowledge-pet,body:not(.workspace-ready)>.knowledge-
 
 .group-role-display{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.workspace-account{flex-wrap:wrap}.social-role-dialog{width:min(640px,calc(100vw - 40px));max-height:85vh;overflow:auto;box-sizing:border-box;border:1px solid #dbe6fa;border-radius:20px;padding:28px;color:#234365;background:#fff}.social-role-dialog::backdrop{background:#243c6266}.social-role-dialog label{display:flex;flex-direction:column;gap:8px;margin:16px 0}.social-role-dialog select{font:inherit;padding:12px;border:1px solid #dbe6fa;border-radius:12px;background:white;color:inherit}.social-role-dialog p{line-height:1.8}.social-role-dialog button{margin-right:10px}.social-guidance{white-space:pre-line}
 
-.without-ai .layout{grid-template-columns:minmax(0,1fr)}
 
 .social-role-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}.social-role-heading h2{margin:0}.social-role-heading img{width:100px;height:auto;flex-shrink:0}@media(max-width:480px){.social-role-heading img{width:76px}.social-role-heading h2{font-size:20px}}
 

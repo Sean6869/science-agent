@@ -1,7 +1,7 @@
 import {lessons,defaultLessonId} from './lessons.mjs';
 import {cleanEnvValue,completeStructured} from './deepseek.mjs';
-import {answerKnowledge,fallbackKnowledge} from './knowledge-agent.mjs';
-import {buildFeedbackMessages,exhaustedFeedback,fallbackFeedback,formatStructuredFeedback,isStructuredFeedbackComplete,MAX_CONTENT_SUBMISSIONS} from './metacognitive-agent.mjs';
+import {answerKnowledge,fallbackKnowledge,presetKnowledge} from './knowledge-agent.mjs';
+import {buildFeedbackMessages,exhaustedFeedback,fallbackFeedback,presetFeedback,formatStructuredFeedback,isStructuredFeedbackComplete,MAX_CONTENT_SUBMISSIONS} from './metacognitive-agent.mjs';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
@@ -14,9 +14,10 @@ try { process.loadEnvFile(resolve(root, '.env.local')); } catch {}
 const pub = resolve(root, 'public');
 function json(res, status, data) { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(data)); }
 async function body(req,limit=64000) { let raw = ''; for await (const c of req) { raw += c; if (Buffer.byteLength(raw) > limit) throw new Error('请求内容过长'); } return JSON.parse(raw); }
-async function evaluate(p) {
+async function evaluate(p,aiEnabled=true) {
  const remainingAttempts=Math.max(0,MAX_CONTENT_SUBMISSIONS-p.attempt);
  if(p.kind==='content'&&p.attempt>MAX_CONTENT_SUBMISSIONS)return {content:exhaustedFeedback(),source:'rule',remainingAttempts:0,exhausted:true,complete:true,kind:p.kind};
+ if(!aiEnabled)return {content:presetFeedback(p),source:'static',remainingAttempts,exhausted:false,complete:false,kind:p.kind};
  const clean={...p,
   context:Array.isArray(p.context)?p.context.filter(x=>x&&Number.isInteger(x.stage)&&typeof x.text==='string').slice(-6).map(x=>({stage:x.stage,text:x.text.slice(0,2000)})):[],
   conversation:Array.isArray(p.conversation)?p.conversation.filter(x=>x&&['user','agent'].includes(x.role)&&typeof x.text==='string').slice(-6).map(x=>({role:x.role,text:x.text.slice(0,1200)})):[],
@@ -65,13 +66,13 @@ export function createApp({store}={}) {
    const lessonId=lessons.some(l=>l.id===p.lessonId)?p.lessonId:defaultLessonId;
    const turn={id:typeof p.id==='string'&&p.id.length<=80?p.id:crypto.randomUUID(),text:p.text.trim()};
    store.knowledgeQuota(req.schoolUser.id,lessonId,turn);
-   const result=await recorded(req,'knowledge',{...p,...turn,lessonId},async()=>{try{return await answerKnowledge(p);}catch(error){console.error(`[knowledge] ${error?.name||'Error'}: ${error?.message||'unknown failure'}`);return fallbackKnowledge(p.text);}});
+   const result=await recorded(req,'knowledge',{...p,...turn,lessonId},async()=>{if(!req.schoolUser.aiEnabled)return presetKnowledge(p.text,lessonId);try{return await answerKnowledge(p);}catch(error){console.error(`[knowledge] ${error?.name||'Error'}: ${error?.message||'unknown failure'}`);return fallbackKnowledge(p.text);}});
    return json(res,200,{...result,quota:store.knowledgeQuota(req.schoolUser.id,lessonId)});
   }
   if(url.pathname==='/api/chat' && req.method==='POST') {
    let p; try {p=await body(req);} catch {return json(res,400,{message:'请求格式无效或内容过长'});}
    if(!p||!Number.isInteger(p.stage)||![1,2,3,5,6].includes(p.stage)||!['content','self_assessment'].includes(p.kind)||!Number.isInteger(p.attempt)||p.attempt<0||p.attempt>MAX_CONTENT_SUBMISSIONS+1||(p.kind==='content'&&p.attempt<1)||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000) return json(res,400,{message:'请选择有效阶段并输入1至2000字产出'});
-   return json(res,200,await recorded(req,'metacognitive',p,()=>evaluate(p)));
+   return json(res,200,await recorded(req,'metacognitive',p,()=>evaluate(p,req.schoolUser.aiEnabled)));
   }
   if(url.pathname.startsWith('/api/')) return json(res,404,{message:'接口不存在'});
   if(req.method!=='GET') return json(res,405,{message:'不支持此请求'});

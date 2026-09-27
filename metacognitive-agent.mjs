@@ -35,6 +35,20 @@ export function exhaustedFeedback() {
  return '本环节三次内容提交机会已经用完，请保存现有成果并尽快进入下一个环节。';
 }
 
+const presetChecks={
+ 1:'是否明确指出要改变的自变量、要观察或测量的因变量？这个问题能否通过实验操作回答？',
+ 2:'假设是否为可以检验的陈述句？是否说明变量关系的方向，以及假设成立的条件？',
+ 3:'是否写明自变量的取值和操作方法、因变量的记录方式，以及保持其他条件不变的措施？',
+ 5:'结论是否有多组数据支持？是否写明适用条件，并与记录的现象和数值一致？',
+ 6:'每位组员是否表达了自己的判断和理由？是否引用具体实验记录，与原来的假设进行比较？'
+};
+export function presetFeedback({stage,kind='content',attempt=1}){
+ const checks=presetChecks[stage];
+ const remaining=Math.max(0,MAX_CONTENT_SUBMISSIONS-attempt);
+ if(kind==='self_assessment')return `自我评价：请为你们的星级判断补充一条实验记录或原文依据。\n老师的评价：请相互核对：${checks}\n根据核对结果保留或调整自评，并记录改进之处；自评不占内容提交次数，本环节还剩${remaining}次内容提交机会。`;
+ return `自我评价：请对照本环节标准进行星级自评，并说明依据。\n老师的评价：请逐项检查：${checks}\n请与同伴讨论，补充尚未说明的内容，再提交修改后的产出；本环节还剩${remaining}次内容提交机会。`;
+}
+
 export function fallbackFeedback({stage,kind='content',attempt=1}) {
  const rubric=stageRubrics[stage];
  if(!rubric)return '当前环节不使用智能体量规反馈。';

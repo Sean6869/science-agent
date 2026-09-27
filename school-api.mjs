@@ -28,7 +28,6 @@ export function createSchoolApi(store,{json,body}){
   if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,completed:store.completed(session.user.id),group:session.user.role==='student'?store.groupStatus(session.user.id):null,ready:session.user.role!=='student'||store.ready(session.user.id)}:{user:null});return true;}
   if(!path.startsWith('/api/'))return false;
   if(!session){json(res,401,{message:'请先登录'});return true;}
-  if(session.user.role==='student'&&!session.user.aiEnabled&&['/api/chat','/api/knowledge','/api/assessment','/api/groups/roles'].includes(path)){json(res,403,{message:'教师尚未开放此账号的AI使用权限',code:'AI_DISABLED'});return true;}
   if(path==='/api/auth/logout'&&req.method==='POST'){store.logout(token(req));res.setHeader('Set-Cookie',cookie(req,'',0));json(res,200,{ok:true});return true;}
   if(path.startsWith('/api/admin/')){
    if(session.user.role!=='admin'){json(res,403,{message:'仅管理员可以访问'});return true;}
@@ -66,7 +65,7 @@ export function createSchoolApi(store,{json,body}){
     try{const p=await body(req,1500000);const parsed=await parseStudentsWorkbook(p?.data);json(res,200,await store.importStudents(parsed.rows,parsed.fingerprint,actor,p?.aiEnabled??true));}catch(e){json(res,e.status||400,{message:e.message});}return true;
    }
    if(path==='/api/teacher/accounts.xlsx'&&req.method==='GET'){
-    const rows=store.studentCredentials(actor,classId);const file=await workbookBuffer([['姓名','name'],['性别','gender',10],['年龄','age',10],['班级','className'],['账号','username',30],['密码','password',20]],rows);
+    const rows=store.studentCredentials(actor,classId).map(s=>({...s,permissionGroup:s.aiEnabled?'动态组':'静态组'}));const file=await workbookBuffer([['姓名','name'],['性别','gender',10],['年龄','age',10],['班级','className'],['账号','username',30],['密码','password',20],['权限分组','permissionGroup']],rows);
     res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':'attachment; filename="student-accounts.xlsx"','cache-control':'no-store'});res.end(file);return true;
    }
    if(path==='/api/teacher/students'){

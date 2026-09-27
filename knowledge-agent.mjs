@@ -35,6 +35,18 @@ export function fallbackKnowledge(text){
  return {content:found?found[1]:'小科暂时没有连上在线知识服务，但你们的问题已经保留。\n可以先说说你们已经知道的概念或观察到的现象，我会据此帮助你们继续分析。\n也可以稍后点击重试，获取更完整的讲解。',source:'fallback',agent:'knowledge'};
 }
 
+const courseChecks={
+ 'bending-light':'请先标出入射点、法线、入射光线和折射光线，再以法线为基准测量角度。',
+ 'geometric-optics-basics':'请先区分焦距、物距和像距，再观察光屏能否承接清晰的像。',
+ 'energy-skate-park':'请先辨认速度、高度、质量和摩擦设置，再记录动能、重力势能和热能的变化。'
+};
+export function presetKnowledge(text,lessonId){
+ const coreLaw=/规律|公式|完整.*表|结论/.test(text);
+ const found=coreLaw?null:localAnswers.find(([pattern])=>pattern.test(text));
+ const content=found?.[1]||`${courseChecks[lessonId]||courseChecks['bending-light']}\n每次只改变一个条件，保持其他条件不变，并记录多组现象或数据。\n请与同伴对照这些记录讨论问题，也可以选择本课典型问题查看概念说明。`;
+ return {content,source:'static',agent:'knowledge'};
+}
+
 export async function answerKnowledge(payload,options={}){
  const content=await completeStructured(knowledgeMessages(payload),parseKnowledgeAnswer,options);
  return {content,source:'model',agent:'knowledge'};
