@@ -20,12 +20,12 @@ test('missing credentials and upstream failures do not become cached audio',asyn
  }finally{await rm(directory,{recursive:true,force:true});}
 });
 test('long speech segments synthesize concurrently and retain their original order',async()=>{
- const directory=await mkdtemp(join(tmpdir(),'speech-')),pending=[];
+ const directory=await mkdtemp(join(tmpdir(),'speech-')),pending=[];let bothStarted;const started=new Promise(resolve=>{bothStarted=resolve;});
  const text='甲'.repeat(139)+'。'+'乙'.repeat(139)+'。';
- const request=async(url,options)=>{const segment=JSON.parse(options.body).Text;let release;const wait=new Promise(resolve=>{release=resolve;});pending.push({segment,release});await wait;return {ok:true,json:async()=>({Response:{Audio:Buffer.from(segment.startsWith('甲')?[1,0]:[2,0]).toString('base64')}})};};
+ const request=async(url,options)=>{const segment=JSON.parse(options.body).Text;let release;const wait=new Promise(resolve=>{release=resolve;});pending.push({segment,release});if(pending.length===2)bothStarted();await wait;return {ok:true,json:async()=>({Response:{Audio:Buffer.from(segment.startsWith('甲')?[1,0]:[2,0]).toString('base64')}})};};
  try{
   const result=createSpeech({directory,env:{TENCENTCLOUD_SECRET_ID:'test',TENCENTCLOUD_SECRET_KEY:'test'},request})(text);
-  for(let turn=0;turn<10&&pending.length<2;turn++)await new Promise(resolve=>setImmediate(resolve));assert.equal(pending.length,2);for(const item of pending.reverse())item.release();
+  await Promise.race([started,new Promise((_,reject)=>setTimeout(()=>reject(new Error('speech requests did not start concurrently')),1000))]);assert.equal(pending.length,2);for(const item of pending.reverse())item.release();
   const wav=await result;assert.equal(wav[44],1);assert.equal(wav.at(-2),2);
  }finally{await rm(directory,{recursive:true,force:true});}
 });

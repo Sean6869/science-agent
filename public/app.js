@@ -8,14 +8,16 @@ import {isSelfAssessmentText} from './turn-kind.js';
 import {createRoleHintButton,createRoleHintController} from './role-hints.js';
 import {createLessonVideo} from './lesson-video.js';
 import {apiFetch} from './school.js';
-const KEY=`science-session-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
+const KEY=`science-session-v4:${window.schoolUser.id}:${window.schoolGroup.id}`;
+const LEGACY_KEY=`science-session-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const fresh=()=>({version:3,stage:1,timers:createStageTimers(stages.map(s=>s.id)),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))});
 let state=fresh();
-try {
- const saved=JSON.parse(sessionStorage.getItem(KEY));
+let activeLessonId=null,legacyState=null;
+function normalizeState(saved){
  const validData=(saved?.version===2||saved?.version===3)&&stages.every(s=>saved.data?.[s.id]?.submissions&&saved.data[s.id].messages)&&stages.some(s=>s.id===saved.stage);
- if(validData){const base=fresh();state={...base,...saved,version:3,timers:saved.version===3&&stages.every(s=>saved.timers?.[s.id])?saved.timers:base.timers};for(const s of stages)state.data[s.id]={...base.data[s.id],...saved.data[s.id]};}
-} catch {}
+ if(!validData)return fresh();const base=fresh(),next={...base,...saved,version:3,timers:saved.version===3&&stages.every(s=>saved.timers?.[s.id])?saved.timers:base.timers};for(const s of stages)next.data[s.id]={...base.data[s.id],...saved.data[s.id]};return next;
+}
+try{legacyState=JSON.parse(sessionStorage.getItem(LEGACY_KEY));}catch{}
 const $=id=>document.getElementById(id);
 const busy=new Set();
 let sharedRows=[],sharedLoaded=false,sharedSyncing=false;
@@ -30,7 +32,13 @@ const narrator=createNarrator({onError:()=>{narrationButton.title='语音暂不�
  narrationButton.title=playing?'停止播放':'播放开场白';
 }});
 narrationButton.hidden=!narrator.supported;
-function save(){try {sessionStorage.setItem(KEY,JSON.stringify(state));} catch {$('voiceState').textContent='存储不可用，刷新前请复制保存产出。';}}
+const stageAudio=stage=>`/audio/stages/${stage}.wav?user=${encodeURIComponent(window.schoolUser.id)}`;
+function lessonKey(lessonId){return `${KEY}:${lessonId}`;}
+function loadLessonState(lessonId){
+ try{const saved=JSON.parse(sessionStorage.getItem(lessonKey(lessonId)));if(saved)return normalizeState(saved);const previousLesson=sessionStorage.getItem('science-lesson');if(legacyState&&(!previousLesson||previousLesson===lessonId)){const migrated=normalizeState(legacyState);sessionStorage.setItem(lessonKey(lessonId),JSON.stringify(migrated));sessionStorage.removeItem(LEGACY_KEY);legacyState=null;return migrated;}}catch{}
+ return fresh();
+}
+function save(){if(!activeLessonId)return;try {sessionStorage.setItem(lessonKey(activeLessonId),JSON.stringify(state));} catch {$('voiceState').textContent='存储不可用，刷新前请复制保存产出。';}}
 function unlockAlarm(){
  const AudioContext=window.AudioContext||window.webkitAudioContext;
  if(!AudioContext)return Promise.resolve(false);
@@ -143,7 +151,7 @@ function submit(e){
 }
 $('stages').replaceChildren();
 for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{
- if(speech)speech.stop();const now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;startTimer(state.timers[s.id],now);roleHint.enter(s.id);void unlockAlarm();render();narrator.play(`/audio/stages/${s.id}.wav`);
+ if(speech)speech.stop();const now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;startTimer(state.timers[s.id],now);roleHint.enter(s.id);void unlockAlarm();render();narrator.play(stageAudio(s.id));
 };$('stages').append(b);}
 renderTimerFields();
 $('timerToggle').onclick=()=>{void unlockAlarm();const timer=state.timers[state.stage];timer.running?pauseTimer(timer):startTimer(timer);save();renderTimer();};
@@ -159,7 +167,7 @@ $('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e
 $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
 $('clear').onclick=()=>{if(window.confirm('清除本机草稿和倒计时设置？小组共享的对话记录会保留。')){if(speech)speech.abort();narrator.stop();state=fresh();renderTimerFields();$('timerSettingsPanel').hidden=true;$('timerSettingsToggle').setAttribute('aria-expanded','false');$('timerSettingsToggle').textContent='设置各环节时间⌄';save();render();}};
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-narrationButton.onclick=()=>narrator.isPlaying()?narrator.stop():narrator.play(`/audio/stages/${state.stage}.wav`);
+narrationButton.onclick=()=>narrator.isPlaying()?narrator.stop():narrator.play(stageAudio(state.stage));
 $('voice').onclick=()=>{
  narrator.stop();
  if(speech){speech.stop();return;}
@@ -176,7 +184,7 @@ $('voice').onclick=()=>{
 render();
 createWorkspacePanels();
 createKnowledgeChat();
-window.addEventListener('science:lesson-change',()=>{sharedRows=[];sharedLoaded=false;roleHint.enter(state.stage);void syncShared();});window.addEventListener('focus',()=>void syncShared());const sharedTimer=setInterval(()=>{if(!document.hidden)void syncShared();},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
+window.addEventListener('science:lesson-change',event=>{if(activeLessonId){pauseTimer(state.timers[state.stage]);save();}narrator.stop();activeLessonId=event.detail.id;state=loadLessonState(activeLessonId);sharedRows=[];sharedLoaded=false;renderTimerFields();roleHint.enter(state.stage);render();void syncShared();});window.addEventListener('focus',()=>void syncShared());const sharedTimer=setInterval(()=>{if(!document.hidden)void syncShared();},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
 setInterval(()=>{const result=advanceTimer(state.timers[state.stage]);if(result.warning){ringAlarm();save();}if(result.finished){ringAlarm(true);save();}renderTimer();},250);
-setTimeout(()=>narrator.play(`/audio/stages/${state.stage}.wav`),150);
+setTimeout(()=>narrator.play(stageAudio(state.stage)),150);
 createExperimentWorkspace();

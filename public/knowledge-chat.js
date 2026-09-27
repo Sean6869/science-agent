@@ -1,11 +1,11 @@
 import {apiFetch} from './school.js';
 export function createKnowledgeChat(){
- const KEY=`science-knowledge-draft-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
+ const KEY=`science-knowledge-draft-v3:${window.schoolUser.id}:${window.schoolGroup.id}`;
  const promptList=document.getElementById('knowledgePromptList'),list=document.getElementById('knowledgeMessages'),draft=document.getElementById('knowledgeDraft'),form=document.getElementById('knowledgeComposer'),send=document.getElementById('knowledgeSend');
- let messages=[],busy=false,groupBusy=false,local=[],syncing=false;
+ let messages=[],busy=false,groupBusy=false,local=[],syncing=false,activeLessonId=null;
  const quotaNote=document.createElement('p');quotaNote.className='knowledge-welcome';quotaNote.setAttribute('role','status');form.before(quotaNote);
- try{draft.value=sessionStorage.getItem(KEY)||'';}catch{}
- const saveDraft=()=>{try{sessionStorage.setItem(KEY,draft.value);}catch{}};
+ const draftKey=()=>activeLessonId&&`${KEY}:${activeLessonId}`;
+ const saveDraft=()=>{try{if(draftKey())sessionStorage.setItem(draftKey(),draft.value);}catch{}};
  async function refreshQuota(){const lessonId=window.__scienceLesson?.id;if(!lessonId)return;try{const r=await apiFetch('/api/knowledge?lesson='+encodeURIComponent(lessonId));if(!r.ok)return;const q=await r.json();if(lessonId===window.__scienceLesson?.id)quotaNote.textContent=q.limit===3?'本组本课知识答疑：剩余 '+q.remaining+' / 3 次（组员共享）':'';}catch{}}
  function render(){
   list.replaceChildren();const shown=[...messages,...local];
@@ -19,7 +19,7 @@ export function createKnowledgeChat(){
   try{const response=await apiFetch(`/api/group-conversations?agent=knowledge&lesson=${encodeURIComponent(lessonId)}`),result=await response.json();if(!response.ok)throw new Error(result.message);if(lessonId!==window.__scienceLesson?.id)return;groupBusy=result.conversations.some(row=>row.status==='pending');messages=result.conversations.flatMap(row=>[{role:'user',text:row.userText,senderName:row.senderName,turnId:row.turnId},...(row.reply?[{role:row.source==='fallback'?'system':'agent',text:row.reply,turnId:row.turnId}]:[])]);const ids=new Set(result.conversations.map(row=>row.turnId));local=local.filter(message=>message.retry||!ids.has(message.turnId));render();}
   catch{}finally{syncing=false;}
  }
- function setLesson(lesson){promptList.replaceChildren(...(lesson.questions||[]).map(question=>{const button=document.createElement('button');button.type='button';button.textContent=question;button.setAttribute('aria-label',`直接提问：${question}`);button.onclick=()=>{const details=promptList.closest('details');if(details)details.open=false;submitText(question);};return button;}));messages=[];local=[];render();void Promise.all([sync(),refreshQuota()]);}
+ function setLesson(lesson){saveDraft();activeLessonId=lesson.id||null;try{draft.value=draftKey()?sessionStorage.getItem(draftKey())||'':'';}catch{draft.value='';}promptList.replaceChildren(...(lesson.questions||[]).map(question=>{const button=document.createElement('button');button.type='button';button.textContent=question;button.setAttribute('aria-label',`直接提问：${question}`);button.onclick=()=>{const details=promptList.closest('details');if(details)details.open=false;submitText(question);};return button;}));messages=[];local=[];render();void Promise.all([sync(),refreshQuota()]);}
  async function request(turn){
   if(busy)return;busy=true;local=local.filter(message=>message.retry?.id!==turn.id);render();
   try{const response=await apiFetch('/api/knowledge',{method:'POST',headers:{'content-type':'application/json'},signal:AbortSignal.timeout(130000),body:JSON.stringify({...turn,history:[]})}),result=await response.json();if(!response.ok){if(response.status===429){local.push({role:'system',text:result.message});return;}throw new Error(result.message);}}

@@ -18,7 +18,38 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 try { process.loadEnvFile(resolve(root, '.env.local')); } catch {}
 const pub = resolve(root, 'public');
 function json(res, status, data) { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(data)); }
-async function body(req,limit=64000) { let raw = ''; for await (const c of req) { raw += c; if (Buffer.byteLength(raw) > limit) throw new Error('请求内容过长'); } return JSON.parse(raw); }
+function httpError(message,status){const error=new Error(message);error.status=status;return error;}
+async function body(req,limit=64000) {
+ const chunks=[];let size=0;
+ for await(const chunk of req){const data=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);size+=data.length;if(size>limit)throw httpError('请求内容过长',413);chunks.push(data);}
+ try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw httpError('请求格式无效',400);}
+}
+const contentTypes={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.jpeg':'image/jpeg','.jpg':'image/jpeg','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.mp4':'video/mp4'};
+function videoRange(value,size){
+ if(!value)return {start:0,end:size-1,status:200};
+ const match=value.match(/^bytes=(\d*)-(\d*)$/);if(!match||(!match[1]&&!match[2]))throw httpError('视频范围无效',416);
+ let start,end;
+ if(!match[1]){const suffix=Number(match[2]);if(!Number.isSafeInteger(suffix)||suffix<=0)throw httpError('视频范围无效',416);start=Math.max(0,size-suffix);end=size-1;}
+ else{start=Number(match[1]);end=match[2]?Number(match[2]):size-1;}
+ if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||start>=size)throw httpError('视频范围无效',416);
+ return {start,end:Math.min(end,size-1),status:206};
+}
+async function serveStatic(req,res,url){
+ let pathname;try{pathname=decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname);}catch{throw httpError('文件路径无效',400);}
+ const path=resolve(pub,'.'+pathname);if(!path.startsWith(pub+sep))throw httpError('禁止访问',403);
+ let info;try{info=await stat(path);}catch(error){if(['ENOENT','ENOTDIR'].includes(error.code))return json(res,404,{message:'文件不存在'});throw error;}
+ if(!info.isFile())return json(res,404,{message:'文件不存在'});
+ const type=extname(path),contentType=contentTypes[type]||'application/octet-stream',etag=`W/"${info.size}-${Math.trunc(info.mtimeMs)}"`;
+ const cacheControl=type==='.png'?'public, max-age=31536000, immutable':type==='.mp4'?'public, max-age=0, must-revalidate':'no-cache';
+ if(!req.headers.range&&req.headers['if-none-match']===etag){res.writeHead(304,{etag,'cache-control':cacheControl});return res.end();}
+ if(type==='.mp4'){
+  let range;try{range=videoRange(req.headers.range,info.size);}catch(error){if(error.status===416)res.setHeader('Content-Range',`bytes */${info.size}`);throw error;}
+  const headers={'content-type':contentType,'content-length':range.end-range.start+1,'accept-ranges':'bytes','cache-control':cacheControl,'x-content-type-options':'nosniff',etag};
+  if(range.status===206)headers['content-range']=`bytes ${range.start}-${range.end}/${info.size}`;
+  res.writeHead(range.status,headers);if(req.method==='HEAD')return res.end();return createReadStream(path,{start:range.start,end:range.end}).pipe(res);
+ }
+ const file=await readFile(path);res.writeHead(200,{'content-type':contentType,'content-length':file.length,'cache-control':cacheControl,'x-content-type-options':'nosniff',etag});res.end(req.method==='HEAD'?undefined:file);
+}
 async function evaluate(p) {
  const remainingAttempts=Math.max(0,MAX_CONTENT_SUBMISSIONS-p.attempt);
  if(p.kind==='content'&&p.attempt>MAX_CONTENT_SUBMISSIONS)return {content:exhaustedFeedback(),source:'rule',remainingAttempts:0,exhausted:true,complete:true,kind:p.kind};
@@ -64,6 +95,7 @@ export function createApp({store,synthesize}={}) {
   if(await schoolApi(req,res,url))return;
   if((url.pathname==='/audio/roles.wav'||url.pathname==='/audio/roles-preview.wav'||/^\/audio\/stages\/\d+\.wav$/.test(url.pathname))&&req.method==='GET'){
    if(!req.schoolUser||req.schoolUser.role!=='student')return json(res,403,{message:'请使用学生账号'});
+   if(url.searchParams.get('user')!==req.schoolUser.id)return json(res,409,{message:'账号已切换，请重新载入'});
    const roles=store.groupRoles(req.schoolUser.id);
    let text;
    if(url.pathname==='/audio/roles-preview.wav'){
@@ -101,7 +133,7 @@ export function createApp({store,synthesize}={}) {
    return json(res,200,store.knowledgeQuota(req.schoolUser.id,lessonId));
   }
   if(url.pathname==='/api/knowledge' && req.method==='POST') {
-   let p;try{p=await body(req);}catch{return json(res,400,{message:'请求格式无效'});}
+   const p=await body(req);
    if(!p||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000||!Array.isArray(p.history)||p.history.length>8||p.history.some(m=>!m||!['user','agent'].includes(m.role)||typeof m.text!=='string'||m.text.length>2000))return json(res,400,{message:'请输入1至2000字问题'});
    const lessonId=lessons.some(l=>l.id===p.lessonId)?p.lessonId:defaultLessonId;
    const turn={id:typeof p.id==='string'&&p.id.length<=80?p.id:crypto.randomUUID(),text:p.text.trim()};
@@ -112,7 +144,7 @@ export function createApp({store,synthesize}={}) {
    return json(res,200,{...result,quota:store.knowledgeQuota(req.schoolUser.id,lessonId)});
   }
   if(url.pathname==='/api/chat' && req.method==='POST') {
-   let p; try {p=await body(req);} catch {return json(res,400,{message:'请求格式无效或内容过长'});}
+   const p=await body(req);
    if(!p||!Number.isInteger(p.stage)||![1,2,3,5,6].includes(p.stage)||!['content','self_assessment'].includes(p.kind)||!Number.isInteger(p.attempt)||p.attempt<0||p.attempt>MAX_CONTENT_SUBMISSIONS+1||(p.kind==='content'&&p.attempt<1)||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000) return json(res,400,{message:'请选择有效阶段并输入1至2000字产出'});
    const lessonId=lessons.some(lesson=>lesson.id===p.lessonId)?p.lessonId:defaultLessonId,state=req.schoolUser.role==='student'?store.groupInquiryState(req.schoolUser.id,lessonId,p.stage,p.id):p;
    if(req.schoolUser.role==='student'&&store.groupHasPending(req.schoolUser.id,'metacognitive',lessonId,p.stage,p.id))return json(res,423,{message:'请等待小组当前反馈完成'});
@@ -121,10 +153,8 @@ export function createApp({store,synthesize}={}) {
   }
   if(url.pathname.startsWith('/api/')) return json(res,404,{message:'接口不存在'});
   if(!['GET','HEAD'].includes(req.method)) return json(res,405,{message:'不支持此请求'});
-  const path=resolve(pub,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
-  if(!path.startsWith(pub+sep)) return json(res,403,{message:'禁止访问'});
-  try {const type=extname(path),contentType=({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.jpeg':'image/jpeg','.jpg':'image/jpeg','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.mp4':'video/mp4'})[type]||'application/octet-stream';if(type==='.mp4'){const {size}=await stat(path),match=req.headers.range?.match(/^bytes=(\d*)-(\d*)$/);let start=0,end=size-1,status=200;if(req.headers.range){if(!match||(!match[1]&&!match[2])){res.setHeader('Content-Range',`bytes */${size}`);return json(res,416,{message:'视频范围无效'});}if(!match[1]){const suffix=Number(match[2]);if(!Number.isSafeInteger(suffix)||suffix<=0){res.setHeader('Content-Range',`bytes */${size}`);return json(res,416,{message:'视频范围无效'});}start=Math.max(0,size-suffix);}else start=Number(match[1]);end=match[1]&&match[2]?Number(match[2]):size-1;if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||start>=size){res.setHeader('Content-Range',`bytes */${size}`);return json(res,416,{message:'视频范围无效'});}end=Math.min(end,size-1);status=206;}const headers={'content-type':contentType,'content-length':end-start+1,'accept-ranges':'bytes','cache-control':'public, max-age=86400','x-content-type-options':'nosniff'};if(status===206)headers['content-range']=`bytes ${start}-${end}/${size}`;res.writeHead(status,headers);if(req.method==='HEAD')return res.end();return createReadStream(path,{start,end}).pipe(res);}const file=await readFile(path);res.writeHead(200,{'content-type':contentType,'content-length':file.length,'cache-control':type==='.png'?'public, max-age=31536000, immutable':'no-cache','x-content-type-options':'nosniff'});res.end(req.method==='HEAD'?undefined:file);} catch {json(res,404,{message:'文件不存在'});}
- } catch(error) {console.error('[request]',error.name);json(res,error.status||(error instanceof SyntaxError?400:500),{message:error.status?error.message:error instanceof SyntaxError?'请求格式无效':'服务暂不可用'});}
+  return await serveStatic(req,res,url);
+ } catch(error) {const status=error.status||(error instanceof SyntaxError?400:500);if(status>=500)console.error('[request]',error.name);json(res,status,{message:error.status?error.message:error instanceof SyntaxError?'请求格式无效':'服务暂不可用'});}
 });}
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
  const configuredPort=Number(cleanEnvValue(process.env.PORT));
