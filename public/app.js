@@ -5,6 +5,7 @@ import {createWorkspacePanels} from './workspace-panels.js';
 import {createKnowledgeChat} from './knowledge-chat.js';
 import {advanceTimer,createStageTimers,formatTime,pauseTimer,remainingSeconds,resetTimer,startTimer} from './stage-timer.js';
 import {isSelfAssessmentText} from './turn-kind.js';
+import {createRoleHintButton,createRoleHintController} from './role-hints.js';
 import {apiFetch} from './school.js';
 const KEY=`science-session-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const fresh=()=>({version:3,stage:1,timers:createStageTimers(stages.map(s=>s.id)),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))});
@@ -20,6 +21,7 @@ let sharedRows=[],sharedLoaded=false,sharedSyncing=false;
 let speech=null;
 let alarmContext=null;
 const narrationButton=$('narrate');
+const roleHintButton=createRoleHintButton(),roleHint=createRoleHintController(roleHintButton);$('stageTimer').append(roleHintButton);
 const narrator=createNarrator({onError:()=>{narrationButton.title='语音暂不可用，请点击重试';},onLoading:()=>{narrationButton.title='正在准备语音，点击可停止';},onState:playing=>{
  narrationButton.classList.toggle('playing',playing);
  narrationButton.setAttribute('aria-label',playing?'停止播放开场白':'播放开场白');
@@ -139,7 +141,7 @@ function submit(e){
 }
 $('stages').replaceChildren();
 for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{
- if(speech)speech.stop();const now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;startTimer(state.timers[s.id],now);void unlockAlarm();render();narrator.play(`/audio/stages/${s.id}.wav`);
+ if(speech)speech.stop();const now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;startTimer(state.timers[s.id],now);roleHint.enter(s.id);void unlockAlarm();render();narrator.play(`/audio/stages/${s.id}.wav`);
 };$('stages').append(b);}
 renderTimerFields();
 $('timerToggle').onclick=()=>{void unlockAlarm();const timer=state.timers[state.stage];timer.running?pauseTimer(timer):startTimer(timer);save();renderTimer();};
@@ -172,7 +174,7 @@ $('voice').onclick=()=>{
 render();
 createWorkspacePanels();
 createKnowledgeChat();
-window.addEventListener('science:lesson-change',()=>{sharedRows=[];sharedLoaded=false;void syncShared();});window.addEventListener('focus',()=>void syncShared());const sharedTimer=setInterval(()=>{if(!document.hidden)void syncShared();},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
+window.addEventListener('science:lesson-change',()=>{sharedRows=[];sharedLoaded=false;roleHint.enter(state.stage);void syncShared();});window.addEventListener('focus',()=>void syncShared());const sharedTimer=setInterval(()=>{if(!document.hidden)void syncShared();},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
 setInterval(()=>{const result=advanceTimer(state.timers[state.stage]);if(result.warning){ringAlarm();save();}if(result.finished){ringAlarm(true);save();}renderTimer();},250);
 setTimeout(()=>narrator.play(`/audio/stages/${state.stage}.wav`),150);
 createExperimentWorkspace();

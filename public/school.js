@@ -138,7 +138,7 @@ async function startWorkspace(group){
  }
  const {setupRoles}=await import('./social-roles.js');await setupRoles(api,bar);
  if(identity.aiEnabled)await import('./app.js');
- else{const {createExperimentWorkspace}=await import('./experiment-workspace.js');await createExperimentWorkspace();}
+ else{const [{createExperimentWorkspace},{createStaticRoleHints}]=await Promise.all([import('./experiment-workspace.js'),import('./role-hints.js')]);createStaticRoleHints(document.querySelector('.experiment'));await createExperimentWorkspace();}
 }
 
 async function boot(){const session=await api('/api/me');if(!session.user){login();return;}identity=session.user;csrf=session.csrf;window.schoolUser=identity;if(identity.role!=='student')await teacher();else if(session.ready)await studentEntry(session.group);else await studentTests();}
