@@ -121,6 +121,7 @@ export async function openSchoolStore(filename,bootstrap={}){
   completed(userId){return this.scores(userId).map(({quizId,version})=>({quizId,version}));},
   approveGroups(actor,classId,batchId){return groups.approve(actor,classId,batchId);},
   editGroups(actor,classId,batchId,assignments){return groups.edit(actor,classId,batchId,assignments);},
+  groupRoles(userId,change){const result=groups.roles(userId,change);if(change){const name=id=>result.members.find(m=>m.id===id).name;const id=this.begin(userId,'social',{lessonId:'小组角色分工',text:(change.swap?'交换角色：':'角色分工：')+'领航发言员 '+name(result.leaderId)+'；记录与质疑员 '+name(result.challengerId)});this.finish(id,{content:change.swap?'角色已交换。':result.guidance,source:'rule'});}return result;},
   groupStatus(userId){return groups.student(userId);},
   knowledgeQuota(userId,lessonId,turn){return groups.quota(userId,lessonId,turn);},
   resetKnowledgeQuota(actor,classId,lessonId){return groups.resetQuota(actor,classId,lessonId);},

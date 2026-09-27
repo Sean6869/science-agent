@@ -34,6 +34,8 @@ test('server grades in order, rejects incomplete submissions, and cannot overwri
  const c=store.listGroups(teacher.user,student.user.classId)[0];store.approveGroups(teacher.user,c.id,c.batchId);store.joinGroup(student.user.id,store.listGroups(teacher.user,c.id)[0].groups[0].code);assert.equal((await request('/api/config',student)).status,200);
 });
 test('both agents persist student input and returned replies tied to authenticated identity',async()=>{
+ assert.equal((await request('/api/chat',student,{text:'问题',stage:1})).status,403);
+ const roles=store.groupRoles(student.user.id);store.groupRoles(student.user.id,{version:0,leaderId:roles.members[0].id,challengerId:roles.members.at(-1).id});
  delete process.env.DEEPSEEK_API_KEY;
  for(const [path,p] of [['/api/knowledge',{text:'什么是焦距？',history:[],lessonId:'geometric-optics-basics'}],['/api/chat',{text:'物距变化影响像的大小',stage:1,kind:'content',attempt:1,lessonId:'geometric-optics-basics'}],['/api/assessment',{option:'sufficient',lessonId:'geometric-optics-basics'}]]){
   const r=await request(path,student,{...p,userId:other.user.id});assert.equal(r.status,200);const reply=await r.json();assert.ok(reply.content);const rows=store.conversations(student.user.id,500,0,teacher.user);assert.equal(rows[0].reply,reply.content);assert.equal(rows[0].status,'complete');assert.equal(rows[0].username,'student1');

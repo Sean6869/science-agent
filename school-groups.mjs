@@ -1,4 +1,5 @@
 import {randomUUID,randomBytes} from 'node:crypto';
+import {roleGuidance} from './social-roles.mjs';
 import {planGroups} from './grouping.mjs';
 
 export function createGroupStore(db,{quizzes,getUser,scope,fail}){
@@ -6,6 +7,24 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
  CREATE TABLE IF NOT EXISTS student_groups(id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES classes(id),number INTEGER NOT NULL,type TEXT NOT NULL,code TEXT UNIQUE);
  CREATE TABLE IF NOT EXISTS group_members(user_id TEXT PRIMARY KEY REFERENCES users(id),group_id TEXT NOT NULL REFERENCES student_groups(id),total INTEGER NOT NULL,level TEXT NOT NULL,joined INTEGER NOT NULL DEFAULT 0);`);
  db.exec('CREATE TABLE IF NOT EXISTS knowledge_usage(group_id TEXT NOT NULL REFERENCES student_groups(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,user_id TEXT NOT NULL,turn_id TEXT NOT NULL,question TEXT NOT NULL,PRIMARY KEY(group_id,lesson_id,user_id,turn_id))');
+ db.exec('CREATE TABLE IF NOT EXISTS group_roles(group_id TEXT PRIMARY KEY REFERENCES student_groups(id) ON DELETE CASCADE,leader_id TEXT NOT NULL,challenger_id TEXT NOT NULL,version INTEGER NOT NULL)');
+ function roles(userId,change){
+  const g=db.prepare('SELECT g.id,g.type FROM student_groups g JOIN group_members m ON m.group_id=g.id JOIN group_batches b ON b.class_id=g.class_id WHERE m.user_id=? AND m.joined=1 AND b.approved_at IS NOT NULL').get(userId);
+  if(!g)fail('请先加入已审核的小组',403);
+  const members=db.prepare('SELECT u.id,u.name,m.total FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=? ORDER BY m.total DESC,u.username').all(g.id);
+  return atomic(()=>{
+   let saved=db.prepare('SELECT * FROM group_roles WHERE group_id=?').get(g.id);
+   if(change){
+    if((saved?.version||0)!==change.version)fail('角色分工已更新，请刷新后重试',409);
+    let leader=change.leaderId,challenger=change.challengerId;
+    if(change.swap){if(!saved)fail('请先完成角色分工');leader=saved.challenger_id;challenger=saved.leader_id;}
+    if(!members.some(m=>m.id===leader)||!members.some(m=>m.id===challenger)||(members.length>1&&leader===challenger))fail('请为两位组员选择不同的角色');
+    db.prepare('INSERT INTO group_roles VALUES(?,?,?,?) ON CONFLICT(group_id) DO UPDATE SET leader_id=excluded.leader_id,challenger_id=excluded.challenger_id,version=excluded.version').run(g.id,leader,challenger,(saved?.version||0)+1);
+    saved=db.prepare('SELECT * FROM group_roles WHERE group_id=?').get(g.id);
+   }
+   return {members:members.map(({id,name})=>({id,name})),version:saved?.version||0,leaderId:saved?.leader_id||null,challengerId:saved?.challenger_id||null,guidance:saved?roleGuidance(g.type,members,saved.leader_id,saved.challenger_id):null};
+  });
+ }
  function quota(userId,lessonId,turn){
   const group=db.prepare('SELECT g.id,g.type FROM student_groups g JOIN group_members m ON m.group_id=g.id WHERE m.user_id=? AND m.joined=1').get(userId);
   if(!group||group.type!=='HH')return {limit:null,remaining:null};
@@ -65,5 +84,5 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
   });
  }
  function resetQuota(actor,classId,lessonId){if(!classId)fail('请选择班级');scope(actor,classId);db.prepare('DELETE FROM knowledge_usage WHERE lesson_id=? AND group_id IN (SELECT id FROM student_groups WHERE class_id=?)').run(lessonId,classId);}
- return {invalidate,ensure,student,report,approve,join,edit,quota,resetQuota};
+ return {invalidate,ensure,student,report,approve,join,edit,quota,resetQuota,roles};
 }

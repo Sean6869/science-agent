@@ -42,6 +42,7 @@ export function createSchoolApi(store,{json,body}){
    if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号作答'});return true;}
    const p=await body(req);try{store.submit(session.user.id,p?.quizId,p?.answers);json(res,200,{saved:true,completed:store.completed(session.user.id),ready:store.ready(session.user.id)});}catch(e){json(res,400,{message:e.message});}return true;
   }
+  if(path==='/api/groups/roles'&&['GET','POST'].includes(req.method)){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}const change=req.method==='POST'?await body(req):undefined;if(req.method==='POST'&&(!change||typeof change!=='object'||Array.isArray(change))){json(res,400,{message:'请提交有效的角色分工'});return true;}json(res,200,store.groupRoles(session.user.id,change));return true;}
   if(path==='/api/groups/join'&&req.method==='POST'){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}const p=await body(req);json(res,200,{group:store.joinGroup(session.user.id,p?.code)});return true;}
   if(path.startsWith('/api/teacher/')){
    if(!['admin','teacher'].includes(session.user.role)){json(res,403,{message:'仅教师或管理员可以访问'});return true;}
@@ -88,6 +89,7 @@ export function createSchoolApi(store,{json,body}){
   }
   if(['/api/chat','/api/knowledge','/api/assessment','/api/config'].includes(path)&&session.user.role==='student'&&!store.ready(session.user.id)){json(res,403,{message:'请先完成全部入门测验'});return true;}
   if(['/api/chat','/api/knowledge','/api/assessment','/api/config'].includes(path)&&session.user.role==='student'&&store.groupStatus(session.user.id).status!=='joined'){json(res,403,{message:'请等待教师确认分组，再输入本组小组码进入实验'});return true;}
+  if(['/api/chat','/api/assessment'].includes(path)&&session.user.role==='student'&&!store.groupRoles(session.user.id).leaderId){json(res,403,{message:'请先完成小组角色分工'});return true;}
   return false;
  };
 }
