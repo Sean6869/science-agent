@@ -4,7 +4,7 @@ import {answerKnowledge,fallbackKnowledge} from './knowledge-agent.mjs';
 import {buildFeedbackMessages,exhaustedFeedback,fallbackFeedback,formatStructuredFeedback,isStructuredFeedbackComplete,MAX_CONTENT_SUBMISSIONS} from './metacognitive-agent.mjs';
 import { createServer } from 'node:http';
 import {createRoleSpeech} from './tencent-speech.mjs';
-import roleNarration from './scripts/role-narration.json' with {type:'json'};
+import roleNarration from './role-narration.mjs';
 
 import { readFile } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';

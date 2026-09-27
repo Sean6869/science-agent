@@ -74,7 +74,7 @@ pnpm dev
 
 ### 合作建议语音
 
-使用腾讯云 `TextToVoice`（2019-08-23）精品女声智希 `101026`、16kHz。Railway 配置 `TENCENTCLOUD_SECRET_ID` 和 `TENCENTCLOUD_SECRET_KEY`；密钥只由服务端读取。文案和音色集中在 `scripts/role-narration.json`，姓名只显示在界面，不发送给腾讯云。
+使用腾讯云 `TextToVoice`（2019-08-23）精品女声智希 `101026`、16kHz。Railway 配置 `TENCENTCLOUD_SECRET_ID` 和 `TENCENTCLOUD_SECRET_KEY`；密钥只由服务端读取。文案和音色集中在运行模块 `role-narration.mjs`，随 Docker 的 `*.mjs` 一起打包，姓名只显示在界面，不发送给腾讯云。
 
 首次播放按句切分完整文案，经基础合成取得 PCM 后封装成 WAV，缓存在 Volume 的 `role-audio` 目录；后续请求直接复用。同一文案的并发请求共用一次生成，变更文案或音色后自动更新缓存。首次生成使用腾讯云额度，复用缓存不再合成。无须 Python、ffmpeg 或旧的微软语音工具。未配置或服务失败时提示语音不可用，仍可阅读建议并进入实验。
 
