@@ -18,3 +18,4 @@ data/
 *.sqlite-wal
 *.credentials.key
 .school-qa/
+__pycache__/

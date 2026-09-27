@@ -3,6 +3,8 @@ import {cleanEnvValue,completeStructured} from './deepseek.mjs';
 import {answerKnowledge,fallbackKnowledge} from './knowledge-agent.mjs';
 import {buildFeedbackMessages,exhaustedFeedback,fallbackFeedback,formatStructuredFeedback,isStructuredFeedbackComplete,MAX_CONTENT_SUBMISSIONS} from './metacognitive-agent.mjs';
 import { createServer } from 'node:http';
+import {createRoleSpeech} from './tencent-speech.mjs';
+import roleNarration from './scripts/role-narration.json' with {type:'json'};
 
 import { readFile } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
@@ -36,6 +38,7 @@ export async function defaultSchoolStore(){
 export function createApp({store}={}) {
  if(!store)throw new Error('createApp requires a school store');
  const schoolApi=createSchoolApi(store,{json,body});
+ const roleAudio=createRoleSpeech({directory:resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR||resolve(root,'data'),'role-audio'),config:roleNarration});
  async function recorded(req,agent,p,run){
   const safe={...p,id:typeof p.id==='string'?p.id.slice(0,80):undefined,lessonId:lessons.some(l=>l.id===p.lessonId)?p.lessonId:'unknown'};
   const id=store.begin(req.schoolUser.id,agent,safe);
@@ -49,6 +52,11 @@ export function createApp({store}={}) {
   const url = new URL(req.url,'http://localhost');
   if(url.pathname==='/health'&&req.method==='GET')return json(res,200,{ok:true});
   if(await schoolApi(req,res,url))return;
+  if(url.pathname.startsWith('/audio/roles/')&&url.pathname.endsWith('.wav')&&req.method==='GET'){
+   if(!req.schoolUser||req.schoolUser.role!=='student')return json(res,403,{message:'请使用学生账号'});
+   store.groupRoles(req.schoolUser.id);
+   try{const audio=await roleAudio(url.pathname.slice('/audio/roles/'.length,-4));res.writeHead(200,{'content-type':'audio/wav','cache-control':'private, no-cache'});res.end(audio);}catch(e){json(res,e.status||502,{message:e.message});}return;
+  }
   if (url.pathname==='/api/config' && req.method==='GET') {
    return json(res,200,{lessons,defaultLessonId});
   }
