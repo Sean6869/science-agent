@@ -1,12 +1,27 @@
+import {createNarrator} from './narration.js';
 export async function setupRoles(api,bar){
  const node=(tag,text)=>{const el=document.createElement(tag);if(text)el.textContent=text;return el;};
  const heading=title=>{const head=node('div');head.className='social-role-heading';const logo=node('img');logo.src='/assets/xiaoke-logo-transparent.png?v=20260917';logo.alt='小科';head.append(node('h2',title),logo);return head;};
  let state=await api('/api/groups/roles');
  const display=node('span');display.className='group-role-display';bar.append(display);
+
+ function showGuidance(dialog,form,done=()=>{}){
+  form.replaceChildren(heading('🤝 合作建议'));const text=node('p',state.guidance);text.className='social-guidance';form.append(text);
+  const replay=node('button','重新朗读');replay.type='button';replay.className='school-button';
+  const status=node('span');status.className='school-note';status.setAttribute('role','status');
+  const narrator=createNarrator({onState:playing=>{status.textContent=playing?'正在播放':'';},onLoading:()=>{status.textContent='正在准备语音…';},onError:()=>{status.textContent='语音暂不可用，请点击重新朗读';}});
+  const source='/audio/roles.wav?version='+state.version;
+  replay.onclick=()=>narrator.play(source);
+  const enter=node('button','开始探究');enter.type='button';enter.className='school-button primary';
+  enter.onclick=()=>{narrator.stop();dialog.close();dialog.remove();done();};
+  window.addEventListener('pagehide',()=>narrator.stop(),{once:true});
+  form.append(replay,status,enter);narrator.play(source);
+ }
  function render(){
   display.replaceChildren();if(!state.leaderId)return;
   const name=id=>state.members.find(m=>m.id===id)?.name||'';
   display.append(node('span',`领航：${name(state.leaderId)} · 质疑：${name(state.challengerId)}`));
+  const advice=node('button','合作建议');advice.type='button';advice.className='school-link';advice.onclick=async()=>{state=await api('/api/groups/roles');render();const dialog=node('dialog'),form=node('div');dialog.className='social-role-dialog';dialog.append(form);document.body.append(dialog);dialog.addEventListener('cancel',e=>e.preventDefault());dialog.showModal();showGuidance(dialog,form);};display.append(advice);
   if(state.members.length>1){const swap=node('button','交换角色');swap.className='school-link';swap.type='button';swap.onclick=async()=>{swap.disabled=true;try{state=await api('/api/groups/roles',{swap:true,version:state.version});render();}catch(err){alert(err.message);swap.disabled=false;}};display.append(swap);}
  }
  if(!state.leaderId)await new Promise(resolve=>{
@@ -19,11 +34,7 @@ export async function setupRoles(api,bar){
   const error=node('p');error.setAttribute('role','alert');error.className='school-error';const submit=node('button','提交分工');submit.className='school-button primary';form.append(error,submit);dialog.append(form);document.body.append(dialog);dialog.addEventListener('cancel',e=>e.preventDefault());dialog.showModal();
   form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{
    state=await api('/api/groups/roles',{leaderId:leader.value,challengerId:challenger.value,version:state.version});render();
-   form.replaceChildren(heading('🤝 合作建议'));const text=node('p',state.guidance);text.className='social-guidance';form.append(text);
-   const replay=node('button','播放语音');replay.type='button';replay.className='school-button';const voiceState=node('span');voiceState.className='school-note';let audio=null;
-   const audioKey=state.members.length===1?'single':({LL:'low-low',HH:'high-high',HL:'high-low'}[state.type]||'low-low');const audioUrl=`/audio/roles/${audioKey}.wav`;
-   const speak=async()=>{replay.disabled=true;voiceState.textContent='正在准备语音…';audio?.pause();audio=new Audio(audioUrl);audio.onended=()=>{replay.disabled=false;voiceState.textContent='';};audio.onerror=()=>{replay.disabled=false;voiceState.textContent='语音文件暂不可用，请阅读文字建议';};try{await audio.play();voiceState.textContent='正在播放';}catch{replay.disabled=false;voiceState.textContent='语音文件暂不可用，请阅读文字建议';}};form.append(replay,voiceState);void speak();
-   const enter=node('button','开始探究');enter.type='button';enter.className='school-button primary';enter.onclick=()=>{audio?.pause();dialog.close();dialog.remove();resolve();};form.append(enter);
+   showGuidance(dialog,form,resolve);
   }catch(err){error.textContent=err.message;submit.disabled=false;}};
  });
  render();

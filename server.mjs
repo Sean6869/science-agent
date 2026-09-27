@@ -3,15 +3,15 @@ import {cleanEnvValue,completeStructured} from './deepseek.mjs';
 import {answerKnowledge,fallbackKnowledge} from './knowledge-agent.mjs';
 import {buildFeedbackMessages,exhaustedFeedback,fallbackFeedback,formatStructuredFeedback,isStructuredFeedbackComplete,MAX_CONTENT_SUBMISSIONS} from './metacognitive-agent.mjs';
 import { createServer } from 'node:http';
-import {createRoleSpeech} from './tencent-speech.mjs';
-import roleNarration from './role-narration.mjs';
+import {createSpeech} from './tencent-speech.mjs';
+
 
 import { readFile } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {openSchoolStore} from './school-store.mjs';
 import {createSchoolApi} from './school-api.mjs';
-import {assessments} from './public/content.js';
+import {assessments,stages} from './public/content.js';
 const root = fileURLToPath(new URL('.', import.meta.url));
 try { process.loadEnvFile(resolve(root, '.env.local')); } catch {}
 const pub = resolve(root, 'public');
@@ -35,10 +35,10 @@ export async function defaultSchoolStore(){
  if(process.env.RAILWAY_ENVIRONMENT_ID&&!process.env.RAILWAY_VOLUME_MOUNT_PATH)throw new Error('请先为 Railway 服务挂载持久化 Volume，建议挂载到 /data，以保存账号、成绩和对话');
  return openSchoolStore(resolve(dataDir||resolve(root,'data'),'school.sqlite'),{username:process.env.ADMIN_USERNAME,password:process.env.ADMIN_PASSWORD});
 }
-export function createApp({store}={}) {
+export function createApp({store,synthesize}={}) {
  if(!store)throw new Error('createApp requires a school store');
  const schoolApi=createSchoolApi(store,{json,body});
- const roleAudio=createRoleSpeech({directory:resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR||resolve(root,'data'),'role-audio'),config:roleNarration});
+ const speechAudio=synthesize||createSpeech({directory:resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR||resolve(root,'data'),'speech-audio')});
  async function recorded(req,agent,p,run){
   const safe={...p,id:typeof p.id==='string'?p.id.slice(0,80):undefined,lessonId:lessons.some(l=>l.id===p.lessonId)?p.lessonId:'unknown'};
   const id=store.begin(req.schoolUser.id,agent,safe);
@@ -52,10 +52,20 @@ export function createApp({store}={}) {
   const url = new URL(req.url,'http://localhost');
   if(url.pathname==='/health'&&req.method==='GET')return json(res,200,{ok:true});
   if(await schoolApi(req,res,url))return;
-  if(url.pathname.startsWith('/audio/roles/')&&url.pathname.endsWith('.wav')&&req.method==='GET'){
+  if((url.pathname==='/audio/roles.wav'||/^\/audio\/stages\/\d+\.wav$/.test(url.pathname))&&req.method==='GET'){
    if(!req.schoolUser||req.schoolUser.role!=='student')return json(res,403,{message:'请使用学生账号'});
-   store.groupRoles(req.schoolUser.id);
-   try{const audio=await roleAudio(url.pathname.slice('/audio/roles/'.length,-4));res.writeHead(200,{'content-type':'audio/wav','cache-control':'private, no-cache'});res.end(audio);}catch(e){json(res,e.status||502,{message:e.message});}return;
+   const roles=store.groupRoles(req.schoolUser.id);
+   if(!roles.guidance)return json(res,409,{message:'请先完成角色分工'});
+   let text;
+   if(url.pathname==='/audio/roles.wav'){
+    if(url.searchParams.get('version')!==String(roles.version))return json(res,409,{message:'角色分工已变化，请重新打开合作建议'});
+    text=roles.guidance;
+   }else{
+    if(!req.schoolUser.aiEnabled)return json(res,403,{message:'静态组不使用探究支架'});
+    text=stages.find(s=>s.id===Number(url.pathname.match(/\d+/)[0]))?.brief;
+    if(!text)return json(res,404,{message:'播报内容不存在'});
+   }
+   try{const audio=await speechAudio(text);res.writeHead(200,{'content-type':'audio/wav','cache-control':'private, no-store'});res.end(audio);}catch(e){json(res,e.status||502,{message:e.message});}return;
   }
   if (url.pathname==='/api/config' && req.method==='GET') {
    return json(res,200,{lessons,defaultLessonId});
@@ -86,7 +96,7 @@ export function createApp({store}={}) {
   if(req.method!=='GET') return json(res,405,{message:'不支持此请求'});
   const path=resolve(pub,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
   if(!path.startsWith(pub+sep)) return json(res,403,{message:'禁止访问'});
-  try {const file=await readFile(path);const type=extname(path); const immutable=['.png','.mp3']; res.writeHead(200,{'content-type':({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.jpeg':'image/jpeg','.jpg':'image/jpeg','.mp3':'audio/mpeg','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})[type]||'application/octet-stream','cache-control':immutable.includes(type)?'public, max-age=31536000, immutable':'no-cache','x-content-type-options':'nosniff'});res.end(file);} catch {json(res,404,{message:'文件不存在'});}
+  try {const file=await readFile(path);const type=extname(path); const immutable=['.png']; res.writeHead(200,{'content-type':({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.jpeg':'image/jpeg','.jpg':'image/jpeg','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})[type]||'application/octet-stream','cache-control':immutable.includes(type)?'public, max-age=31536000, immutable':'no-cache','x-content-type-options':'nosniff'});res.end(file);} catch {json(res,404,{message:'文件不存在'});}
  } catch(error) {console.error('[request]',error.name);json(res,error.status||(error instanceof SyntaxError?400:500),{message:error.status?error.message:error instanceof SyntaxError?'请求格式无效':'服务暂不可用'});}
 });}
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

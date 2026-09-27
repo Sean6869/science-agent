@@ -19,7 +19,7 @@ const busy=new Set();
 let speech=null;
 let alarmContext=null;
 const narrationButton=$('narrate');
-const narrator=createNarrator({onState:playing=>{
+const narrator=createNarrator({onError:()=>{narrationButton.title='语音暂不可用，请点击重试';},onLoading:()=>{narrationButton.title='正在准备语音，点击可停止';},onState:playing=>{
  narrationButton.classList.toggle('playing',playing);
  narrationButton.setAttribute('aria-label',playing?'停止播放开场白':'播放开场白');
  narrationButton.title=playing?'停止播放':'播放开场白';
@@ -128,7 +128,7 @@ function submit(e){
 }
 $('stages').replaceChildren();
 for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{
- if(speech)speech.stop();const now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;startTimer(state.timers[s.id],now);void unlockAlarm();render();narrator.play(`/audio/stage-${s.id}.mp3`);
+ if(speech)speech.stop();const now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;startTimer(state.timers[s.id],now);void unlockAlarm();render();narrator.play(`/audio/stages/${s.id}.wav`);
 };$('stages').append(b);}
 renderTimerFields();
 $('timerToggle').onclick=()=>{void unlockAlarm();const timer=state.timers[state.stage];timer.running?pauseTimer(timer):startTimer(timer);save();renderTimer();};
@@ -144,7 +144,7 @@ $('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e
 $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
 $('clear').onclick=()=>{if(window.confirm('清除本次所有草稿、产出、反馈及倒计时设置？')){if(speech)speech.abort();narrator.stop();state=fresh();renderTimerFields();$('timerSettingsPanel').hidden=true;$('timerSettingsToggle').setAttribute('aria-expanded','false');$('timerSettingsToggle').textContent='设置各环节时间⌄';save();render();}};
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-narrationButton.onclick=()=>narrator.isPlaying()?narrator.stop():narrator.play(`/audio/stage-${state.stage}.mp3`);
+narrationButton.onclick=()=>narrator.isPlaying()?narrator.stop():narrator.play(`/audio/stages/${state.stage}.wav`);
 $('voice').onclick=()=>{
  narrator.stop();
  if(speech){speech.stop();return;}
@@ -162,5 +162,5 @@ render();
 createWorkspacePanels();
 createKnowledgeChat();
 setInterval(()=>{const result=advanceTimer(state.timers[state.stage]);if(result.warning){ringAlarm();save();}if(result.finished){ringAlarm(true);save();}renderTimer();},250);
-setTimeout(()=>narrator.play(`/audio/stage-${state.stage}.mp3`),150);
+setTimeout(()=>narrator.play(`/audio/stages/${state.stage}.wav`),150);
 createExperimentWorkspace();

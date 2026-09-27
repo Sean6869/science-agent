@@ -1,6 +1,8 @@
 export function createNarrator({
  createAudio = globalThis.Audio ? source => new globalThis.Audio(source) : null,
- onState = () => {}
+ onState = () => {},
+ onError = () => {},
+ onLoading = () => {}
 } = {}) {
  let current = null;
  const supported = typeof createAudio === 'function';
@@ -28,9 +30,11 @@ export function createNarrator({
   audio.preload = 'auto';
   audio.addEventListener('playing', () => { if (current === audio) onState(true); });
   audio.addEventListener('ended', finish);
-  audio.addEventListener('error', finish);
+  const fail = () => { if (current === audio) { finish(); onError(); } };
+  audio.addEventListener('error', fail);
   current = audio;
-  Promise.resolve(audio.play()).catch(finish);
+  onLoading();
+  Promise.resolve(audio.play()).catch(fail);
   return true;
  }
 
