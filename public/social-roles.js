@@ -1,4 +1,3 @@
-import {apiFetch} from './school.js';
 export async function setupRoles(api,bar){
  const node=(tag,text)=>{const el=document.createElement(tag);if(text)el.textContent=text;return el;};
  const heading=title=>{const head=node('div');head.className='social-role-heading';const logo=node('img');logo.src='/assets/xiaoke-logo-transparent.png?v=20260917';logo.alt='小科';head.append(node('h2',title),logo);return head;};
@@ -22,7 +21,8 @@ export async function setupRoles(api,bar){
    state=await api('/api/groups/roles',{leaderId:leader.value,challengerId:challenger.value,version:state.version});render();
    form.replaceChildren(heading('🤝 合作建议'));const text=node('p',state.guidance);text.className='social-guidance';form.append(text);
    const replay=node('button','播放语音');replay.type='button';replay.className='school-button';const voiceState=node('span');voiceState.className='school-note';let audio=null;
-   const speak=async()=>{replay.disabled=true;voiceState.textContent='正在准备自然语音…';try{const response=await apiFetch('/api/roles/audio',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:state.guidance})});if(!response.ok)throw new Error((await response.json()).message||'语音服务不可用');const blob=await response.blob();audio?.pause();audio=new Audio(URL.createObjectURL(blob));audio.onended=()=>{replay.disabled=false;voiceState.textContent='';};await audio.play();voiceState.textContent='正在播放';}catch(err){voiceState.textContent=err.message;replay.disabled=false;}};form.append(replay,voiceState);void speak();
+   const audioKey={LL:'low-low',HH:'high-high',HL:'high-low'}[state.type]||'general';const audioUrl=`/audio/roles/${audioKey}.mp3`;
+   const speak=async()=>{replay.disabled=true;voiceState.textContent='正在准备语音…';audio?.pause();audio=new Audio(audioUrl);audio.onended=()=>{replay.disabled=false;voiceState.textContent='';};audio.onerror=()=>{replay.disabled=false;voiceState.textContent='语音文件暂不可用，请阅读文字建议';};try{await audio.play();voiceState.textContent='正在播放';}catch{replay.disabled=false;voiceState.textContent='语音文件暂不可用，请阅读文字建议';}};form.append(replay,voiceState);void speak();
    const enter=node('button','开始探究');enter.type='button';enter.className='school-button primary';enter.onclick=()=>{audio?.pause();dialog.close();dialog.remove();resolve();};form.append(enter);
   }catch(err){error.textContent=err.message;submit.disabled=false;}};
  });

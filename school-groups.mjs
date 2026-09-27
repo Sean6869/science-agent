@@ -22,7 +22,7 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
     db.prepare('INSERT INTO group_roles VALUES(?,?,?,?) ON CONFLICT(group_id) DO UPDATE SET leader_id=excluded.leader_id,challenger_id=excluded.challenger_id,version=excluded.version').run(g.id,leader,challenger,(saved?.version||0)+1);
     saved=db.prepare('SELECT * FROM group_roles WHERE group_id=?').get(g.id);
    }
-   return {members:members.map(({id,name})=>({id,name})),version:saved?.version||0,leaderId:saved?.leader_id||null,challengerId:saved?.challenger_id||null,guidance:saved?roleGuidance(g.type,members,saved.leader_id,saved.challenger_id):null};
+   return {type:g.type,members:members.map(({id,name})=>({id,name})),version:saved?.version||0,leaderId:saved?.leader_id||null,challengerId:saved?.challenger_id||null,guidance:saved?roleGuidance(g.type,members,saved.leader_id,saved.challenger_id):null};
   });
  }
  function quota(userId,lessonId,turn){

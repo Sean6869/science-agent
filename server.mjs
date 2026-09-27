@@ -4,8 +4,7 @@ import {answerKnowledge,fallbackKnowledge} from './knowledge-agent.mjs';
 import {buildFeedbackMessages,exhaustedFeedback,fallbackFeedback,formatStructuredFeedback,isStructuredFeedbackComplete,MAX_CONTENT_SUBMISSIONS} from './metacognitive-agent.mjs';
 import { createServer } from 'node:http';
 
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {openSchoolStore} from './school-store.mjs';
@@ -52,19 +51,6 @@ export function createApp({store}={}) {
   if(await schoolApi(req,res,url))return;
   if (url.pathname==='/api/config' && req.method==='GET') {
    return json(res,200,{lessons,defaultLessonId});
-  }
-  if(url.pathname==='/api/roles/audio'&&req.method==='POST'){
-   if(!req.schoolUser||req.schoolUser.role!=='student')return json(res,403,{message:'请使用学生账号'});
-   if(!req.schoolUser.aiEnabled)return json(res,403,{message:'静态组不使用合作建议语音'});
-   let p;try{p=await body(req,12000);}catch{return json(res,400,{message:'请求格式无效'});}
-   const text=typeof p?.text==='string'?p.text.trim():'';if(!text||text.length>6000)return json(res,400,{message:'语音内容无效'});
-   const key=cleanEnvValue(process.env.AZURE_SPEECH_KEY),region=cleanEnvValue(process.env.AZURE_SPEECH_REGION);
-   if(!key||!region)return json(res,503,{message:'语音服务尚未配置，请先配置微软语音服务'});
-   const rootData=process.env.RAILWAY_VOLUME_MOUNT_PATH||resolve(root,'data'),dir=resolve(rootData,'role-audio'),hash=createHash('sha256').update(region+'\0'+text).digest('hex'),file=resolve(dir,hash+'.mp3');
-   try{const cached=await readFile(file);res.writeHead(200,{'content-type':'audio/mpeg','cache-control':'public, max-age=31536000, immutable'});res.end(cached);return true;}catch{}
-   const ssml=`<speak version="1.0" xml:lang="zh-CN"><voice name="zh-CN-XiaoxiaoNeural">${text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')}</voice></speak>`;
-   const upstream=await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`,{method:'POST',headers:{'Ocp-Apim-Subscription-Key':key,'Content-Type':'application/ssml+xml','X-Microsoft-OutputFormat':'audio-24khz-96kbitrate-mono-mp3'},body:ssml});
-   if(!upstream.ok)return json(res,502,{message:'微软语音服务暂时不可用'});const audio=Buffer.from(await upstream.arrayBuffer());await mkdir(dir,{recursive:true});await writeFile(file,audio);res.writeHead(200,{'content-type':'audio/mpeg','cache-control':'public, max-age=31536000, immutable'});res.end(audio);return true;
   }
   if(url.pathname==='/api/assessment'&&req.method==='POST'){
    const p=await body(req);const a=assessments.find(a=>a.id===p?.option);if(!a)return json(res,400,{message:'请选择有效的自评选项'});
