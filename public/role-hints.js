@@ -18,7 +18,7 @@ export function createRoleHintController(button){
  const enter=id=>{current=roleHints.find(item=>item.id===Number(id))||roleHints[0];button.dataset.attention='true';button.title=`第 ${current.id} 环节角色提示`;button.setAttribute('aria-label',button.title);};
  button.onclick=()=>{button.dataset.attention='false';openHint(current);};enter(1);return {enter};
 }
-export function createStaticRoleHints(experiment){
+export function createStaticRoleHints(experiment,videoButton){
  const bar=document.createElement('section');bar.className='static-role-hints';const label=document.createElement('label');label.textContent='探究环节';const select=document.createElement('select');select.setAttribute('aria-label','当前探究环节');for(const hint of roleHints){const option=document.createElement('option');option.value=hint.id;option.textContent=`第 ${hint.id} 环节 · ${hint.title}`;select.append(option);}label.append(select);
- const button=createRoleHintButton(),controller=createRoleHintController(button);select.onchange=()=>controller.enter(select.value);bar.append(label,button);experiment.insertBefore(bar,experiment.querySelector('.frame'));
+ const button=createRoleHintButton(),controller=createRoleHintController(button),syncVideo=()=>{if(videoButton)videoButton.hidden=select.value!=='1';};select.onchange=()=>{controller.enter(select.value);syncVideo();};window.addEventListener('science:lesson-change',syncVideo);if(videoButton)bar.append(videoButton);bar.append(label,button);experiment.insertBefore(bar,experiment.querySelector('.frame'));
 }

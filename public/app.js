@@ -6,6 +6,7 @@ import {createKnowledgeChat} from './knowledge-chat.js';
 import {advanceTimer,createStageTimers,formatTime,pauseTimer,remainingSeconds,resetTimer,startTimer} from './stage-timer.js';
 import {isSelfAssessmentText} from './turn-kind.js';
 import {createRoleHintButton,createRoleHintController} from './role-hints.js';
+import {createLessonVideo} from './lesson-video.js';
 import {apiFetch} from './school.js';
 const KEY=`science-session-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const fresh=()=>({version:3,stage:1,timers:createStageTimers(stages.map(s=>s.id)),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))});
@@ -22,6 +23,7 @@ let speech=null;
 let alarmContext=null;
 const narrationButton=$('narrate');
 const roleHintButton=createRoleHintButton(),roleHint=createRoleHintController(roleHintButton);$('stageTimer').append(roleHintButton);
+const lessonVideo=createLessonVideo({userId:window.schoolUser.id,onWatched:()=>render()});
 const narrator=createNarrator({onError:()=>{narrationButton.title='语音暂不可用，请点击重试';},onLoading:()=>{narrationButton.title='正在准备语音，点击可停止';},onState:playing=>{
  narrationButton.classList.toggle('playing',playing);
  narrationButton.setAttribute('aria-label',playing?'停止播放开场白':'播放开场白');
@@ -88,8 +90,8 @@ function renderMessages(){
  $('messages').append(div);}
  $('messages').scrollTop=$('messages').scrollHeight;
 }
-function renderBrief(text) {
- const lines=text.trim().split('\n');
+function renderBrief(stage) {
+ const lines=stage.brief.trim().split('\n');
  const last=lines.findLastIndex(line=>line.trim());
  const nodes=lines.map((line,index)=>{
   const node=document.createElement(index===last?'strong':'p');
@@ -97,16 +99,16 @@ function renderBrief(text) {
   node.textContent=line;
   return node;
  });
- $('brief').replaceChildren(narrationButton,...nodes);
+ $('brief').replaceChildren(narrationButton,...nodes,...(stage.id===1?[lessonVideo.button]:[]));
 }
 function render(){
  const s=stages[state.stage-1],d=state.data[s.id];
  document.querySelectorAll('.stage').forEach(b=>{const active=+b.dataset.id===s.id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));const done=state.data[b.dataset.id].submissions.length>0;b.classList.toggle('complete',done);});
- renderBrief(s.brief);
+ renderBrief(s);
  $('stageStatus').textContent=`第 ${s.id} 步 · ${s.id===4?(d.submissions.length?'已完成自评':'进行中'):`内容提交 ${Math.min(d.submissions.length,3)}/3`}${d.awaitingSelfAssessment?' · 等待星级自评':''}${d.stale?' · 依据已更新，请复核':''}${d.draft?' · 有未提交草稿':''}`;
  $('draft').value=d.draft;$('draft').placeholder=s.placeholder;
  $('composer').hidden=s.id===4;$('assessment').hidden=s.id!==4;
- const groupBusy=sharedRows.some(row=>row.stage===s.id&&row.status==='pending');$('draft').disabled=busy.has(s.id)||groupBusy;document.querySelector('.send').disabled=busy.has(s.id)||groupBusy;
+ const groupBusy=sharedRows.some(row=>row.stage===s.id&&row.status==='pending'),videoRequired=s.id===1&&!lessonVideo.isWatched();$('draft').disabled=busy.has(s.id)||groupBusy||videoRequired;document.querySelector('.send').disabled=busy.has(s.id)||groupBusy||videoRequired;if(videoRequired)$('draft').placeholder='请先观看导入视频，再提出科学问题';
  renderMessages();renderTimer();save();
 }
 function invalidate(id){for(const s of stages)if(s.id>id&&state.data[s.id].submissions.length)state.data[s.id].stale=true;}

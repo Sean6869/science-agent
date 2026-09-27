@@ -6,7 +6,8 @@ import { createServer } from 'node:http';
 import {createSpeech} from './tencent-speech.mjs';
 
 
-import { readFile } from 'node:fs/promises';
+import { readFile,stat } from 'node:fs/promises';
+import {createReadStream} from 'node:fs';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {openSchoolStore} from './school-store.mjs';
@@ -119,10 +120,10 @@ export function createApp({store,synthesize}={}) {
    return json(res,200,await recorded(req,'metacognitive',shared,()=>evaluate(shared)));
   }
   if(url.pathname.startsWith('/api/')) return json(res,404,{message:'接口不存在'});
-  if(req.method!=='GET') return json(res,405,{message:'不支持此请求'});
+  if(!['GET','HEAD'].includes(req.method)) return json(res,405,{message:'不支持此请求'});
   const path=resolve(pub,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
   if(!path.startsWith(pub+sep)) return json(res,403,{message:'禁止访问'});
-  try {const file=await readFile(path);const type=extname(path); const immutable=['.png']; res.writeHead(200,{'content-type':({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.jpeg':'image/jpeg','.jpg':'image/jpeg','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})[type]||'application/octet-stream','cache-control':immutable.includes(type)?'public, max-age=31536000, immutable':'no-cache','x-content-type-options':'nosniff'});res.end(file);} catch {json(res,404,{message:'文件不存在'});}
+  try {const type=extname(path),contentType=({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.jpeg':'image/jpeg','.jpg':'image/jpeg','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.mp4':'video/mp4'})[type]||'application/octet-stream';if(type==='.mp4'){const {size}=await stat(path),match=req.headers.range?.match(/^bytes=(\d*)-(\d*)$/);let start=0,end=size-1,status=200;if(req.headers.range){if(!match||(!match[1]&&!match[2])){res.setHeader('Content-Range',`bytes */${size}`);return json(res,416,{message:'视频范围无效'});}if(!match[1]){const suffix=Number(match[2]);if(!Number.isSafeInteger(suffix)||suffix<=0){res.setHeader('Content-Range',`bytes */${size}`);return json(res,416,{message:'视频范围无效'});}start=Math.max(0,size-suffix);}else start=Number(match[1]);end=match[1]&&match[2]?Number(match[2]):size-1;if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||start>=size){res.setHeader('Content-Range',`bytes */${size}`);return json(res,416,{message:'视频范围无效'});}end=Math.min(end,size-1);status=206;}const headers={'content-type':contentType,'content-length':end-start+1,'accept-ranges':'bytes','cache-control':'public, max-age=86400','x-content-type-options':'nosniff'};if(status===206)headers['content-range']=`bytes ${start}-${end}/${size}`;res.writeHead(status,headers);if(req.method==='HEAD')return res.end();return createReadStream(path,{start,end}).pipe(res);}const file=await readFile(path);res.writeHead(200,{'content-type':contentType,'content-length':file.length,'cache-control':type==='.png'?'public, max-age=31536000, immutable':'no-cache','x-content-type-options':'nosniff'});res.end(req.method==='HEAD'?undefined:file);} catch {json(res,404,{message:'文件不存在'});}
  } catch(error) {console.error('[request]',error.name);json(res,error.status||(error instanceof SyntaxError?400:500),{message:error.status?error.message:error instanceof SyntaxError?'请求格式无效':'服务暂不可用'});}
 });}
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
