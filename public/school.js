@@ -130,9 +130,15 @@ async function startWorkspace(group){
  window.schoolGroup=group;window.schoolUser=identity;screen.hidden=true;
  document.body.classList.add('workspace-ready');document.querySelector('.app').hidden=false;
  const bar=accountBar();bar.classList.add('workspace-account');bar.append(e('span',`第 ${group.number} 组 · ${group.members.join('、')}`));document.querySelector('.panel-head').after(bar);
- const checkPermission=async()=>{if(document.hidden)return;try{const current=await api('/api/me');if(!current.user||current.user.aiEnabled!==identity.aiEnabled)location.reload();}catch{}};
+ const checkPermission=async()=>{if(document.hidden)return;try{const current=await api('/api/me');if(!current.user||current.user.id!==identity.id||current.user.aiEnabled!==identity.aiEnabled||!current.ready||current.group?.status!=='joined'||current.group.id!==group.id)location.reload();}catch{}};
  window.addEventListener('focus',checkPermission);const permissionTimer=setInterval(checkPermission,15000);window.addEventListener('pagehide',()=>clearInterval(permissionTimer),{once:true});
- const {setupRoles}=await import('./social-roles.js');await setupRoles(api,bar);await import('./app.js');
+ if(!identity.aiEnabled){
+  document.querySelector('.layout').classList.add('coach-collapsed');
+  for(const id of ['coachPanel','coachToggle','knowledgeToggle','knowledgePanel'])document.getElementById(id).hidden=true;
+ }
+ const {setupRoles}=await import('./social-roles.js');await setupRoles(api,bar);
+ if(identity.aiEnabled)await import('./app.js');
+ else{const {createExperimentWorkspace}=await import('./experiment-workspace.js');await createExperimentWorkspace();}
 }
 
 async function boot(){const session=await api('/api/me');if(!session.user){login();return;}identity=session.user;csrf=session.csrf;window.schoolUser=identity;if(identity.role!=='student')await teacher();else if(session.ready)await studentEntry(session.group);else await studentTests();}

@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {openSchoolStore,quizzes} from '../school-store.mjs';
 import {createApp} from '../server.mjs';
-test('static and dynamic accounts share workflows, enforce ownership and only dynamic mode calls the model',async()=>{
+test('static accounts retain experiment and roles while coach and knowledge APIs are forbidden',async()=>{
  const originalFetch=globalThis.fetch,oldKey=process.env.DEEPSEEK_API_KEY;let modelCalls=0;process.env.DEEPSEEK_API_KEY='test-static-routing';globalThis.fetch=(url,options)=>{if(String(url).startsWith('http://127.0.0.1:'))return originalFetch(url,options);modelCalls++;return Promise.resolve(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({sentences:['动态回答。','测试模型调用。','请继续观察。']})}}]}));};
  const dir=await mkdtemp(join(tmpdir(),'ai-permission-')),file=join(dir,'school.sqlite');
  let store=await openSchoolStore(file,{username:'admin',password:'Test-admin-password'}),server;
@@ -30,18 +30,15 @@ test('static and dynamic accounts share workflows, enforce ownership and only dy
 
   assert.equal((await request('/api/groups/roles')).status,200);
   await request('/api/groups/roles',{version:0,leaderId:student.id,challengerId:student.id});
-  for(const stage of [1,2,3,5,6])for(const kind of ['content','self_assessment']){
-   const r=await request('/api/chat',{stage,kind,attempt:1,text:'我们的观点',aiEnabled:true});assert.equal(r.status,200);const reply=await r.json();assert.equal(reply.source,'static');assert.equal(reply.remainingAttempts,2);assert.doesNotMatch(reply.content,/暂时不可用|恢复后|重试/);
-  }
-  const knowledge=await(await request('/api/knowledge',{text:'什么是凸透镜的焦距？',history:[],lessonId:'geometric-optics-basics',aiEnabled:true})).json();assert.equal(knowledge.source,'static');assert.match(knowledge.content,/光心到焦点/);
-  assert.equal((await request('/api/knowledge?lesson=bending-light')).status,200);
+  for(const path of ['/api/chat','/api/knowledge','/api/assessment']){const r=await request(path,{stage:1,kind:'content',attempt:1,text:'问题',history:[],option:'sufficient',aiEnabled:true});assert.equal(r.status,403);assert.equal((await r.json()).code,'AI_DISABLED');}
+  assert.equal((await request('/api/knowledge?lesson=bending-light')).status,403);
   assert.equal((await request('/api/config')).status,200);assert.equal((await request('/api/quizzes')).status,200);
-  const assessment=await(await request('/api/assessment',{option:'sufficient'})).json();assert.ok(assessment.content);
-  assert.equal(modelCalls,0);
-  assert.equal(store.groupStatus(student.id).status,'joined');assert.ok(store.conversations(student.id,100,0,owner).some(r=>r.source==='static'));
+  assert.equal(modelCalls,0);assert.equal(store.groupStatus(student.id).status,'joined');assert.ok(store.conversations(student.id,100,0,owner).every(r=>r.agent==='social'));
+  assert.equal((await originalFetch(base+'/api/teacher/profile',{method:'PUT',body:'{}'})).status,401);
   assert.equal((await request('/api/teacher/ai-permissions',{classId:student.classId,aiEnabled:true})).status,403);
   store.setAiPermission(admin,student.classId,true);
   const dynamic=await(await request('/api/knowledge',{text:'什么是凸透镜的焦距？',history:[],lessonId:'geometric-optics-basics',aiEnabled:false})).json();assert.equal(dynamic.source,'model');assert.equal(modelCalls,1);
+  store.setAiPermission(admin,student.classId,false);assert.equal((await request('/api/knowledge',{text:'问题',history:[]})).status,403);assert.equal(modelCalls,1);
   await store.editStudent(student.id,{...student,password:'',aiEnabled:false},owner);
   assert.equal(store.groupStatus(student.id).status,'joined');
   await new Promise(r=>server.close(r));server=null;store.close();store=await openSchoolStore(file);
