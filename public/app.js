@@ -1,5 +1,5 @@
 import {createExperimentWorkspace} from './experiment-workspace.js';
-import { stages, assessments } from './content.js';
+import { stages, assessmentsForLesson } from './content.js';
 import { createNarrator } from './narration.js';
 import {createWorkspacePanels} from './workspace-panels.js';
 import {createKnowledgeChat} from './knowledge-chat.js';
@@ -150,9 +150,10 @@ for(const s of stages){const b=document.createElement('button');b.className='sta
 $('timerToggle').onclick=()=>{void unlockAlarm();const timer=state.timers[state.stage];timer.running?pauseTimer(timer):startTimer(timer);save();renderTimer();};
 $('timerReset').onclick=()=>{const timer=state.timers[state.stage];resetTimer(timer,timer.durationSeconds);save();renderTimer();};
 const af=document.createElement('form');
-for(const a of assessments){const label=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='assessment';input.value=a.id;input.required=true;label.append(input,document.createTextNode(` ${a.label}：${a.detail}`));af.append(label);}
 const confirm=document.createElement('button');confirm.className='primary';confirm.textContent='确认小组自评';af.append(confirm);$('assessment').append(af);
-af.onsubmit=async e=>{e.preventDefault();const option=new FormData(af).get('assessment'),a=assessments.find(a=>a.id===option),d=state.data[4];if(!a||confirm.disabled||d.submissions.at(-1)?.option===option)return;confirm.disabled=true;const turnId=crypto.randomUUID();try{const response=await apiFetch('/api/assessment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:turnId,option,lessonId:window.__scienceLesson?.id})});const result=await response.json();if(!response.ok)throw new Error(result.message);stopActiveTimer();d.submissions.push({id:turnId,option,at:new Date().toISOString()});d.stale=false;invalidate(4);add(4,'user',a.label+'：'+a.detail,{turnId,senderName:window.schoolUser.name,local:true},true);add(4,'agent',result.content,{turnId,local:true});await syncShared();render();}catch{add(4,'system','自评暂未保存，请再次点击确认。');render();}finally{confirm.disabled=false;}};
+let lessonAssessments=[];
+function renderAssessmentOptions(){lessonAssessments=assessmentsForLesson(window.__scienceLesson?.id);af.replaceChildren(...lessonAssessments.map(a=>{const label=document.createElement('label'),input=document.createElement('input');input.type='radio';input.name='assessment';input.value=a.id;input.required=true;label.append(input,document.createTextNode(` ${a.label}：${a.detail}`));return label;}),confirm);}
+af.onsubmit=async e=>{e.preventDefault();const option=new FormData(af).get('assessment'),a=lessonAssessments.find(item=>item.id===option),d=state.data[4];if(!a||confirm.disabled||d.submissions.at(-1)?.option===option)return;confirm.disabled=true;const turnId=crypto.randomUUID();try{const response=await apiFetch('/api/assessment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:turnId,option,lessonId:window.__scienceLesson?.id})});const result=await response.json();if(!response.ok)throw new Error(result.message);stopActiveTimer();d.submissions.push({id:turnId,option,at:new Date().toISOString()});d.stale=false;invalidate(4);add(4,'user',a.label+'：'+a.detail,{turnId,senderName:window.schoolUser.name,local:true},true);add(4,'agent',result.content,{turnId,local:true});await syncShared();render();}catch{add(4,'system','自评暂未保存，请再次点击确认。');render();}finally{confirm.disabled=false;}};
 $('composer').onsubmit=submit;
 $('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e.target.value;save();};
 $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
@@ -175,7 +176,7 @@ $('voice').onclick=()=>{
 render(true);
 createWorkspacePanels();
 createKnowledgeChat();
-window.addEventListener('science:lesson-change',event=>{if(activeLessonId){pauseTimer(state.timers[state.stage]);save();}narrator.stop();activeLessonId=event.detail.id;state=loadLessonState(activeLessonId);sharedRows=[];sharedLoaded=false;roleHint.enter(state.stage);render(true);void syncShared();});window.addEventListener('focus',()=>void syncShared());const sharedTimer=setInterval(()=>{if(!document.hidden)void syncShared();},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
+window.addEventListener('science:lesson-change',event=>{if(activeLessonId){pauseTimer(state.timers[state.stage]);save();}narrator.stop();activeLessonId=event.detail.id;state=loadLessonState(activeLessonId);sharedRows=[];sharedLoaded=false;renderAssessmentOptions();roleHint.enter(state.stage);render(true);void syncShared();});window.addEventListener('focus',()=>void syncShared());const sharedTimer=setInterval(()=>{if(!document.hidden)void syncShared();},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
 setInterval(()=>{const result=advanceTimer(state.timers[state.stage]);if(result.warning){ringAlarm();save();}if(result.finished){ringAlarm(true);save();}renderTimer();},250);
 setTimeout(()=>narrator.play(stageAudio(state.stage)),150);
 createExperimentWorkspace();

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import {openSchoolStore} from './school-store.mjs';
 import {createSchoolApi} from './school-api.mjs';
 import {roleGuidance} from './social-roles.mjs';
-import {assessments,stages} from './public/content.js';
+import {assessmentsForLesson,stages} from './public/content.js';
 const root = fileURLToPath(new URL('.', import.meta.url));
 try { process.loadEnvFile(resolve(root, '.env.local')); } catch {}
 const pub = resolve(root, 'public');
@@ -125,8 +125,8 @@ export function createApp({store,synthesize}={}) {
    return json(res,200,{conversations:store.groupConversations(req.schoolUser.id,agent,lessonId)});
   }
   if(url.pathname==='/api/assessment'&&req.method==='POST'){
-   const p=await body(req);const a=assessments.find(a=>a.id===p?.option);if(!a)return json(res,400,{message:'请选择有效的自评选项'});
-   return json(res,200,await recorded(req,'metacognitive',{...p,stage:4,kind:'assessment',text:a.label+'：'+a.detail},async()=>({content:a.reply,source:'rule',complete:true})));
+   const p=await body(req),lessonId=lessons.some(lesson=>lesson.id===p?.lessonId)?p.lessonId:null,a=assessmentsForLesson(lessonId).find(item=>item.id===p?.option);if(!a)return json(res,400,{message:'请选择有效课程和自评选项'});
+   return json(res,200,await recorded(req,'metacognitive',{...p,lessonId,stage:4,kind:'assessment',text:a.label+'：'+a.detail},async()=>({content:a.reply,source:'rule',complete:true})));
   }
   if(url.pathname==='/api/knowledge' && req.method==='GET') {
    const lessonId=url.searchParams.get('lesson');if(!lessons.some(l=>l.id===lessonId))return json(res,400,{message:'请选择有效课程'});

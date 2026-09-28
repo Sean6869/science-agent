@@ -37,9 +37,10 @@ test('both agents persist student input and returned replies tied to authenticat
  assert.equal((await request('/api/chat',student,{text:'问题',stage:1})).status,403);
  const roles=store.groupRoles(student.user.id);store.groupRoles(student.user.id,{version:0,leaderId:roles.members[0].id,challengerId:roles.members.at(-1).id});
  delete process.env.DEEPSEEK_API_KEY;
- for(const [path,p] of [['/api/knowledge',{text:'什么是焦距？',history:[],lessonId:'geometric-optics-basics'}],['/api/chat',{text:'物距变化影响像的大小',stage:1,kind:'content',attempt:1,lessonId:'geometric-optics-basics'}],['/api/assessment',{option:'sufficient',lessonId:'geometric-optics-basics'}]]){
-  const r=await request(path,student,{...p,userId:other.user.id});assert.equal(r.status,200);const reply=await r.json();assert.ok(reply.content);const rows=store.conversations(student.user.id,500,0,teacher.user);assert.equal(rows[0].reply,reply.content);assert.equal(rows[0].status,'complete');assert.equal(rows[0].username,'student1');
+ for(const [path,p,expected] of [['/api/knowledge',{text:'什么是焦距？',history:[],lessonId:'geometric-optics-basics'},null],['/api/chat',{text:'物距变化影响像的大小',stage:1,kind:'content',attempt:1,lessonId:'geometric-optics-basics'},null],['/api/assessment',{option:'sufficient',lessonId:'geometric-optics-basics'},/焦点附近/],['/api/assessment',{option:'partial',lessonId:'bending-light'},/空气射入水/],['/api/assessment',{option:'needs_revision',lessonId:'energy-skate-park'},/质量对动能的影响/]]){
+  const r=await request(path,student,{...p,userId:other.user.id});assert.equal(r.status,200);const reply=await r.json();assert.ok(reply.content);if(expected)assert.match(reply.content,expected);const rows=store.conversations(student.user.id,500,0,teacher.user);assert.equal(rows[0].reply,reply.content);assert.equal(rows[0].status,'complete');assert.equal(rows[0].username,'student1');
  }
+ assert.equal((await request('/api/assessment',student,{option:'sufficient',lessonId:'unknown'})).status,400);
  assert.equal(store.conversations(other.user.id,500,0,teacher.user).length,0);const exported=await request('/api/teacher/export?type=conversations',teacher);assert.equal(exported.status,200);const data=await workbookText(exported);assert.match(data,/知识|knowledge/);assert.match(data,/metacognitive/);assert.match(data,/物距变化影响像的大小/);
  const scoreCSV=await workbookText(await request('/api/teacher/export?type=scores',teacher));assert.match(scoreCSV,/90/);assert.match(scoreCSV,/100/);
 });
