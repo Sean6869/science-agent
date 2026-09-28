@@ -1,4 +1,6 @@
 let identity=null,csrf='',selectedClass='';
+const AUTH_TAB_KEY='xiaoke-authenticated',LAST_ACTIVE_KEY='xiaoke-last-active',IDLE_MS=30*60*1000;
+let stopIdleSession=()=>{};
 const roleLabel=role=>({admin:'管理员端',teacher:'教师端',student:'学生端'})[role];
 const scoped=path=>path+(path.includes('?')?'&':'?')+'class='+encodeURIComponent(selectedClass);
 const screen=document.getElementById('schoolScreen');
@@ -16,17 +18,28 @@ function aiPermissionField(container,value=true){const wrap=e('label',undefined,
 function message(text,error=false){const n=e('p',text,error?'school-error':'school-note');n.setAttribute('role',error?'alert':'status');return n;}
 function header(title,subtitle){const head=e('header',undefined,'school-heading');const logo=e('img');logo.src='/assets/xiaoke-logo-transparent.png?v=20260917';logo.alt='小科';head.append(logo,e('h1',title));if(subtitle)head.append(e('p',subtitle));return head;}
 function field(form,label,name,type='text',value='',required=true){const wrap=e('label',undefined,'school-field');wrap.append(e('span',label));const input=e('input');Object.assign(input,{name,type,value,required});if(type==='password'){input.minLength=8;input.maxLength=128;input.autocomplete='new-password';}wrap.append(input);form.append(wrap);return input;}
-async function logout(){await api('/api/auth/logout',{});sessionStorage.clear();location.reload();}
+function activeKey(userId){return `${LAST_ACTIVE_KEY}:${userId}`;}
+function rememberAuthentication(userId){const value=String(Date.now());try{sessionStorage.setItem(AUTH_TAB_KEY,userId);sessionStorage.setItem(activeKey(userId),value);localStorage.setItem(activeKey(userId),value);}catch{}}
+function startIdleSession(){
+ stopIdleSession();const key=activeKey(identity.id),events=['pointerdown','keydown','touchstart','scroll'];let timer,lastHeartbeat=0,stopped=false;
+ const readLast=()=>{let values=[];try{values=[sessionStorage.getItem(key),localStorage.getItem(key)];}catch{}return Math.max(...values.map(Number).filter(Number.isFinite),0);};
+ const schedule=()=>{clearTimeout(timer);const remaining=IDLE_MS-(Date.now()-readLast());if(remaining<=0){void logout();return;}timer=setTimeout(schedule,Math.min(remaining,60000));};
+ const activity=()=>{if(stopped)return;const at=Date.now(),value=String(at);try{sessionStorage.setItem(key,value);localStorage.setItem(key,value);}catch{}schedule();if(at-lastHeartbeat>=60000){lastHeartbeat=at;void api('/api/auth/activity',{}).catch(()=>{});}};
+ const storage=event=>{if(event.key===key)schedule();},visibility=()=>{if(!document.hidden)activity();};
+ for(const name of events)window.addEventListener(name,activity,{passive:true});window.addEventListener('storage',storage);document.addEventListener('visibilitychange',visibility);const frameActivity=setInterval(()=>{if(document.activeElement?.id==='lab')activity();},60000);schedule();
+ stopIdleSession=()=>{stopped=true;clearTimeout(timer);clearInterval(frameActivity);for(const name of events)window.removeEventListener(name,activity);window.removeEventListener('storage',storage);document.removeEventListener('visibilitychange',visibility);};
+}
+async function logout(){try{await api('/api/auth/logout',{});}finally{stopIdleSession();try{if(identity)localStorage.removeItem(activeKey(identity.id));sessionStorage.clear();}catch{}location.reload();}}
 function accountBar(){const bar=e('div',undefined,'account-bar');bar.append(e('span',roleLabel(identity.role)),button('退出登录',()=>logout().catch(err=>alert(err.message)),'school-link'));return bar;}
 function login(){
  screen.replaceChildren();const card=e('section',undefined,'login-card');card.append(header('欢迎来到科学实验室'));
  const form=e('form');field(form,'账号','username').autocomplete='username';const pass=field(form,'密码','password','password');pass.minLength=1;pass.autocomplete='current-password';
  const submit=e('button','登录','school-button primary');submit.type='submit';const status=message('');form.append(submit,button('教师注册',register,'school-link'),status);card.append(form);screen.append(card);
- form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;status.textContent='正在登录…';try{const result=await api('/api/auth/login',Object.fromEntries(new FormData(form)));csrf=result.csrf;await boot();}catch(err){status.textContent=err.message;status.className='school-error';}finally{submit.disabled=false;}};
+ form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;status.textContent='正在登录…';try{const result=await api('/api/auth/login',Object.fromEntries(new FormData(form)));csrf=result.csrf;rememberAuthentication(result.user.id);await boot();}catch(err){status.textContent=err.message;status.className='school-error';}finally{submit.disabled=false;}};
 }
 function register(){
  screen.replaceChildren();const card=e('section',undefined,'login-card');card.append(header('教师注册'));const form=e('form');field(form,'姓名','name');const username=field(form,'账号','username');username.pattern='[a-zA-Z0-9_.-]{3,40}';field(form,'密码（至少8位）','password','password');const submit=e('button','注册','school-button primary');submit.type='submit';const status=message('');form.append(submit,button('返回登录',login,'school-link'),status);card.append(form);screen.append(card);
- form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{const p=Object.fromEntries(new FormData(form));await api('/api/auth/register',p);const auth=await api('/api/auth/login',{username:p.username,password:p.password});csrf=auth.csrf;await boot();}catch(err){status.textContent=err.message;status.className='school-error';submit.disabled=false;}};
+ form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{const p=Object.fromEntries(new FormData(form));await api('/api/auth/register',p);const auth=await api('/api/auth/login',{username:p.username,password:p.password});csrf=auth.csrf;rememberAuthentication(auth.user.id);await boot();}catch(err){status.textContent=err.message;status.className='school-error';submit.disabled=false;}};
 }
 async function studentTests(){
  const {quizzes,completed}=await api('/api/quizzes');screen.replaceChildren(accountBar());
@@ -43,7 +56,7 @@ async function studentTests(){
  form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{await api('/api/quizzes/submit',{quizId:next.id,answers:Object.fromEntries(new FormData(form))});sessionStorage.removeItem(draftKey);card.replaceChildren(header('测验已提交'),button(quizzes.indexOf(next)<quizzes.length-1?'继续下一份测验':'进入分组',()=>studentTests().catch(showError)));window.scrollTo(0,0);}catch(err){progress.textContent=err.message;progress.className='school-error';submit.disabled=false;}};
 }
 async function studentEntry(group){
- if(!group)group=(await api('/api/me')).group;
+ if(!group){const current=await api('/api/me');group=current.group;window.schoolStageDurations=current.stageDurations;}
  if(group.status==='joined'){await startWorkspace(group);return;}
  screen.replaceChildren(accountBar());const card=e('section',undefined,'login-card');card.append(header('加入小组'));
  const status=message(group.status==='waiting'?'测验已完成，等待本班同学完成测验。':group.status==='review'?'测验已完成，等待教师审核分组。':'请输入教师提供的本组小组码。');
@@ -58,8 +71,8 @@ async function teacher(initialTab='students'){
  screen.replaceChildren(accountBar());const card=e('section',undefined,'school-card teacher-card');const heading=header(identity.role==='admin'?'管理员管理':'教师管理'),top=e('div',undefined,'teacher-top');top.append(heading);card.append(top);
  if(identity.role==='teacher'){const profileCard=e('section',undefined,'teacher-profile-card');const avatar=e('img');avatar.className='teacher-avatar';avatar.src='/assets/xiaoke-icon-transparent.png?v=20260917';avatar.alt='教师头像';const info=e('div',undefined,'teacher-profile-info');const title=e('h2','教师信息');const form=e('form',undefined,'teacher-profile-form');const name=e('input');name.value=identity.name;name.disabled=true;name.setAttribute('aria-label','姓名');const nameField=e('label',undefined,'school-field');nameField.append(e('span','姓名'),name);const subject=field(form,'学科','subject','text',identity.subject||'');const school=field(form,'学校','school','text',identity.school||'');const classesText=e('div',undefined,'teacher-class-list');classesText.append(e('span','所带班级'),e('strong','加载中…'));const status=message('');const save=button('保存资料',async()=>{save.disabled=true;try{const updated=await api('/api/teacher/profile',{subject:subject.value,school:school.value},'PUT');Object.assign(identity,updated.user);status.textContent='资料已保存';}catch(error){status.textContent=error.message;}finally{save.disabled=false;}});form.append(nameField,subject.parentElement,school.parentElement,save,classesText,status);form.onsubmit=event=>{event.preventDefault();save.click();};info.append(title,form);profileCard.append(avatar,info);top.append(profileCard);}
  const nav=e('nav',undefined,'school-tabs management-nav'),panel=e('section');let selected='students';
- const render=async tab=>{selected=tab;for(const b of nav.children)b.classList.toggle('selected',b.dataset.tab===tab);nav.querySelector('[data-export]')?.remove();panel.replaceChildren(message('正在读取记录…'));try{if(tab==='students')await studentsPanel(panel);else if(tab==='scores')await scoresPanel(panel);else if(tab==='teachers')await teachersPanel(panel);else if(tab==='groups')await groupsPanel(panel);else await conversationsPanel(panel);}catch(err){panel.replaceChildren(message(err.message,true));}};
- const tabs=[['students','学生账号'],['scores','测验成绩'],['groups','小组管理'],['conversations','AI 对话记录']];if(identity.role==='admin')tabs.unshift(['teachers','教师账号']);
+ const render=async tab=>{selected=tab;for(const b of nav.children)b.classList.toggle('selected',b.dataset.tab===tab);nav.querySelector('[data-export]')?.remove();panel.replaceChildren(message('正在读取记录…'));try{if(tab==='students')await studentsPanel(panel);else if(tab==='scores')await scoresPanel(panel);else if(tab==='teachers')await teachersPanel(panel);else if(tab==='groups')await groupsPanel(panel);else if(tab==='timers')await timersPanel(panel);else await conversationsPanel(panel);}catch(err){panel.replaceChildren(message(err.message,true));}};
+ const tabs=[['students','学生账号'],['scores','测验成绩'],['groups','小组管理'],['timers','倒计时设置'],['conversations','AI 对话记录']];if(identity.role==='admin')tabs.unshift(['teachers','教师账号']);
  for(const [key,label] of tabs){const b=button(label,()=>render(key));b.dataset.tab=key;nav.append(b);}const refresh=button('',()=>render(selected),'refresh-button');refreshButton=refresh;refresh.title='刷新';refresh.setAttribute('aria-label','刷新');refresh.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3.9L3 9"/><path d="M3 4v5h5"/><path d="M4 13a8 8 0 0 0 14.9 3.9L21 15"/><path d="M21 20v-5h-5"/></svg>';nav.append(refresh);
  {const {classes}=await api('/api/teacher/classes');if(identity.role==='teacher'){const list=card.querySelector('.teacher-class-list strong');if(list)list.textContent=classes.length?classes.map(c=>c.name).join('、'):'暂未分配';}if(!classes.some(c=>c.id===selectedClass))selectedClass='';const select=classSelect(classes,true);select.value=selectedClass;select.onchange=()=>{selectedClass=select.value;void render(selected);};select.className='class-filter';nav.insertBefore(select,nav.querySelector('[data-tab=students]'));}
  card.append(nav,panel);screen.append(card);await render(initialTab);
@@ -93,6 +106,11 @@ async function studentsPanel(panel){
 let refreshButton=null;function setExport(node){const nav=screen.querySelector('.management-nav');nav.querySelector('[data-export]')?.remove();node.dataset.export='true';nav.append(node);if(refreshButton)nav.append(refreshButton);}
 function exportLink(type,student=''){const a=e('a','导出记录','school-button');a.dataset.export='true';a.href=scoped(`/api/teacher/export?type=${type}&student=${encodeURIComponent(student)}`);return a;}
 async function scoresPanel(panel){const [{students},{scores,quizzes}]=await Promise.all([api(scoped('/api/teacher/students')),api(scoped('/api/teacher/scores'))]);panel.replaceChildren();setExport(exportLink('scores'));const rows=students.flatMap(s=>quizzes.map(q=>{const result=scores.find(r=>r.studentId===s.id&&r.quizId===q.id&&r.version===q.version);return {...s,lesson:q.title,score:result?result.score+' / 100':'未完成',createdAt:time(result?.createdAt)};}));panel.append(table([['姓名','name'],['班级','className'],['账号','username'],['测验','lesson'],['分数','score'],['提交时间','createdAt'],['操作',s=>deleteButton('清除测验','将清除学生“'+s.name+'”全部测验成绩，并使本班分组及小组码失效。','/api/teacher/students/'+s.id+'/scores',()=>scoresPanel(panel))]],rows));}
+async function timersPanel(panel){
+ const {classes}=await api('/api/teacher/classes'),shown=selectedClass?classes.filter(c=>c.id===selectedClass):classes;panel.replaceChildren();if(!shown.length){panel.append(message('暂无班级，请先导入学生名单。'));return;}
+ const labels=['共同观察与问题界定','提出并确认假设','协作设计实验','协作采集证据','协作评估证据并得出结论','反思讨论'];
+ for(const c of shown){const card=e('section',undefined,'student-editor timer-editor'),form=e('form'),grid=e('div',undefined,'teacher-timer-grid'),status=message('');card.append(e('h2',c.name));for(let index=0;index<labels.length;index++){const input=field(grid,`${index+1}. ${labels[index]}（分钟）`,`stage-${index+1}`,'number',String(c.stageDurations[index]/60));input.min='1';input.max='60';input.step='1';}const save=e('button','保存倒计时设置','school-button primary');save.type='submit';form.append(grid,save,status);form.onsubmit=async event=>{event.preventDefault();save.disabled=true;const minutes=labels.map((_,index)=>Number(new FormData(form).get(`stage-${index+1}`)));try{const result=await api('/api/teacher/timers',{classId:c.id,minutes},'PUT');c.stageDurations=result.stageDurations;status.textContent='已保存，学生端将在状态同步后使用新时长。';}catch(error){status.textContent=error.message;status.className='school-error';}finally{save.disabled=false;}};card.append(form);panel.append(card);}
+}
 function editGroupDraft(card,c,panel){
  const members=c.groups.flatMap(g=>g.members),byId=new Map(members.map(m=>[m.id,m])),draft=c.groups.map(g=>g.members.map(m=>m.id));
  card.replaceChildren(e('h2',c.name+' · 编辑分组'),message('选择学生即可与其原位置的成员互换。保存后仍需确认，才会生成小组码。'));
@@ -130,7 +148,7 @@ async function startWorkspace(group){
  window.schoolGroup=group;window.schoolUser=identity;screen.hidden=true;
  document.body.classList.add('workspace-ready');document.querySelector('.app').hidden=false;
  const bar=accountBar();bar.classList.add('workspace-account');bar.append(e('span',`第 ${group.number} 组 · ${group.members.join('、')}`));document.querySelector('.panel-head').after(bar);
- const checkPermission=async()=>{if(document.hidden)return;try{const current=await api('/api/me');if(!current.user||current.user.id!==identity.id||current.user.aiEnabled!==identity.aiEnabled||!current.ready||current.group?.status!=='joined'||current.group.id!==group.id)location.reload();}catch{}};
+ const checkPermission=async()=>{if(document.hidden)return;try{const current=await api('/api/me'),timersChanged=JSON.stringify(current.stageDurations)!==JSON.stringify(window.schoolStageDurations);if(!current.user||current.user.id!==identity.id||current.user.aiEnabled!==identity.aiEnabled||!current.ready||current.group?.status!=='joined'||current.group.id!==group.id||timersChanged)location.reload();}catch{}};
  window.addEventListener('focus',checkPermission);const permissionTimer=setInterval(checkPermission,15000);window.addEventListener('pagehide',()=>clearInterval(permissionTimer),{once:true});
  if(!identity.aiEnabled){
   document.querySelector('.layout').classList.add('coach-collapsed');
@@ -141,5 +159,5 @@ async function startWorkspace(group){
  else{const [{createExperimentWorkspace},{createStaticRoleHints},{createLessonVideo}]=await Promise.all([import('./experiment-workspace.js'),import('./role-hints.js'),import('./lesson-video.js')]);const lessonVideo=createLessonVideo({userId:identity.id});createStaticRoleHints(document.querySelector('.experiment'),lessonVideo.button);await createExperimentWorkspace();}
 }
 
-async function boot(){const session=await api('/api/me');if(!session.user){login();return;}identity=session.user;csrf=session.csrf;window.schoolUser=identity;if(identity.role!=='student')await teacher();else if(session.ready)await studentEntry(session.group);else await studentTests();}
+async function boot(){const session=await api('/api/me');if(!session.user){login();return;}let marker='';try{marker=sessionStorage.getItem(AUTH_TAB_KEY)||'';}catch{}identity=session.user;csrf=session.csrf;if(marker!==identity.id){try{await api('/api/auth/logout',{});}catch{}identity=null;csrf='';login();return;}window.schoolUser=identity;window.schoolStageDurations=session.stageDurations;startIdleSession();if(identity.role!=='student')await teacher();else if(session.ready)await studentEntry(session.group);else await studentTests();}
 boot().catch(error=>{screen.hidden=false;document.querySelector('.app').hidden=true;screen.replaceChildren(header('暂时无法连接','请确认服务已启动后重试'),message(error.message,true),button('重新连接',()=>location.reload()));});

@@ -50,8 +50,7 @@ iframe{display:block;width:100%;height:100%;border:0}
 .stage.active.complete .stage-number{background:var(--blue);color:white}
 .stage-label{white-space:pre;line-height:20px;font-size:clamp(11px,.8vw,14px);font-weight:600;text-align:center;height:40px}
 .stage.active .stage-label{color:var(--blue);font-weight:700}
-.timer-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;min-height:38px;padding:4px 6px;border-radius:10px;background:#f6f8fc}
-.stage-timer{display:flex;align-items:center;gap:7px;min-width:0;color:var(--muted);font-size:12px}
+.stage-timer{display:flex;align-items:center;gap:7px;min-width:0;min-height:38px;padding:4px 6px;border-radius:10px;background:#f6f8fc;color:var(--muted);font-size:12px}
 .alarm-icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--blue);flex:none}
 #timerLabel{color:var(--ink);font-weight:600;white-space:nowrap}
 #timerRemaining{font-variant-numeric:tabular-nums;font-size:20px;line-height:1;color:var(--blue);letter-spacing:.04em}
@@ -63,12 +62,7 @@ iframe{display:block;width:100%;height:100%;border:0}
 .intro-video-button{display:inline-flex;align-items:center;justify-content:center;margin-top:12px;padding:8px 14px;color:#fff;background:#3972df;border-color:#3972df;font-weight:700}.intro-video-dialog{width:min(900px,calc(100vw - 28px));border:1px solid #dbe6fa;border-radius:18px;padding:20px;color:#234365}.intro-video-dialog::backdrop{background:#172b4d99}.intro-video-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.intro-video-dialog h2{margin:0;font-size:21px}.intro-video-dialog header img{width:100px;height:auto}.intro-video-dialog video{display:block;width:100%;max-height:68vh;border-radius:10px;background:#000}.intro-video-status{margin:12px 0;color:var(--muted);line-height:1.6}.static-role-hints .intro-video-button{margin:0;height:38px;font-size:13px}
 .stage-timer[data-state="warning"]{color:#a85d00}.stage-timer[data-state="warning"] .alarm-icon,.stage-timer[data-state="warning"] #timerRemaining{color:#c56800;animation:alarm-pulse .8s ease-in-out infinite alternate}
 .stage-timer[data-state="expired"]{color:#b4232c}.stage-timer[data-state="expired"] .alarm-icon,.stage-timer[data-state="expired"] #timerRemaining{color:#b4232c}
-.timer-reset{font-size:11px}.timer-settings-toggle{border:0;background:transparent;color:var(--blue);font-size:12px;padding:6px 8px;white-space:nowrap}
-.timer-settings-panel{margin-top:8px;padding:10px;border:1px solid #d8e2f0;border-radius:10px;background:white;box-shadow:0 8px 24px #1a3d7214}
-.timer-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.timer-field{display:flex;align-items:center;gap:6px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px}
-.timer-field span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.timer-field input{width:54px;padding:4px 5px;border:1px solid #c8d4e5;border-radius:6px;text-align:center}.timer-unit{color:var(--muted)}
-.timer-settings-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:9px;color:var(--muted);font-size:11px}.timer-settings-actions button{font-size:12px;padding:6px 10px}
+.timer-reset{font-size:11px}
 @keyframes alarm-pulse{to{transform:scale(1.1);filter:drop-shadow(0 0 3px #f2a33c)}}
 .brief{position:relative;background:var(--soft);border:1px solid #e4eaf4;border-radius:10px;padding:14px 52px 14px 14px;font-size:var(--body-size);line-height:var(--body-leading);overflow:visible}
 .brief-narrate{position:absolute;right:10px;top:10px;color:var(--blue);background:#fff;border:1px solid #cfdbef}
@@ -113,7 +107,7 @@ textarea:focus-visible{outline:none}
 @media(max-width:480px){
  .app{padding:4px}.inquiry{padding:8px}.brief{padding:10px 48px 10px 10px;font-size:13px}
  .stage-label{font-size:10px}.stage{padding:0;gap:4px}
- .timer-toolbar{align-items:flex-start}.stage-timer{flex-wrap:wrap}.timer-fields{grid-template-columns:repeat(2,minmax(0,1fr))}#timerHint{display:none}
+ .stage-timer{flex-wrap:wrap}#timerHint{display:none}
  .panel-head h2{font-size:14px}.panel-head a{font-size:11px}
  .brand-logo{width:150px;max-height:44px}
 }

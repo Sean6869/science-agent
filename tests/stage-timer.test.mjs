@@ -32,3 +32,9 @@ test('reset applies teacher duration and time formatting is stable',()=>{
  assert.equal(formatTime(59.2),'01:00');
  assert.equal(formatTime(0),'00:00');
 });
+
+test('each stage receives its teacher configured duration',()=>{
+ const timers=createStageTimers([1,2,3],[120,300,480]);
+ assert.deepEqual(Object.values(timers).map(timer=>timer.durationSeconds),[120,300,480]);
+ assert.deepEqual(Object.values(timers).map(timer=>timer.remainingSeconds),[120,300,480]);
+});

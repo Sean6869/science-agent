@@ -1,13 +1,13 @@
 export const DEFAULT_STAGE_SECONDS = 5 * 60;
 
 export function createStageTimers(stageIds, durationSeconds = DEFAULT_STAGE_SECONDS) {
- return Object.fromEntries(stageIds.map(id => [id, {
-  durationSeconds,
-  remainingSeconds: durationSeconds,
+ return Object.fromEntries(stageIds.map((id,index) => {const duration=Array.isArray(durationSeconds)?durationSeconds[index]:durationSeconds;return [id, {
+  durationSeconds: duration,
+  remainingSeconds: duration,
   deadline: null,
   running: false,
   warned: false
- }]));
+ }];}));
 }
 
 export function remainingSeconds(timer, now = Date.now()) {

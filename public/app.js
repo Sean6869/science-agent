@@ -3,19 +3,20 @@ import { stages, assessments } from './content.js';
 import { createNarrator } from './narration.js';
 import {createWorkspacePanels} from './workspace-panels.js';
 import {createKnowledgeChat} from './knowledge-chat.js';
-import {advanceTimer,createStageTimers,formatTime,pauseTimer,remainingSeconds,resetTimer,startTimer} from './stage-timer.js';
+import {advanceTimer,createStageTimers,DEFAULT_STAGE_SECONDS,formatTime,pauseTimer,remainingSeconds,resetTimer,startTimer} from './stage-timer.js';
 import {isSelfAssessmentText} from './turn-kind.js';
 import {createRoleHintButton,createRoleHintController} from './role-hints.js';
 import {createLessonVideo} from './lesson-video.js';
 import {apiFetch} from './school.js';
 const KEY=`science-session-v4:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const LEGACY_KEY=`science-session-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
-const fresh=()=>({version:3,stage:1,timers:createStageTimers(stages.map(s=>s.id)),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))});
+const configuredDurations=()=>stages.map((_,index)=>{const seconds=Number(window.schoolStageDurations?.[index]);return Number.isInteger(seconds)&&seconds>=60&&seconds<=3600?seconds:DEFAULT_STAGE_SECONDS;});
+const fresh=()=>{const durations=configuredDurations();return {version:4,timerConfig:durations.join(','),stage:1,timers:createStageTimers(stages.map(s=>s.id),durations),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))};};
 let state=fresh();
 let activeLessonId=null,legacyState=null;
 function normalizeState(saved){
- const validData=(saved?.version===2||saved?.version===3)&&stages.every(s=>saved.data?.[s.id]?.submissions&&saved.data[s.id].messages)&&stages.some(s=>s.id===saved.stage);
- if(!validData)return fresh();const base=fresh(),next={...base,...saved,version:3,timers:saved.version===3&&stages.every(s=>saved.timers?.[s.id])?saved.timers:base.timers};for(const s of stages)next.data[s.id]={...base.data[s.id],...saved.data[s.id]};return next;
+ const validData=[2,3,4].includes(saved?.version)&&stages.every(s=>saved.data?.[s.id]?.submissions&&saved.data[s.id].messages)&&stages.some(s=>s.id===saved.stage);
+ if(!validData)return fresh();const base=fresh(),savedConfig=saved.timerConfig||stages.map(s=>saved.timers?.[s.id]?.durationSeconds).join(','),preserveTimers=saved.version>=3&&savedConfig===base.timerConfig&&stages.every(s=>saved.timers?.[s.id]);const next={...base,...saved,version:4,timerConfig:base.timerConfig,timers:preserveTimers?saved.timers:base.timers};for(const s of stages)next.data[s.id]={...base.data[s.id],...saved.data[s.id]};return next;
 }
 try{legacyState=JSON.parse(sessionStorage.getItem(LEGACY_KEY));}catch{}
 const $=id=>document.getElementById(id);
@@ -66,14 +67,6 @@ function renderTimer(now=Date.now()){
  $('timerHint').textContent=complete?'已完成':remaining===0?'时间到':timer.running?(remaining<=60?'最后 1 分钟':'进行中'):remaining<timer.durationSeconds?'已暂停':'点击环节开始';
  $('timerToggle').disabled=remaining===0;
  const action=timer.running?'暂停倒计时':'开始倒计时';$('timerToggle').setAttribute('aria-label',action);$('timerToggle').title=action;
-}
-function renderTimerFields(){
- $('timerFields').replaceChildren(...stages.map(s=>{
-  const label=document.createElement('label');label.className='timer-field';
-  const name=document.createElement('span');name.textContent=`${s.id}. ${s.title}`;name.title=s.title;
-  const input=document.createElement('input');input.type='number';input.name=`stage-${s.id}`;input.min='1';input.max='60';input.required=true;input.value=String(Math.round(state.timers[s.id].durationSeconds/60));input.setAttribute('aria-label',`${s.title}时长（分钟）`);
-  const unit=document.createElement('span');unit.className='timer-unit';unit.textContent='分钟';label.append(name,input,unit);return label;
- }));
 }
 function stopActiveTimer(){if(pauseTimer(state.timers[state.stage]))save();}
 function add(id,role,text,extra={}) {state.data[id].messages.push({role,text,...extra});save();if(id===state.stage)renderMessages();}
@@ -153,11 +146,8 @@ $('stages').replaceChildren();
 for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{
  if(speech)speech.stop();const now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;startTimer(state.timers[s.id],now);roleHint.enter(s.id);void unlockAlarm();render();narrator.play(stageAudio(s.id));
 };$('stages').append(b);}
-renderTimerFields();
 $('timerToggle').onclick=()=>{void unlockAlarm();const timer=state.timers[state.stage];timer.running?pauseTimer(timer):startTimer(timer);save();renderTimer();};
 $('timerReset').onclick=()=>{const timer=state.timers[state.stage];resetTimer(timer,timer.durationSeconds);save();renderTimer();};
-$('timerSettingsToggle').onclick=()=>{const panel=$('timerSettingsPanel'),opening=panel.hidden;panel.hidden=!opening;$('timerSettingsToggle').setAttribute('aria-expanded',String(opening));$('timerSettingsToggle').textContent=opening?'收起时间设置⌃':'设置各环节时间⌄';};
-$('timerSettingsPanel').onsubmit=e=>{e.preventDefault();const form=new FormData(e.currentTarget),durations=stages.map(s=>({id:s.id,minutes:Number(form.get(`stage-${s.id}`))}));if(durations.some(x=>!Number.isInteger(x.minutes)||x.minutes<1||x.minutes>60))return;for(const item of durations)resetTimer(state.timers[item.id],item.minutes*60);e.currentTarget.hidden=true;$('timerSettingsToggle').setAttribute('aria-expanded','false');$('timerSettingsToggle').textContent='设置各环节时间⌄';save();renderTimer();};
 const af=document.createElement('form');
 for(const a of assessments){const label=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='assessment';input.value=a.id;input.required=true;label.append(input,document.createTextNode(` ${a.label}：${a.detail}`));af.append(label);}
 const confirm=document.createElement('button');confirm.className='primary';confirm.textContent='确认小组自评';af.append(confirm);$('assessment').append(af);
@@ -165,7 +155,7 @@ af.onsubmit=async e=>{e.preventDefault();const option=new FormData(af).get('asse
 $('composer').onsubmit=submit;
 $('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e.target.value;save();};
 $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
-$('clear').onclick=()=>{if(window.confirm('清除本机草稿和倒计时设置？小组共享的对话记录会保留。')){if(speech)speech.abort();narrator.stop();state=fresh();renderTimerFields();$('timerSettingsPanel').hidden=true;$('timerSettingsToggle').setAttribute('aria-expanded','false');$('timerSettingsToggle').textContent='设置各环节时间⌄';save();render();}};
+$('clear').onclick=()=>{if(window.confirm('清除本机草稿和倒计时记录？小组共享的对话记录会保留。')){if(speech)speech.abort();narrator.stop();state=fresh();save();render();}};
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 narrationButton.onclick=()=>narrator.isPlaying()?narrator.stop():narrator.play(stageAudio(state.stage));
 $('voice').onclick=()=>{
@@ -184,7 +174,7 @@ $('voice').onclick=()=>{
 render();
 createWorkspacePanels();
 createKnowledgeChat();
-window.addEventListener('science:lesson-change',event=>{if(activeLessonId){pauseTimer(state.timers[state.stage]);save();}narrator.stop();activeLessonId=event.detail.id;state=loadLessonState(activeLessonId);sharedRows=[];sharedLoaded=false;renderTimerFields();roleHint.enter(state.stage);render();void syncShared();});window.addEventListener('focus',()=>void syncShared());const sharedTimer=setInterval(()=>{if(!document.hidden)void syncShared();},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
+window.addEventListener('science:lesson-change',event=>{if(activeLessonId){pauseTimer(state.timers[state.stage]);save();}narrator.stop();activeLessonId=event.detail.id;state=loadLessonState(activeLessonId);sharedRows=[];sharedLoaded=false;roleHint.enter(state.stage);render();void syncShared();});window.addEventListener('focus',()=>void syncShared());const sharedTimer=setInterval(()=>{if(!document.hidden)void syncShared();},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
 setInterval(()=>{const result=advanceTimer(state.timers[state.stage]);if(result.warning){ringAlarm();save();}if(result.finished){ringAlarm(true);save();}renderTimer();},250);
 setTimeout(()=>narrator.play(stageAudio(state.stage)),150);
 createExperimentWorkspace();

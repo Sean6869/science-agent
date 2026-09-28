@@ -4,7 +4,7 @@ import {parseStudentsWorkbook,workbookBuffer} from './school-excel.mjs';
 export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
  const attempts=new Map();
  function token(req){return /(?:^|;\s*)xiaoke_session=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie||'')?.[1];}
- const cookie=(req,value,age)=>`xiaoke_session=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${req.headers['x-forwarded-proto']==='https'||req.socket.encrypted?'; Secure':''}`;
+ const cookie=(req,value,clear=false)=>`xiaoke_session=${value}; Path=/; HttpOnly; SameSite=Lax${clear?'; Max-Age=0':''}${req.headers['x-forwarded-proto']==='https'||req.socket.encrypted?'; Secure':''}`;
  return async function schoolApi(req,res,url){
   const path=url.pathname;
   const session=store.session(token(req));req.schoolUser=session?.user;
@@ -22,14 +22,15 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
    const p=await body(req);if(typeof p?.username!=='string'||typeof p?.password!=='string'||p.username.length>80||p.password.length>128){json(res,400,{message:'请输入账号和密码'});return true;}
    if(path==='/api/auth/register'){try{await store.registerTeacher(p);json(res,201,{ok:true});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
    const auth=await store.login(p.username.trim(),p.password);if(!auth){json(res,401,{message:'账号或密码错误，或账号已停用'});return true;}
-   attempts.delete(ip);res.setHeader('Set-Cookie',cookie(req,auth.token,43200));json(res,200,{user:auth.user,csrf:auth.csrf});return true;
+   attempts.delete(ip);res.setHeader('Set-Cookie',cookie(req,auth.token));json(res,200,{user:auth.user,csrf:auth.csrf});return true;
   }
-  if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,completed:store.completed(session.user.id),group:session.user.role==='student'?store.groupStatus(session.user.id):null,ready:session.user.role!=='student'||store.ready(session.user.id)}:{user:null});return true;}
+  if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,completed:store.completed(session.user.id),group:session.user.role==='student'?store.groupStatus(session.user.id):null,ready:session.user.role!=='student'||store.ready(session.user.id),...(session.user.role==='student'?{stageDurations:store.stageDurations(session.user.id)}:{})}:{user:null});return true;}
   if(!path.startsWith('/api/'))return false;
   if(!session){json(res,401,{message:'请先登录'});return true;}
   if(session.user.role==='student'&&!session.user.aiEnabled&&['/api/chat','/api/knowledge','/api/assessment','/api/group-conversations'].includes(path)){json(res,403,{message:'静态组不使用知识答疑和探究支架',code:'AI_DISABLED'});return true;}
   if(path==='/api/teacher/profile'&&req.method==='PUT'){try{if(session.user.role!=='teacher')throw Object.assign(new Error('仅教师可以编辑资料'),{status:403});json(res,200,{user:store.updateTeacherProfile(session.user.id,await body(req),session.user)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
-  if(path==='/api/auth/logout'&&req.method==='POST'){store.logout(token(req));res.setHeader('Set-Cookie',cookie(req,'',0));json(res,200,{ok:true});return true;}
+  if(path==='/api/auth/activity'&&req.method==='POST'){store.touchSession(token(req));json(res,200,{ok:true});return true;}
+  if(path==='/api/auth/logout'&&req.method==='POST'){store.logout(token(req));res.setHeader('Set-Cookie',cookie(req,'',true));json(res,200,{ok:true});return true;}
   if(path.startsWith('/api/admin/')){
    if(session.user.role!=='admin'){json(res,403,{message:'仅管理员可以访问'});return true;}
    if(/^\/api\/admin\/classes\/[^/]+$/.test(path)&&req.method==='DELETE'){store.deleteClass(path.split('/').at(-1),session.user);json(res,200,{ok:true});return true;}
@@ -48,6 +49,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
   if(path.startsWith('/api/teacher/')){
    if(!['admin','teacher'].includes(session.user.role)){json(res,403,{message:'仅教师或管理员可以访问'});return true;}
    const actor=session.user,classId=url.searchParams.get('class')||'';
+   if(path==='/api/teacher/timers'&&req.method==='PUT'){const p=await body(req);json(res,200,{stageDurations:store.setStageDurations(actor,p?.classId,p?.minutes)});return true;}
    if(path==='/api/teacher/ai-permissions'&&req.method==='PUT'){const p=await body(req);store.setAiPermission(actor,p?.classId,p?.aiEnabled);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/knowledge/reset'&&req.method==='POST'){const p=await body(req);if(!lessons.some(l=>l.id===p?.lessonId)){json(res,400,{message:'请选择有效课程'});return true;}store.resetKnowledgeQuota(actor,p.classId,p.lessonId);json(res,200,{ok:true});return true;}
    if(req.method==='DELETE'){

@@ -8,6 +8,8 @@ import {createGroupStore} from './school-groups.mjs';
 import {credentialVault,migrateSchool} from './school-credentials.mjs';
 import {isSelfAssessmentText} from './public/turn-kind.js';
 const scrypt=promisify(scryptCallback),now=()=>new Date().toISOString();
+export const SESSION_IDLE_MS=30*60*1000;
+export const DEFAULT_STAGE_DURATIONS=Object.freeze([300,300,300,300,300,300]);
 export const quizzes=JSON.parse(readFileSync(new URL('./quizzes.json',import.meta.url),'utf8'));
 export const publicQuizzes=quizzes.map(q=>({...q,questions:q.questions.map(({answer,...question})=>question)}));
 const hashToken=t=>createHash('sha256').update(t).digest('hex');
@@ -44,11 +46,14 @@ export async function openSchoolStore(filename,bootstrap={}){
  CREATE INDEX IF NOT EXISTS conversation_user ON conversations(user_id,created_at);
  CREATE INDEX IF NOT EXISTS conversation_turn ON conversations(user_id,agent,turn_id);`);
  migrateSchool(db);
+ if(!db.prepare('PRAGMA table_info(classes)').all().some(c=>c.name==='stage_durations'))db.exec(`ALTER TABLE classes ADD COLUMN stage_durations TEXT NOT NULL DEFAULT '${JSON.stringify(DEFAULT_STAGE_DURATIONS)}'`);
  for(const column of [['ai_enabled','INTEGER NOT NULL DEFAULT 1'],['subject',"TEXT NOT NULL DEFAULT ''"],['school',"TEXT NOT NULL DEFAULT ''"]]){if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE users ADD COLUMN '+column[0]+' '+column[1]);}
  for(const column of [['kind','TEXT'],['complete','INTEGER']]){if(!db.prepare('PRAGMA table_info(conversations)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE conversations ADD COLUMN '+column[0]+' '+column[1]);}
  const setLegacyKind=db.prepare('UPDATE conversations SET kind=? WHERE id=?');for(const row of db.prepare("SELECT id,stage,user_text AS text FROM conversations WHERE agent='metacognitive' AND kind IS NULL").all())setLegacyKind.run(row.stage===4?'assessment':isSelfAssessmentText(row.text)?'self_assessment':'content',row.id);
  const vault=credentialVault(filename,!!db.prepare('SELECT id FROM users WHERE credential IS NOT NULL LIMIT 1').get());
  const profile=u=>u&&({id:u.id,username:u.username,role:u.role,name:u.name,gender:u.gender,className:u.class_name,classId:u.class_id,age:u.age,active:!!u.active,aiEnabled:!!u.ai_enabled,subject:u.subject||'',school:u.school||''});
+ const stageDurations=value=>{try{const durations=JSON.parse(value);if(Array.isArray(durations)&&durations.length===6&&durations.every(n=>Number.isInteger(n)&&n>=60&&n<=3600))return durations;}catch{}return [...DEFAULT_STAGE_DURATIONS];};
+ const classProfile=({stage_durations,...c})=>({...c,stageDurations:stageDurations(stage_durations)});
  const getUser=id=>db.prepare('SELECT * FROM users WHERE id=?').get(id);
  function transaction(fn){db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');if(String(error.message).includes('UNIQUE'))fail('账号已存在');throw error;}}
  function manager(actor){const current=actor?getUser(actor.id):null;if(!current?.active||!['admin','teacher'].includes(current.role))fail('没有管理权限',403);return current;}
@@ -60,7 +65,7 @@ export async function openSchoolStore(filename,bootstrap={}){
   const u=manager(actor);if(p.classId){scope(actor,p.classId);return db.prepare('SELECT * FROM classes WHERE id=?').get(p.classId);}
   if(typeof p.className!=='string'||!p.className.trim()||p.className.length>80)fail('请填写班级');
   const name=p.className.trim(),owner=u.role==='teacher'?u.id:null,existing=db.prepare('SELECT * FROM classes WHERE name=? AND teacher_id IS ?').get(name,owner);if(existing)return existing;
-  const c={id:randomUUID(),name};db.prepare('INSERT INTO classes VALUES(?,?,?,?)').run(c.id,name,owner,now());return c;
+  const c={id:randomUUID(),name};db.prepare('INSERT INTO classes(id,name,teacher_id,created_at) VALUES(?,?,?,?)').run(c.id,name,owner,now());return c;
  }
  function targetStudent(id,actor){const u=getUser(id);if(!u||u.role!=='student')fail('学生不存在或无权访问',403);scope(actor,u.class_id);return u;}
  const scopedWhere="(?='' OR u.class_id IN (SELECT id FROM classes WHERE teacher_id=?)) AND (?='' OR u.class_id=?)";
@@ -80,7 +85,9 @@ export async function openSchoolStore(filename,bootstrap={}){
     db.prepare('DELETE FROM classes WHERE id=?').run(id);
    });
   },
-  classes(actor){const u=manager(actor);return db.prepare("SELECT c.id,c.name,u.name AS teacherName,u.username AS teacherUsername FROM classes c LEFT JOIN users u ON u.id=c.teacher_id WHERE (?='admin' OR c.teacher_id=?) ORDER BY c.name,c.created_at").all(u.role,u.id);},
+  classes(actor){const u=manager(actor);return db.prepare("SELECT c.id,c.name,c.stage_durations,u.name AS teacherName,u.username AS teacherUsername FROM classes c LEFT JOIN users u ON u.id=c.teacher_id WHERE (?='admin' OR c.teacher_id=?) ORDER BY c.name,c.created_at").all(u.role,u.id).map(classProfile);},
+  setStageDurations(actor,classId,minutes){scope(actor,classId);if(!classId||!Array.isArray(minutes)||minutes.length!==6||minutes.some(n=>!Number.isInteger(n)||n<1||n>60))fail('六个环节的时长须为1–60分钟整数');const durations=minutes.map(n=>n*60);db.prepare('UPDATE classes SET stage_durations=? WHERE id=?').run(JSON.stringify(durations),classId);return durations;},
+  stageDurations(userId){const u=getUser(userId);if(!u||u.role!=='student'||!u.class_id)return [...DEFAULT_STAGE_DURATIONS];const c=db.prepare('SELECT stage_durations FROM classes WHERE id=?').get(u.class_id);return stageDurations(c?.stage_durations);},
   assignClass(classId,teacherId,actor){if(manager(actor).role!=='admin')fail('仅管理员可以分配班级',403);scope(actor,classId);if(!classId)fail('请选择班级');if(!teacherId){db.prepare('UPDATE classes SET teacher_id=NULL WHERE id=?').run(classId);return;}const t=getUser(teacherId);if(!t||t.role!=='teacher'||!t.active)fail('请选择启用的教师');db.prepare('UPDATE classes SET teacher_id=? WHERE id=?').run(t.id,classId);},
   students(actor,classId=''){return db.prepare("SELECT u.* FROM users u WHERE u.role='student' AND "+scopedWhere+" ORDER BY u.class_name,u.name,u.username").all(...scopeArgs(actor,classId)).map(profile);},
   setAiPermission(actor,classId,aiEnabled){if(!classId||typeof aiEnabled!=='boolean')fail('请选择班级和权限分组');scope(actor,classId);db.prepare("UPDATE users SET ai_enabled=? WHERE class_id=? AND role='student'").run(Number(aiEnabled),classId);},
@@ -116,8 +123,9 @@ export async function openSchoolStore(filename,bootstrap={}){
      db.prepare('INSERT INTO imports VALUES(?,?,?,?,?)').run(randomUUID(),actor.id,fingerprint,c.id,now());
     }return {created,alreadyImported:created===0};});
   },
-  async login(username,password){const u=db.prepare('SELECT * FROM users WHERE username=?').get(username);if(!u||!u.active){await scrypt(password,'unknown-user-timing',64);return null;}if(!await matches(password,u.password))return null;db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token),u.id,csrf,Date.now()+12*60*60*1000);return {token,csrf,user:profile(u)};},
+  async login(username,password){const u=db.prepare('SELECT * FROM users WHERE username=?').get(username);if(!u||!u.active){await scrypt(password,'unknown-user-timing',64);return null;}if(!await matches(password,u.password))return null;db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hashToken(token),u.id,csrf,Date.now()+SESSION_IDLE_MS);return {token,csrf,user:profile(u)};},
   session(token){if(!token)return null;const s=db.prepare('SELECT s.csrf,u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1').get(hashToken(token),Date.now());return s?{user:profile(s),csrf:s.csrf}:null;},
+  touchSession(token){if(!token)return false;const at=Date.now();return db.prepare('UPDATE sessions SET expires=? WHERE token=? AND expires>?').run(at+SESSION_IDLE_MS,hashToken(token),at).changes===1;},
   logout(token){db.prepare('DELETE FROM sessions WHERE token=?').run(hashToken(token));},
   scores(userId){return db.prepare('SELECT quiz_id AS quizId,version,score,correct,total,created_at AS createdAt FROM scores WHERE user_id=? ORDER BY created_at').all(userId);},
   ready(userId){return quizzes.every(q=>this.scores(userId).some(s=>s.quizId===q.id&&s.version===q.version));},
