@@ -75,7 +75,7 @@ export function createApp({store,synthesize}={}) {
  function warmRoleSpeech(roles){
   const members=roles.members||[],texts=[];
   if(roles.guidance)texts.push(roles.guidance);
-  else if(members.length===1)texts.push(roleGuidance(roles.type,members,members[0].id,members[0].id));
+  else if(roles.type==='VR'){const actual=members.find(member=>!member.virtual),robot=members.find(member=>member.virtual);if(actual&&robot)texts.push(roleGuidance(roles.type,members,actual.id,robot.id));}
   else if(members.length===2){texts.push(roleGuidance(roles.type,members,members[0].id,members[1].id),roleGuidance(roles.type,members,members[1].id,members[0].id));}
   for(const text of texts){if(warming.has(text))continue;warming.add(text);speechAudio(text).catch(error=>console.error('[speech-warmup]',error.code||error.name)).finally(()=>warming.delete(text));}
  }
@@ -101,7 +101,7 @@ export function createApp({store,synthesize}={}) {
    if(url.pathname==='/audio/roles-preview.wav'){
     if(url.searchParams.get('version')!==String(roles.version))return json(res,409,{message:'角色分工已变化'});
     const leaderId=url.searchParams.get('leader'),challengerId=url.searchParams.get('challenger');
-    if(!roles.members.some(member=>member.id===leaderId)||!roles.members.some(member=>member.id===challengerId)||(roles.members.length>1&&leaderId===challengerId))return json(res,400,{message:'请选择有效的角色分工'});
+    if(!roles.members.some(member=>member.id===leaderId)||!roles.members.some(member=>member.id===challengerId)||leaderId===challengerId||(roles.type==='VR'&&(roles.members.find(member=>member.id===leaderId)?.virtual||!roles.members.find(member=>member.id===challengerId)?.virtual)))return json(res,400,{message:'请选择有效的角色分工'});
     text=roleGuidance(roles.type,roles.members,leaderId,challengerId);
    }else if(url.pathname==='/audio/roles.wav'){
     if(!roles.guidance)return json(res,409,{message:'请先完成角色分工'});

@@ -21,7 +21,7 @@ test('pairing maximizes same-gender pairs then balances types, compared against 
 });
 test('class-specific bands keep equal scores together and show unavoidable all-equal or odd cases',()=>{
  const six=Array.from({length:6},(_,i)=>({id:String(i),username:'s'+i,total:30+i*30,gender:'女'}));assert.deepEqual(planGroups(six).counts,{LL:1,HH:1,HL:1});assert.deepEqual(planGroups(six).lowRange,[30,90]);
- const same=planGroups(six.slice(0,5).map(s=>({...s,total:120})));assert.equal(same.highRange,null);assert.equal(same.groups.filter(g=>g.type==='single').length,1);assert.equal(same.groups.filter(g=>g.type==='LL').length,2);
+ const same=planGroups(six.slice(0,5).map(s=>({...s,total:120})));assert.equal(same.highRange,null);assert.equal(same.groups.filter(g=>g.type==='VR').length,1);assert.equal(same.groups.find(g=>g.type==='VR').virtual,true);assert.equal(same.groups.filter(g=>g.type==='LL').length,2);
  const ties=planGroups(six.map((s,i)=>({...s,total:i<4?100:200})));const levels=ties.groups.flatMap(g=>g.members).filter(s=>s.total===100).map(s=>s.level);assert.equal(new Set(levels).size,1);
 });
 

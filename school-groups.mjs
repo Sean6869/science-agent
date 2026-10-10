@@ -2,27 +2,36 @@ import {randomUUID,randomBytes} from 'node:crypto';
 import {roleGuidance} from './social-roles.mjs';
 import {planGroups} from './grouping.mjs';
 
+const VIRTUAL_NAME='小科机器人';
+const virtualId=groupId=>`virtual:${groupId}`;
+
 export function createGroupStore(db,{quizzes,getUser,scope,fail}){
  db.exec(`CREATE TABLE IF NOT EXISTS group_batches(class_id TEXT PRIMARY KEY REFERENCES classes(id),id TEXT NOT NULL,summary TEXT NOT NULL,approved_at TEXT,approved_by TEXT);
- CREATE TABLE IF NOT EXISTS student_groups(id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES classes(id),number INTEGER NOT NULL,type TEXT NOT NULL,code TEXT UNIQUE);
+ CREATE TABLE IF NOT EXISTS student_groups(id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES classes(id),number INTEGER NOT NULL,type TEXT NOT NULL,code TEXT UNIQUE,virtual_member TEXT);
  CREATE TABLE IF NOT EXISTS group_members(user_id TEXT PRIMARY KEY REFERENCES users(id),group_id TEXT NOT NULL REFERENCES student_groups(id),total INTEGER NOT NULL,level TEXT NOT NULL,joined INTEGER NOT NULL DEFAULT 0);`);
+ if(!db.prepare('PRAGMA table_info(student_groups)').all().some(column=>column.name==='virtual_member'))db.exec('ALTER TABLE student_groups ADD COLUMN virtual_member TEXT');
  db.exec('CREATE TABLE IF NOT EXISTS knowledge_usage(group_id TEXT NOT NULL REFERENCES student_groups(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,user_id TEXT NOT NULL,turn_id TEXT NOT NULL,question TEXT NOT NULL,PRIMARY KEY(group_id,lesson_id,user_id,turn_id))');
  db.exec('CREATE TABLE IF NOT EXISTS group_roles(group_id TEXT PRIMARY KEY REFERENCES student_groups(id) ON DELETE CASCADE,leader_id TEXT NOT NULL,challenger_id TEXT NOT NULL,version INTEGER NOT NULL)');
+ db.exec(`UPDATE student_groups SET type='VR',virtual_member='${VIRTUAL_NAME}' WHERE (type='single' OR virtual_member IS NULL) AND (SELECT COUNT(*) FROM group_members WHERE group_id=student_groups.id)=1;
+ UPDATE group_roles SET challenger_id='virtual:'||group_id,version=version+1 WHERE group_id IN (SELECT id FROM student_groups WHERE type='VR') AND leader_id=challenger_id;`);
+ const actualMembers=groupId=>db.prepare('SELECT u.id,u.name,u.username,u.gender,m.total,m.level FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=? ORDER BY m.total DESC,u.username').all(groupId);
+ const membersOf=g=>{const members=actualMembers(g.id);if(g.virtual_member)members.push({id:virtualId(g.id),name:g.virtual_member,username:'xiaoke_robot',gender:'机器人',total:null,level:'virtual',virtual:true});return members;};
  function roles(userId,change){
-  const g=db.prepare('SELECT g.id,g.type FROM student_groups g JOIN group_members m ON m.group_id=g.id JOIN group_batches b ON b.class_id=g.class_id WHERE m.user_id=? AND m.joined=1 AND b.approved_at IS NOT NULL').get(userId);
+  const g=db.prepare('SELECT g.id,g.type,g.virtual_member FROM student_groups g JOIN group_members m ON m.group_id=g.id JOIN group_batches b ON b.class_id=g.class_id WHERE m.user_id=? AND m.joined=1 AND b.approved_at IS NOT NULL').get(userId);
   if(!g)fail('请先加入已审核的小组',403);
-  const members=db.prepare('SELECT u.id,u.name,m.total FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=? ORDER BY m.total DESC,u.username').all(g.id);
+  const members=membersOf(g);
   return atomic(()=>{
    let saved=db.prepare('SELECT * FROM group_roles WHERE group_id=?').get(g.id);
    if(change){
     if((saved?.version||0)!==change.version)fail('角色分工已更新，请刷新后重试',409);
     let leader=change.leaderId,challenger=change.challengerId;
-    if(change.swap){if(!saved)fail('请先完成角色分工');leader=saved.challenger_id;challenger=saved.leader_id;}
+    if(change.swap){if(!saved)fail('请先完成角色分工');if(g.type==='VR')fail('人机组的角色分工固定，无需交换');leader=saved.challenger_id;challenger=saved.leader_id;}
     if(!members.some(m=>m.id===leader)||!members.some(m=>m.id===challenger)||(members.length>1&&leader===challenger))fail('请为两位组员选择不同的角色');
+    if(g.type==='VR'&&(members.find(m=>m.id===leader)?.virtual||!members.find(m=>m.id===challenger)?.virtual))fail('人机组由学生担任领航发言员，小科机器人担任记录与质疑员');
     db.prepare('INSERT INTO group_roles VALUES(?,?,?,?) ON CONFLICT(group_id) DO UPDATE SET leader_id=excluded.leader_id,challenger_id=excluded.challenger_id,version=excluded.version').run(g.id,leader,challenger,(saved?.version||0)+1);
     saved=db.prepare('SELECT * FROM group_roles WHERE group_id=?').get(g.id);
    }
-   return {type:g.type,members:members.map(({id,name})=>({id,name})),version:saved?.version||0,leaderId:saved?.leader_id||null,challengerId:saved?.challenger_id||null,guidance:saved?roleGuidance(g.type,members,saved.leader_id,saved.challenger_id):null};
+   return {type:g.type,members:members.map(({id,name,virtual})=>({id,name,virtual:!!virtual})),version:saved?.version||0,leaderId:saved?.leader_id||null,challengerId:saved?.challenger_id||null,guidance:saved?roleGuidance(g.type,members,saved.leader_id,saved.challenger_id):null};
   });
  }
  function quota(userId,lessonId,turn){
@@ -48,20 +57,20 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
   const people=roster(classId);if(!people.length||people.some(s=>!s.completed))return;
   const {groups,...summary}=planGroups(people);
   atomic(()=>{db.prepare('INSERT INTO group_batches VALUES(?,?,?,NULL,NULL)').run(classId,randomUUID(),JSON.stringify(summary));
-   for(const [index,g] of groups.entries()){const id=randomUUID();db.prepare('INSERT INTO student_groups VALUES(?,?,?,?,NULL)').run(id,classId,index+1,g.type);for(const s of g.members)db.prepare('INSERT INTO group_members VALUES(?,?,?,?,0)').run(s.id,id,s.total,s.level);}
+   for(const [index,g] of groups.entries()){const id=randomUUID();db.prepare('INSERT INTO student_groups(id,class_id,number,type,code,virtual_member) VALUES(?,?,?,?,NULL,?)').run(id,classId,index+1,g.type,g.virtual?VIRTUAL_NAME:null);for(const s of g.members)db.prepare('INSERT INTO group_members VALUES(?,?,?,?,0)').run(s.id,id,s.total,s.level);}
   });
  }
  function student(userId){
   const user=getUser(userId);ensure(user?.class_id);
-  const row=db.prepare('SELECT g.id,g.number,m.joined,b.approved_at FROM group_members m JOIN student_groups g ON g.id=m.group_id JOIN group_batches b ON b.class_id=g.class_id WHERE m.user_id=?').get(userId);
+  const row=db.prepare('SELECT g.id,g.number,g.virtual_member,m.joined,b.approved_at FROM group_members m JOIN student_groups g ON g.id=m.group_id JOIN group_batches b ON b.class_id=g.class_id WHERE m.user_id=?').get(userId);
   if(!row)return {status:'waiting'};
   if(!row.approved_at)return {status:'review'};
   if(!row.joined)return {status:'code_required'};
-  return {status:'joined',id:row.id,number:row.number,members:db.prepare('SELECT u.name FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=? ORDER BY u.username').all(row.id).map(s=>s.name)};
+  const names=db.prepare('SELECT u.name FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=? ORDER BY u.username').all(row.id).map(s=>s.name);if(row.virtual_member)names.push(row.virtual_member);return {status:'joined',id:row.id,number:row.number,members:names};
  }
  function report(c){
   ensure(c.id);const people=roster(c.id),batch=db.prepare('SELECT * FROM group_batches WHERE class_id=?').get(c.id);
-  return {...c,total:people.length,completed:people.filter(s=>s.completed).length,batchId:batch?.id,status:batch?(batch.approved_at?'approved':'review'):'waiting',summary:batch?JSON.parse(batch.summary):null,groups:db.prepare('SELECT * FROM student_groups WHERE class_id=? ORDER BY number').all(c.id).map(g=>({...g,members:db.prepare('SELECT u.id,u.name,u.username,u.gender,m.total,m.level FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=? ORDER BY u.username').all(g.id)}))};
+  return {...c,total:people.length,completed:people.filter(s=>s.completed).length,batchId:batch?.id,status:batch?(batch.approved_at?'approved':'review'):'waiting',summary:batch?JSON.parse(batch.summary):null,groups:db.prepare('SELECT * FROM student_groups WHERE class_id=? ORDER BY number').all(c.id).map(g=>({...g,members:membersOf(g)}))};
  }
  function approve(actor,classId,batchId){if(typeof classId!=='string'||!classId||typeof batchId!=='string'||!batchId)fail('请选择待审核的分组');scope(actor,classId);const batch=db.prepare('SELECT * FROM group_batches WHERE class_id=?').get(classId);if(!batch||batch.id!==batchId)fail('分组草案已改变，请刷新后重新审核');if(batch.approved_at)return;
   atomic(()=>{for(const g of db.prepare('SELECT id FROM student_groups WHERE class_id=?').all(classId)){let code;do{code=randomBytes(4).toString('hex').toUpperCase();}while(db.prepare('SELECT id FROM student_groups WHERE code=?').get(code));db.prepare('UPDATE student_groups SET code=? WHERE id=?').run(code,g.id);}db.prepare('UPDATE group_batches SET approved_at=?,approved_by=? WHERE class_id=?').run(new Date().toISOString(),actor.id,classId);});
@@ -73,14 +82,14 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
   if(!batch||batch.id!==batchId)fail('分组草案已改变，请刷新后重新编辑',409);
   if(batch.approved_at)fail('分组已确认，不能修改已发放的小组码对应成员');
   const people=roster(classId),byId=new Map(people.map(s=>[s.id,s]));
-  if(!Array.isArray(assignments)||assignments.length!==Math.ceil(people.length/2)||assignments.some(g=>!Array.isArray(g)||g.length<1||g.length>2))fail('每组须为两人，奇数人数仅保留一个单人组');
+  if(!Array.isArray(assignments)||assignments.length!==Math.ceil(people.length/2)||assignments.some(g=>!Array.isArray(g)||g.length<1||g.length>2))fail('每组须为两名学生；人数为奇数时，最后一名学生将与小科机器人组队');
   const ids=assignments.flat();if(ids.length!==people.length||new Set(ids).size!==people.length||ids.some(id=>!byId.has(id))||people.some(s=>!s.completed))fail('成员须包含本班全部已完成测验的学生，且不能重复');
   const summary=JSON.parse(batch.summary),level=s=>s.total<=summary.threshold?'low':'high';summary.counts={LL:0,HH:0,HL:0};summary.edited=true;
-  const planned=assignments.map(ids=>{const members=ids.map(id=>byId.get(id)),type=members.length===1?'single':level(members[0])===level(members[1])?(level(members[0])==='low'?'LL':'HH'):'HL';if(type!=='single')summary.counts[type]++;return {members,type};});
+  const planned=assignments.map(ids=>{const members=ids.map(id=>byId.get(id)),virtual=members.length===1,type=virtual?'VR':level(members[0])===level(members[1])?(level(members[0])==='low'?'LL':'HH'):'HL';if(!virtual)summary.counts[type]++;return {members,type,virtual};});
   atomic(()=>{
    invalidate(classId);
    db.prepare('INSERT INTO group_batches VALUES(?,?,?,NULL,NULL)').run(classId,randomUUID(),JSON.stringify(summary));
-   for(const [i,g] of planned.entries()){const id=randomUUID();db.prepare('INSERT INTO student_groups VALUES(?,?,?,?,NULL)').run(id,classId,i+1,g.type);for(const s of g.members)db.prepare('INSERT INTO group_members VALUES(?,?,?,?,0)').run(s.id,id,s.total,level(s));}
+   for(const [i,g] of planned.entries()){const id=randomUUID();db.prepare('INSERT INTO student_groups(id,class_id,number,type,code,virtual_member) VALUES(?,?,?,?,NULL,?)').run(id,classId,i+1,g.type,g.virtual?VIRTUAL_NAME:null);for(const s of g.members)db.prepare('INSERT INTO group_members VALUES(?,?,?,?,0)').run(s.id,id,s.total,level(s));}
   });
  }
  function resetQuota(actor,classId,lessonId){if(!classId)fail('请选择班级');scope(actor,classId);db.prepare('DELETE FROM knowledge_usage WHERE lesson_id=? AND group_id IN (SELECT id FROM student_groups WHERE class_id=?)').run(lessonId,classId);}

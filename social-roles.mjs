@@ -1,6 +1,6 @@
 export function roleGuidance(type,members,leaderId,challengerId){
  const leader=members.find(m=>m.id===leaderId).name,challenger=members.find(m=>m.id===challengerId).name;
- if(members.length===1)return `${leader}，你的角色分工老师已收到！📝你将兼任领航发言员和记录与质疑员。提出想法后，请记录依据，再问自己“有没有另一种可能？”`;
+ if(type==='VR')return `${leader}，你与${challenger}组成了人机小组。你的角色分工老师已收到！📝接下来由你担任领航发言员，负责开展实验并提出想法；${challenger}作为虚拟记录与质疑员，陪你完成本节课的探究。提出观点后，请记录依据，再问自己“有没有另一种可能？”、“这个答案合理吗？”。`;
  const intro=`${members.map(m=>m.name).join('、')}，你们的小组分工老师已收到！📝接下来请${leader}担任领航发言员，负责率先提出自己的想法，请${challenger}担任记录与质疑员，负责用笔记录和随后提问。`;
  if(type==='HH')return intro+'\n\n💡提示1：根据你们的摸底考试情况，老师发现你们俩的学习能力很强，这是很好的优势！老师建议，在你们小组合作完成科学探究实验中，最重要的是记录与质疑员不仅要记录，更要主动挑战领航发言人的观点——多提问“有没有另一种可能？”、“这个答案合理吗？”等。并且，建议你们在每个环节结束后，花1分钟检查一下：“我们是不是太快达成同意了？有没有遗漏什么关键信息？”\n\n💡提示2：老师建议，你们在科学探究过程中交换一次角色，让两个人都能体验领航发言和记录质疑的过程。这样能发挥你们俩的最大优势！';
  if(type==='HL'){

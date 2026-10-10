@@ -6,7 +6,7 @@ export function planGroups(students){
  for(let i=1;i<sorted.length;i++)if(sorted[i-1].total<sorted[i].total&&Math.abs(sorted.length-2*i)<Math.abs(sorted.length-2*split))split=i;
  const threshold=sorted[split-1].total;
  const level=s=>s.total<=threshold?'low':'high';
- const type=members=>members.length===1?'single':level(members[0])===level(members[1])?(level(members[0])==='low'?'LL':'HH'):'HL';
+ const type=members=>members.length===1?'VR':level(members[0])===level(members[1])?(level(members[0])==='low'?'LL':'HH'):'HL';
  function options(gender){
   const people=sorted.filter(s=>s.gender===gender),low=people.filter(s=>level(s)==='low'),high=people.filter(s=>level(s)==='high'),plans=[];
   const singles=people.length%2?[...(low.length?['low']:[]),...(high.length?['high']:[])]:[null];
@@ -30,5 +30,5 @@ export function planGroups(students){
    if(better(score,best?.score))best={pairs,counts,score};
   }
  }
- return {threshold,lowRange:[sorted[0].total,threshold],highRange:split<sorted.length?[sorted[split].total,sorted.at(-1).total]:null,counts:best.counts,groups:best.pairs.map(members=>({type:type(members),members:members.map(s=>({...s,level:level(s)}))}))};
+ return {threshold,lowRange:[sorted[0].total,threshold],highRange:split<sorted.length?[sorted[split].total,sorted.at(-1).total]:null,counts:best.counts,groups:best.pairs.map(members=>({type:type(members),virtual:members.length===1,members:members.map(s=>({...s,level:level(s)}))}))};
 }
