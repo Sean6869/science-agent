@@ -23,9 +23,10 @@ export async function setupRoles(api,bar){
  function render(){
   display.replaceChildren();if(!state.leaderId)return;
   const name=id=>state.members.find(m=>m.id===id)?.name||'';
+  const iconAction=(kind,label)=>{const action=node('button');action.type='button';action.className='school-link social-icon-action';action.setAttribute('aria-label',label);action.title=label;action.innerHTML=`<span class="ui-icon ui-icon-${kind}" aria-hidden="true"></span>`;return action;};
   display.append(node('span',`领航：${name(state.leaderId)} · 质疑：${name(state.challengerId)}`));
-  const advice=node('button','合作建议');advice.type='button';advice.className='school-link';advice.onclick=async()=>{state=await api('/api/groups/roles');render();const dialog=node('dialog'),form=node('div');dialog.className='social-role-dialog';dialog.append(form);document.body.append(dialog);dialog.addEventListener('cancel',e=>e.preventDefault());dialog.showModal();showGuidance(dialog,form);};display.append(advice);
-  if(state.members.length>1&&state.type!=='VR'){const swap=node('button','交换角色');swap.className='school-link';swap.type='button';swap.onclick=async()=>{swap.disabled=true;try{state=await api('/api/groups/roles',{swap:true,version:state.version});render();}catch(err){alert(err.message);swap.disabled=false;}};display.append(swap);}
+  const advice=iconAction('cooperation','合作建议');advice.onclick=async()=>{state=await api('/api/groups/roles');render();const dialog=node('dialog'),form=node('div');dialog.className='social-role-dialog';dialog.append(form);document.body.append(dialog);dialog.addEventListener('cancel',e=>e.preventDefault());dialog.showModal();showGuidance(dialog,form);};display.append(advice);
+  if(state.members.length>1&&state.type!=='VR'){const swap=iconAction('roles','交换角色');swap.onclick=async()=>{swap.disabled=true;try{state=await api('/api/groups/roles',{swap:true,version:state.version});render();}catch(err){alert(err.message);swap.disabled=false;}};display.append(swap);}
  }
  if(!state.leaderId)await new Promise(resolve=>{
   const dialog=node('dialog');dialog.className='social-role-dialog';const form=node('form');
