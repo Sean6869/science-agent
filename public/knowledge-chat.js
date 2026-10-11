@@ -12,7 +12,7 @@ export function createKnowledgeChat(){
   updateMessageList(list,()=>{list.replaceChildren();const shown=[...messages,...local];
    if(!shown.length){const welcome=document.createElement('p');welcome.className='knowledge-welcome';welcome.textContent='我是小科，可以帮你们理解实验中的科学概念。小组成员的提问和回答会显示在这里。';list.append(welcome);}
    for(const m of shown){const node=document.createElement('div');node.className=`msg ${m.role}`;if(m.senderName){const sender=document.createElement('small');sender.className='msg-sender';sender.textContent=m.senderName;node.append(sender);}node.append(document.createTextNode(m.text));if(m.retry){const retry=document.createElement('button');retry.type='button';retry.textContent='重试';retry.disabled=busy;retry.onclick=()=>request(m.retry);node.append(document.createElement('br'),retry);}list.append(node);}
-   if(busy||groupBusy){const pending=document.createElement('p');pending.className='knowledge-welcome';pending.textContent='小科正在解答小组的问题…';list.append(pending);}
+   if(busy||groupBusy){const pending=document.createElement('p');pending.className='knowledge-welcome ai-pending';pending.setAttribute('role','status');pending.textContent='小科正在评估你们的问题，请稍候…';list.append(pending);}
   },{forceBottom});
   send.disabled=busy||groupBusy;draft.disabled=busy||groupBusy;for(const button of promptList.querySelectorAll('button'))button.disabled=busy||groupBusy;
  }

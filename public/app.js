@@ -90,6 +90,8 @@ function renderMessages(forceBottom=false){
   for(const m of shown){const div=document.createElement('div');div.className=`msg ${m.role}`;if(m.senderName){const sender=document.createElement('small');sender.className='msg-sender';sender.textContent=m.senderName;div.append(sender);}if(m.role==='agent')renderFeedback(div,m.text);else div.append(document.createTextNode(m.text));
   if(m.retry){const b=document.createElement('button');b.textContent='重试反馈';b.onclick=()=>requestFeedback(m.retry);div.append(document.createElement('br'),b);}
   list.append(div);}
+  const pending=busy.has(state.stage)||sharedRows.some(row=>row.stage===state.stage&&row.status==='pending');
+  if(pending&&!shown.some(message=>message.pending)){const status=document.createElement('div');status.className='msg system ai-pending';status.setAttribute('role','status');status.textContent='小科正在评估你们的内容，请稍候…';list.append(status);}
  },{forceBottom});
 }
 function renderBrief(stage) {
@@ -117,7 +119,7 @@ function invalidate(id){for(const s of stages)if(s.id>id&&state.data[s.id].submi
 async function requestFeedback(turn){
  const id=turn.stage;
  if(busy.has(id))return;busy.add(id);if(id===state.stage)render();
- const epoch=state;state.data[id].messages=state.data[id].messages.filter(m=>m.retry?.id!==turn.id);const pending={role:'system',text:'小科正在对照量规阅读你们的产出…'};state.data[id].messages.push(pending);renderMessages();
+ const epoch=state;state.data[id].messages=state.data[id].messages.filter(m=>m.retry?.id!==turn.id);const pending={role:'system',text:'小科正在评估你们的内容，请稍候…',pending:true};state.data[id].messages.push(pending);renderMessages();
  try {
  const r=await apiFetch('/api/chat',{method:'POST',signal:AbortSignal.timeout(130000),headers:{'content-type':'application/json'},body:JSON.stringify(turn)});
  const p=await r.json();if(!r.ok)throw new Error(p.message||'服务请求失败');if(state!==epoch)return;
@@ -164,14 +166,14 @@ $('voice').onclick=()=>{
  narrator.stop();
  if(speech){speech.stop();return;}
  if(!Recognition){$('voiceState').textContent='当前浏览器不支持语音转写，请使用文字输入或支持语音识别的浏览器。';return;}
- const id=state.stage,epoch=state,base=state.data[id].draft;let transcript='';
+ const id=state.stage,epoch=state,base=state.data[id].draft;let transcript='',recognitionError=false,silenceTimer;
  const recognition=new Recognition();speech=recognition;recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;
- recognition.onstart=()=>{$('voice').classList.add('recording');$('voice').setAttribute('aria-label','停止录音');$('voice').title='停止录音';$('voiceState').textContent='正在转写。语音由浏览器识别服务处理，停止后请核对数字、单位与术语再提交。';};
- recognition.onresult=e=>{transcript=Array.from(e.results).map(r=>r[0].transcript).join('');if(state!==epoch)return;state.data[id].draft=(base+(base?'\n':'')+transcript).slice(0,2000);if(state.stage===id)$('draft').value=state.data[id].draft;save();};
- recognition.onerror=e=>{$('voiceState').textContent=`语音识别未完成（${e.error}），已有文字已保留，请编辑后提交。`;};
- const timer=setTimeout(()=>recognition.stop(),90000);
- recognition.onend=()=>{clearTimeout(timer);speech=null;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','语音输入');$('voice').title='语音输入';};
- try{recognition.start();}catch{speech=null;clearTimeout(timer);$('voiceState').textContent='无法启动语音识别，请使用文字输入。';}
+ const maxTimer=setTimeout(()=>recognition.stop(),90000),armSilence=()=>{clearTimeout(silenceTimer);silenceTimer=setTimeout(()=>recognition.stop(),3000)};
+ recognition.onstart=()=>{$('voice').classList.add('recording');$('voice').setAttribute('aria-label','停止录音');$('voice').title='停止录音';$('voiceState').textContent='正在识别…';armSilence();};
+ recognition.onresult=e=>{transcript=Array.from(e.results).map(r=>r[0].transcript).join('');if(state===epoch){state.data[id].draft=(base+(base?'\n':'')+transcript).slice(0,2000);if(state.stage===id)$('draft').value=state.data[id].draft;save();}armSilence();};
+ recognition.onerror=e=>{recognitionError=true;$('voiceState').textContent=`语音识别未完成（${e.error}），已有文字已保留，请编辑后提交。`;};
+ recognition.onend=()=>{clearTimeout(maxTimer);clearTimeout(silenceTimer);speech=null;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','语音输入');$('voice').title='语音输入';if(!recognitionError)$('voiceState').textContent=transcript?'识别完成，请检查文字。':'未识别到语音。';};
+ try{recognition.start();}catch{speech=null;clearTimeout(maxTimer);clearTimeout(silenceTimer);$('voiceState').textContent='无法启动语音识别，请使用文字输入。';}
 };
 render(true);
 createWorkspacePanels();
