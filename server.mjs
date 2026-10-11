@@ -140,7 +140,7 @@ export function createApp({store,synthesize}={}) {
    if(req.schoolUser.role==='student'&&store.groupHasPending(req.schoolUser.id,'knowledge',lessonId,null,turn.id))return json(res,423,{message:'请等待小组当前问题回答完成'});
    store.knowledgeQuota(req.schoolUser.id,lessonId,turn);
    const shared={...p,...turn,lessonId,history:req.schoolUser.role==='student'?store.groupPromptHistory(req.schoolUser.id,'knowledge',lessonId,null,8):p.history};
-   const result=await recorded(req,'knowledge',shared,async()=>{try{return await answerKnowledge(shared);}catch(error){console.error(`[knowledge] ${error?.name||'Error'}: ${error?.message||'unknown failure'}`);return fallbackKnowledge(shared.text);}});
+   const result=await recorded(req,'knowledge',shared,async()=>{try{return await answerKnowledge(shared);}catch(error){console.error(`[knowledge] ${error?.name||'Error'}: ${error?.message||'unknown failure'}`);return fallbackKnowledge(shared.text,p.lessonId?lessonId:undefined);}});
    return json(res,200,{...result,quota:store.knowledgeQuota(req.schoolUser.id,lessonId)});
   }
   if(url.pathname==='/api/chat' && req.method==='POST') {
