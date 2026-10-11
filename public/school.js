@@ -123,10 +123,11 @@ async function groupsPanel(panel){
  const {classes,lessons}=await api(scoped('/api/teacher/groups'));panel.replaceChildren();const download=e('a','导出小组码','school-button');download.href=scoped('/api/teacher/groups.xlsx');setExport(download);if(!classes.length)panel.append(message('暂无班级，请先导入学生名单。'));
  for(const c of classes){const card=e('section',undefined,'conversation-record');card.append(e('h2',c.name),message('已完成全部测验：'+c.completed+' / '+c.total+' 人'));
   if(c.status==='waiting'){card.append(message('全班完成测验后自动生成分组草案。'));panel.append(card);continue;}
-  const range=r=>r?r.join('–')+' 分':'无';card.append(message('三课总分：低分段 '+range(c.summary.lowRange)+'；高分段 '+range(c.summary.highRange)));
+  const range=r=>r?r.join('–')+' 分':'无';card.append(message('三课总分中位数：'+c.summary.median+' 分；低先验知识分段 '+range(c.summary.lowRange)+'；高先验知识分段 '+range(c.summary.highRange)));
   const counts=c.summary.counts;card.append(message('低低 '+counts.LL+' 组 · 高高 '+counts.HH+' 组 · 高低 '+counts.HL+' 组'));
   if(Math.max(...Object.values(counts))-Math.min(...Object.values(counts))>1)card.append(message(c.summary.edited?'当前方案的三类组数未能完全均衡。':'受性别人数或同分分布限制，三类组数未能完全均衡。'));
-  if(!c.summary.highRange)card.append(message('全班总分相同，无法按成绩区分高低。'));
+  if(!c.summary.highRange||String(c.summary.lowRange)===String(c.summary.highRange))card.append(message('全班总分相同或中位数两侧分数相同，平台已按规则均衡分配临界学生。'));
+  if(c.summary.tieCount)card.append(message('共有 '+c.summary.tieCount+' 名学生成绩等于中位数，已随机且均匀地分配到高、低先验知识层。'));
   if(c.groups.some(g=>g.type==='VR'))card.append(message('本班人数为奇数，多出的一名学生已与小科机器人组成二人小组。'));
   if(c.groups.some(g=>g.members.some(m=>m.gender==='未填写')))card.append(message('部分学生未填写性别，未推测其性别。'));
   card.append(table([['小组',g=>g.number],['类型',g=>({LL:'低低',HH:'高高',HL:'高低',VR:'人机组'})[g.type]],['成员',g=>g.members.map(m=>m.virtual?m.name+'（虚拟成员）':m.name+'（'+m.gender+'，'+m.total+'分）').join('、')],['小组码',g=>g.code||'待审核']],c.groups));

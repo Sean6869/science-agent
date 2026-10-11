@@ -11,7 +11,7 @@ test('roles belong to joined groups, reject invalid and stale edits and share sw
   for(const s of students)for(const q of quizzes)store.submit(s.id,q.id,Object.fromEntries(q.questions.map(x=>[x.id,x.answer])));
   let batch=store.listGroups(admin)[0];store.approveGroups(admin,batch.id,batch.batchId);batch=store.listGroups(admin)[0];
   for(const g of batch.groups)for(const m of g.members.filter(member=>!member.virtual))store.joinGroup(m.id,g.code);
-  const pair=batch.groups.find(g=>g.members.length===2),[a,b]=pair.members,robotGroup=batch.groups.find(g=>g.type==='VR'),solo=robotGroup.members[0];
+  const pair=batch.groups.find(g=>g.type!=='VR'),[a,b]=pair.members,robotGroup=batch.groups.find(g=>g.type==='VR'),solo=robotGroup.members.find(member=>!member.virtual);
   assert.throws(()=>store.groupRoles(a.id,{version:0,leaderId:a.id,challengerId:a.id}),/不同/);
   assert.throws(()=>store.groupRoles(a.id,{version:0,leaderId:a.id,challengerId:solo.id}),/不同/);
   const first=store.groupRoles(a.id,{version:0,leaderId:a.id,challengerId:b.id});assert.equal(first.version,1);assert.deepEqual(store.groupRoles(b.id),first);

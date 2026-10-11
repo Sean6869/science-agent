@@ -9,16 +9,16 @@ export async function setupRoles(api,bar){
  const roleAudio=version=>'/audio/roles.wav?'+new URLSearchParams({version,user:userId});
  function showGuidance(dialog,form,done=()=>{},preparedSource=null,releasePrepared=()=>{}){
   form.replaceChildren(heading('🤝 合作建议'));const text=node('p',state.guidance);text.className='social-guidance';form.append(text);
-  const replay=node('button','重新朗读');replay.type='button';replay.className='school-button';
+  const replay=node('button','播放合作建议');replay.type='button';replay.className='school-button';
   const status=node('span');status.className='school-note';status.setAttribute('role','status');
-  const narrator=createNarrator({onState:playing=>{status.textContent=playing?'正在播放':'';},onLoading:()=>{status.textContent='正在准备语音…';},onError:()=>{status.textContent='语音暂不可用，请点击重新朗读';}});
+  const narrator=createNarrator({onState:playing=>{status.textContent=playing?'正在播放':'';},onLoading:()=>{status.textContent='正在准备语音…';},onError:()=>{status.textContent='语音暂不可用，请点击播放合作建议';}});
   const source=roleAudio(state.version);let localSource=null;
   const playPrepared=async()=>{try{localSource=await preparedSource;if(localSource)narrator.play(localSource);else narrator.play(source);}catch{narrator.play(source);}};
   replay.onclick=()=>localSource?narrator.play(localSource):void playPrepared();
   const enter=node('button','开始探究');enter.type='button';enter.className='school-button primary';
   enter.onclick=()=>{narrator.stop();releasePrepared();dialog.close();dialog.remove();done();};
   window.addEventListener('pagehide',()=>{narrator.stop();releasePrepared();},{once:true});
-  form.append(replay,status,enter);void playPrepared();
+  form.append(replay,status,enter);
  }
  function render(){
   display.replaceChildren();if(!state.leaderId)return;

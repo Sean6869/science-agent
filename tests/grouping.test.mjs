@@ -9,20 +9,15 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 
-function merit(groups,threshold){let same=0;const c={LL:0,HH:0,HL:0};for(const members of groups){if(members.length<2)continue;const [a,b]=members;if(a.gender===b.gender)same++;c[a.total<=threshold?(b.total<=threshold?'LL':'HL'):(b.total<=threshold?'HL':'HH')]++;}const v=Object.values(c);return [-same,Math.max(...v)-Math.min(...v),v.reduce((a,n)=>a+n*n,0)];}
-function better(a,b){return !b||a.some((v,i)=>a.slice(0,i).every((x,j)=>x===b[j])&&v<b[i]);}
-function* pairings(people,allowSingle=people.length%2===1){if(!people.length){yield [];return;}const [first,...rest]=people;if(allowSingle)for(const tail of pairings(rest,false))yield [[first],...tail];for(let i=0;i<rest.length;i++)for(const tail of pairings(rest.filter((_,j)=>i!==j),allowSingle))yield [[first,rest[i]],...tail];}
-test('pairing maximizes same-gender pairs then balances types, compared against exhaustive small classes',()=>{
- for(let n=2;n<=9;n++)for(let male=0;male<=n;male++){
-  const people=Array.from({length:n},(_,i)=>({id:String(i),username:'s'+i,total:i*10,gender:i<male?'男':'女'})),plan=planGroups(people);let best;
-  for(const pairs of pairings(people)){const value=merit(pairs,plan.threshold);if(better(value,best))best=value;}
-  assert.deepEqual(merit(plan.groups.map(g=>g.members),plan.threshold),best,`n=${n}, boys=${male}`);assert.equal(new Set(plan.groups.flatMap(g=>g.members.map(m=>m.id))).size,n);
- }
+test('median split creates balanced paired group types and keeps same-gender preference',()=>{
+ const six=Array.from({length:6},(_,i)=>({id:String(i),username:'s'+i,total:30+i*30,gender:i%2?'女':'男'})),plan=planGroups(six,{random:()=>.3});
+ assert.equal(plan.median,105);assert.deepEqual(plan.counts,{LL:1,HH:1,HL:1});assert.deepEqual(plan.lowRange,[30,90]);assert.deepEqual(plan.highRange,[120,180]);
+ assert.equal(new Set(plan.groups.flatMap(g=>g.members.map(m=>m.id))).size,6);assert.ok(plan.groups.every(g=>g.members.length===2));
 });
-test('class-specific bands keep equal scores together and show unavoidable all-equal or odd cases',()=>{
- const six=Array.from({length:6},(_,i)=>({id:String(i),username:'s'+i,total:30+i*30,gender:'女'}));assert.deepEqual(planGroups(six).counts,{LL:1,HH:1,HL:1});assert.deepEqual(planGroups(six).lowRange,[30,90]);
- const same=planGroups(six.slice(0,5).map(s=>({...s,total:120})));assert.equal(same.highRange,null);assert.equal(same.groups.filter(g=>g.type==='VR').length,1);assert.equal(same.groups.find(g=>g.type==='VR').virtual,true);assert.equal(same.groups.filter(g=>g.type==='LL').length,2);
- const ties=planGroups(six.map((s,i)=>({...s,total:i<4?100:200})));const levels=ties.groups.flatMap(g=>g.members).filter(s=>s.total===100).map(s=>s.level);assert.equal(new Set(levels).size,1);
+test('median ties are distributed across strata and odd classes receive a virtual partner',()=>{
+ const same=planGroups(Array.from({length:5},(_,i)=>({id:String(i),username:'s'+i,total:120,gender:'女'})),{random:()=>.3});
+ assert.equal(same.median,120);assert.equal(same.tieCount,5);assert.equal(same.groups.filter(g=>g.type==='VR').length,1);assert.equal(same.groups.find(g=>g.type==='VR').virtual,true);assert.equal(new Set(same.groups.flatMap(g=>g.members.map(m=>m.id))).size,5);
+ const ties=planGroups(Array.from({length:6},(_,i)=>({id:String(i),username:'s'+i,total:i<4?100:200,gender:'男'})),{random:()=>.3});assert.equal(ties.median,100);assert.equal(ties.tieCount,4);assert.equal(ties.groups.flatMap(g=>g.members).filter(s=>s.total===100).length,4);
 });
 
 test('single-class teacher schema upgrades to multiple classes and approved memberships survive restart',async()=>{
