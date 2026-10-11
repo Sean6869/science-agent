@@ -32,7 +32,14 @@ function startIdleSession(){
 async function logout(){try{await api('/api/auth/logout',{});}finally{stopIdleSession();try{if(identity)localStorage.removeItem(activeKey(identity.id));sessionStorage.clear();}catch{}location.reload();}}
 function fullscreenControl(){const control=button('',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{}},'fullscreen-toggle');control.setAttribute('aria-label','进入全屏');control.title='进入全屏';const draw=()=>{const active=!!document.fullscreenElement;control.setAttribute('aria-label',active?'退出全屏':'进入全屏');control.title=active?'退出全屏':'进入全屏';control.innerHTML='<span class="ui-icon ui-icon-fullscreen" aria-hidden="true"></span>';};draw();document.addEventListener('fullscreenchange',draw);return control;}
 function logoutControl(){const control=button('',()=>logout().catch(err=>alert(err.message)),'logout-toggle');control.setAttribute('aria-label','退出登录');control.title='退出登录';control.innerHTML='<span class="ui-icon ui-icon-logout" aria-hidden="true"></span>';return control;}
-function accountBar(fullscreen=false){const bar=e('div',undefined,'account-bar');bar.append(...(fullscreen?[fullscreenControl()]:[]),e('span',roleLabel(identity.role)),fullscreen?logoutControl():button('退出登录',()=>logout().catch(err=>alert(err.message)),'school-link'));return bar;}
+function accountBar(fullscreen=false){
+ const bar=e('div',undefined,'account-bar');
+ if(!fullscreen){bar.append(e('span',roleLabel(identity.role)),button('退出登录',()=>logout().catch(err=>alert(err.message)),'school-link'));return bar;}
+ const left=e('div',undefined,'workspace-account-left');left.append(fullscreenControl(),logoutControl(),e('span',roleLabel(identity.role),'workspace-role-label'));
+ const group=e('span',undefined,'workspace-group-info');
+ const roles=e('div',undefined,'workspace-role-actions group-role-display');
+ bar.classList.add('workspace-account');bar.append(left,group,roles);bar.workspaceGroup=group;bar.workspaceRoles=roles;return bar;
+}
 function login(){
  screen.replaceChildren();const card=e('section',undefined,'login-card');card.append(header('欢迎来到科学实验室'));
  const form=e('form');field(form,'账号','username').autocomplete='username';const pass=field(form,'密码','password','password');pass.minLength=1;pass.autocomplete='current-password';
@@ -169,7 +176,7 @@ async function conversationsPanel(panel){
 async function startWorkspace(group){
  window.schoolGroup=group;window.schoolUser=identity;screen.hidden=true;
  document.body.classList.add('workspace-ready');document.querySelector('.app').hidden=false;
- const bar=accountBar(true);bar.classList.add('workspace-account');bar.append(e('span',`第 ${group.number} 组 · ${group.members.join('、')}`));document.querySelector('.panel-head').after(bar);
+ const bar=accountBar(true);bar.workspaceGroup.textContent=`第 ${group.number} 组 · ${group.members.join('、')}`;document.querySelector('.panel-head').after(bar);
  const checkPermission=async()=>{if(document.hidden)return;try{const current=await api('/api/me'),timersChanged=JSON.stringify(current.stageDurations)!==JSON.stringify(window.schoolStageDurations);if(!current.user||current.user.id!==identity.id||current.user.aiEnabled!==identity.aiEnabled||!current.ready||current.group?.status!=='joined'||current.group.id!==group.id||timersChanged)location.reload();}catch{}};
  window.addEventListener('focus',checkPermission);const permissionTimer=setInterval(checkPermission,15000);window.addEventListener('pagehide',()=>clearInterval(permissionTimer),{once:true});
  if(!identity.aiEnabled){

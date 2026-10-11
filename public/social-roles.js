@@ -4,7 +4,7 @@ export async function setupRoles(api,bar){
  const node=(tag,text)=>{const el=document.createElement(tag);if(text)el.textContent=text;return el;};
  const heading=title=>{const head=node('div');head.className='social-role-heading';const logo=node('img');logo.src='/assets/xiaoke-logo-transparent.png?v=20260917';logo.alt='小科';head.append(node('h2',title),logo);return head;};
  let state=await api('/api/groups/roles');
- const display=node('span');display.className='group-role-display';bar.append(display);
+ const display=bar.querySelector('.workspace-role-actions')||node('span');display.classList.add('group-role-display');if(!display.parentElement)bar.append(display);
 
  const roleAudio=version=>'/audio/roles.wav?'+new URLSearchParams({version,user:userId});
  function showGuidance(dialog,form,done=()=>{},preparedSource=null,releasePrepared=()=>{}){
@@ -24,9 +24,10 @@ export async function setupRoles(api,bar){
   display.replaceChildren();if(!state.leaderId)return;
   const name=id=>state.members.find(m=>m.id===id)?.name||'';
   const iconAction=(kind,label)=>{const action=node('button');action.type='button';action.className='school-link social-icon-action';action.setAttribute('aria-label',label);action.title=label;action.innerHTML=`<span class="ui-icon ui-icon-${kind}" aria-hidden="true"></span>`;return action;};
-  display.append(node('span',`领航：${name(state.leaderId)} · 质疑：${name(state.challengerId)}`));
-  const advice=iconAction('cooperation','合作建议');advice.onclick=async()=>{state=await api('/api/groups/roles');render();const dialog=node('dialog'),form=node('div');dialog.className='social-role-dialog';dialog.append(form);document.body.append(dialog);dialog.addEventListener('cancel',e=>e.preventDefault());dialog.showModal();showGuidance(dialog,form);};display.append(advice);
+  const advice=iconAction('cooperation','合作建议');advice.onclick=async()=>{state=await api('/api/groups/roles');render();const dialog=node('dialog'),form=node('div');dialog.className='social-role-dialog';dialog.append(form);document.body.append(dialog);dialog.addEventListener('cancel',e=>e.preventDefault());dialog.showModal();showGuidance(dialog,form);};
+  display.append(advice);
   if(state.members.length>1&&state.type!=='VR'){const swap=iconAction('roles','交换角色');swap.onclick=async()=>{swap.disabled=true;try{state=await api('/api/groups/roles',{swap:true,version:state.version});render();}catch(err){alert(err.message);swap.disabled=false;}};display.append(swap);}
+  display.append(node('span',`领航：${name(state.leaderId)} · 质疑：${name(state.challengerId)}`,'workspace-role-text'));
  }
  if(!state.leaderId)await new Promise(resolve=>{
   const dialog=node('dialog');dialog.className='social-role-dialog';const form=node('form');
