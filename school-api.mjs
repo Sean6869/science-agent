@@ -31,6 +31,11 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
   if(path==='/api/teacher/profile'&&req.method==='PUT'){try{if(session.user.role!=='teacher')throw Object.assign(new Error('仅教师可以编辑资料'),{status:403});json(res,200,{user:store.updateTeacherProfile(session.user.id,await body(req),session.user)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
   if(path==='/api/auth/activity'&&req.method==='POST'){store.touchSession(token(req));json(res,200,{ok:true});return true;}
   if(path==='/api/auth/logout'&&req.method==='POST'){store.logout(token(req));res.setHeader('Set-Cookie',cookie(req,'',true));json(res,200,{ok:true});return true;}
+  if(path==='/api/progress'&&req.method==='POST'){
+   if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}
+   const p=await body(req);if(!lessons.some(lesson=>lesson.id===p?.lessonId)||!Number.isInteger(p?.stage)){json(res,400,{message:'请选择有效课程和环节'});return true;}
+   try{json(res,200,{stage:store.updateStageProgress(session.user.id,p.lessonId,p.stage)});}catch(e){json(res,e.status||400,{message:e.message});}return true;
+  }
   if(path.startsWith('/api/admin/')){
    if(session.user.role!=='admin'){json(res,403,{message:'仅管理员可以访问'});return true;}
    if(/^\/api\/admin\/classes\/[^/]+$/.test(path)&&req.method==='DELETE'){store.deleteClass(path.split('/').at(-1),session.user);json(res,200,{ok:true});return true;}
@@ -57,6 +62,10 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
     if(target){if(target[1]==='conversations'&&!target[3])store.deleteConversation(target[2],actor);else if(target[1]==='students'){if(target[3])store.deleteScores(target[2],actor);else store.deleteStudent(target[2],actor);}else{json(res,404,{message:'接口不存在'});return true;}json(res,200,{ok:true});return true;}
    }
    if(path==='/api/teacher/groups'&&req.method==='GET'){json(res,200,{classes:store.listGroups(actor,classId),lessons});return true;}
+   if(path==='/api/teacher/progress'&&req.method==='GET'){
+    const lessonId=url.searchParams.get('lesson')||lessons[0]?.id;if(!lessons.some(lesson=>lesson.id===lessonId)){json(res,400,{message:'请选择有效课程'});return true;}
+    json(res,200,{lessonId,lessons:lessons.map(({id,title,number})=>({id,title,number})),rows:store.stageProgress(actor,classId,lessonId)});return true;
+   }
    if(path==='/api/teacher/groups'&&req.method==='PUT'){const p=await body(req);store.editGroups(actor,p?.classId,p?.batchId,p?.groups);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/groups/approve'&&req.method==='POST'){const p=await body(req);store.approveGroups(actor,p?.classId,p?.batchId);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/groups.xlsx'&&req.method==='GET'){

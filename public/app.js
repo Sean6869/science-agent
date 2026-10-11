@@ -147,7 +147,7 @@ function submit(e){
 }
 $('stages').replaceChildren();
 for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{
- if(speech)speech.stop();const now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;startTimer(state.timers[s.id],now);roleHint.enter(s.id);narrator.stop();void unlockAlarm();render(true);
+ if(speech)speech.stop();const now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;recordStageProgress(window.__scienceLesson?.id,s.id);startTimer(state.timers[s.id],now);roleHint.enter(s.id);narrator.stop();void unlockAlarm();render(true);
 };$('stages').append(b);}
 $('timerToggle').onclick=()=>{void unlockAlarm();const timer=state.timers[state.stage];timer.running?pauseTimer(timer):startTimer(timer);save();renderTimer();};
 $('timerReset').onclick=()=>{const timer=state.timers[state.stage];resetTimer(timer,timer.durationSeconds);save();renderTimer();};
@@ -178,6 +178,7 @@ $('voice').onclick=()=>{
 render(true);
 createWorkspacePanels();
 createKnowledgeChat();
-window.addEventListener('science:lesson-change',event=>{if(activeLessonId){pauseTimer(state.timers[state.stage]);save();}narrator.stop();activeLessonId=event.detail.id;state=loadLessonState(activeLessonId);sharedRows=[];sharedLoaded=false;renderAssessmentOptions();roleHint.enter(state.stage);render(true);void syncShared();});window.addEventListener('focus',()=>void syncShared());const sharedTimer=setInterval(()=>{if(!document.hidden)void syncShared();},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
+function recordStageProgress(lessonId,stage){if(!lessonId||!Number.isInteger(stage))return;void apiFetch('/api/progress',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lessonId,stage})}).catch(()=>{});}
+window.addEventListener('science:lesson-change',event=>{if(activeLessonId){pauseTimer(state.timers[state.stage]);save();}narrator.stop();activeLessonId=event.detail.id;state=loadLessonState(activeLessonId);recordStageProgress(activeLessonId,state.stage);sharedRows=[];sharedLoaded=false;renderAssessmentOptions();roleHint.enter(state.stage);render(true);void syncShared();});window.addEventListener('focus',()=>void syncShared());const sharedTimer=setInterval(()=>{if(!document.hidden)void syncShared();},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
 setInterval(()=>{const result=advanceTimer(state.timers[state.stage]);if(result.warning){ringAlarm();save();}if(result.finished){ringAlarm(true);save();}renderTimer();},250);
 createExperimentWorkspace();

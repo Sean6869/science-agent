@@ -44,8 +44,10 @@ export async function openSchoolStore(filename,bootstrap={}){
  CREATE TABLE IF NOT EXISTS scores(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),quiz_id TEXT NOT NULL,version INTEGER NOT NULL,score INTEGER NOT NULL,correct INTEGER NOT NULL,total INTEGER NOT NULL,answers TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(user_id,quiz_id,version));
  CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),turn_id TEXT NOT NULL,agent TEXT NOT NULL,lesson_id TEXT NOT NULL,stage INTEGER,user_text TEXT NOT NULL,reply TEXT,source TEXT,status TEXT NOT NULL,created_at TEXT NOT NULL,answered_at TEXT);
  CREATE INDEX IF NOT EXISTS conversation_user ON conversations(user_id,created_at);
- CREATE INDEX IF NOT EXISTS conversation_turn ON conversations(user_id,agent,turn_id);`);
+ CREATE INDEX IF NOT EXISTS conversation_turn ON conversations(user_id,agent,turn_id);
+ `);
  migrateSchool(db);
+ db.exec(`CREATE TABLE IF NOT EXISTS stage_progress(student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,stage INTEGER NOT NULL CHECK(stage BETWEEN 1 AND 6),updated_at TEXT NOT NULL,PRIMARY KEY(student_id,lesson_id));`);
  if(!db.prepare('PRAGMA table_info(classes)').all().some(c=>c.name==='stage_durations'))db.exec(`ALTER TABLE classes ADD COLUMN stage_durations TEXT NOT NULL DEFAULT '${JSON.stringify(DEFAULT_STAGE_DURATIONS)}'`);
  for(const column of [['ai_enabled','INTEGER NOT NULL DEFAULT 1'],['subject',"TEXT NOT NULL DEFAULT ''"],['school',"TEXT NOT NULL DEFAULT ''"]]){if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE users ADD COLUMN '+column[0]+' '+column[1]);}
  for(const column of [['kind','TEXT'],['complete','INTEGER']]){if(!db.prepare('PRAGMA table_info(conversations)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE conversations ADD COLUMN '+column[0]+' '+column[1]);}
@@ -88,6 +90,22 @@ export async function openSchoolStore(filename,bootstrap={}){
   classes(actor){const u=manager(actor);return db.prepare("SELECT c.id,c.name,c.stage_durations,u.name AS teacherName,u.username AS teacherUsername FROM classes c LEFT JOIN users u ON u.id=c.teacher_id WHERE (?='admin' OR c.teacher_id=?) ORDER BY c.name,c.created_at").all(u.role,u.id).map(classProfile);},
   setStageDurations(actor,classId,minutes){scope(actor,classId);if(!classId||!Array.isArray(minutes)||minutes.length!==6||minutes.some(n=>!Number.isInteger(n)||n<1||n>60))fail('六个环节的时长须为1–60分钟整数');const durations=minutes.map(n=>n*60);db.prepare('UPDATE classes SET stage_durations=? WHERE id=?').run(JSON.stringify(durations),classId);return durations;},
   stageDurations(userId){const u=getUser(userId);if(!u||u.role!=='student'||!u.class_id)return [...DEFAULT_STAGE_DURATIONS];const c=db.prepare('SELECT stage_durations FROM classes WHERE id=?').get(u.class_id);return stageDurations(c?.stage_durations);},
+  updateStageProgress(userId,lessonId,stage){
+   const u=getUser(userId);if(!u||u.role!=='student')fail('仅学生可以更新实验进度',403);
+   if(typeof lessonId!=='string'||!lessonId.trim()||!Number.isInteger(stage)||stage<1||stage>6)fail('实验进度无效');
+   const current=db.prepare('SELECT stage FROM stage_progress WHERE student_id=? AND lesson_id=?').get(userId,lessonId);
+   if(!current){db.prepare('INSERT INTO stage_progress VALUES(?,?,?,?)').run(userId,lessonId,stage,now());return stage;}
+   if(stage>current.stage)db.prepare('UPDATE stage_progress SET stage=?,updated_at=? WHERE student_id=? AND lesson_id=?').run(stage,now(),userId,lessonId);
+   return Math.max(current.stage,stage);
+  },
+  stageProgress(actor,classId='',lessonId=''){
+   if(typeof lessonId!=='string'||!lessonId.trim())fail('请选择课程');
+   return this.students(actor,classId).filter(student=>student.active).map(student=>{
+    const progress=db.prepare('SELECT stage,updated_at AS updatedAt FROM stage_progress WHERE student_id=? AND lesson_id=?').get(student.id,lessonId);
+    const group=db.prepare('SELECT g.id AS groupId,g.number AS groupNumber,g.type AS groupType FROM group_members m JOIN student_groups g ON g.id=m.group_id WHERE m.user_id=?').get(student.id);
+    return {...student,lastStage:progress?.stage||0,progressAt:progress?.updatedAt||null,groupId:group?.groupId||null,groupNumber:group?.groupNumber||null,groupType:group?.groupType||null};
+   });
+  },
   assignClass(classId,teacherId,actor){if(manager(actor).role!=='admin')fail('仅管理员可以分配班级',403);scope(actor,classId);if(!classId)fail('请选择班级');if(!teacherId){db.prepare('UPDATE classes SET teacher_id=NULL WHERE id=?').run(classId);return;}const t=getUser(teacherId);if(!t||t.role!=='teacher'||!t.active)fail('请选择启用的教师');db.prepare('UPDATE classes SET teacher_id=? WHERE id=?').run(t.id,classId);},
   students(actor,classId=''){return db.prepare("SELECT u.* FROM users u WHERE u.role='student' AND "+scopedWhere+" ORDER BY u.class_name,u.name,u.username").all(...scopeArgs(actor,classId)).map(profile);},
   setAiPermission(actor,classId,aiEnabled){if(!classId||typeof aiEnabled!=='boolean')fail('请选择班级和权限分组');scope(actor,classId);db.prepare("UPDATE users SET ai_enabled=? WHERE class_id=? AND role='student'").run(Number(aiEnabled),classId);},
