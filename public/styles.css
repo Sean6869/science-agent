@@ -48,6 +48,13 @@ body.workspace-ready .coach{min-height:0;overflow:hidden}
 .brand-logo{display:block;width:clamp(100px,11vw,145px);height:auto;max-height:58px;object-fit:contain;object-position:left center}
 .frame{flex:1;min-height:0;position:relative;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:var(--soft)}
 iframe{display:block;width:100%;height:100%;border:0}
+.angle-tool{position:absolute;z-index:4;top:10px;right:10px;display:flex;align-items:center;gap:6px;max-width:calc(100% - 20px);padding:6px 8px;border:1px solid #cbdaf1;border-radius:9px;background:#fff;box-shadow:0 4px 14px #1d47721f;color:var(--ink);font-size:12px}
+.angle-tool-button,.angle-tool-reset{height:28px;padding:4px 9px;border:1px solid #c5d6ef;border-radius:7px;background:#f3f7ff;color:var(--blue);font-size:12px;white-space:nowrap}
+.angle-tool-button.active{background:var(--blue);border-color:var(--blue);color:#fff}
+.angle-tool-readout{min-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#526985}
+.angle-tool-layer{position:absolute;z-index:3;inset:0;cursor:crosshair;background:#fff0;pointer-events:auto}
+.angle-tool-layer[hidden]{display:none}
+.angle-tool-canvas{display:block;width:100%;height:100%}
 #loading{position:absolute;inset:0;display:grid;place-items:center;padding:20px;background:var(--soft);color:var(--muted);pointer-events:none}
 #loading.done{display:none}
 .inquiry{padding:12px;min-height:calc(100dvh - 18px);display:grid;grid-template-rows:auto auto auto minmax(130px,1fr) auto auto;gap:10px}
@@ -59,7 +66,7 @@ body.workspace-ready .inquiry{height:100%;min-height:0;overflow:hidden}
 .stage.complete::after{background:#81a1df}
 .stage-number{display:grid;place-items:center;border:1px solid var(--blue);border-radius:50%;width:34px;height:34px;font-size:14px;background:white;color:var(--blue);font-weight:700}
 .stage.active .stage-number{background:var(--blue);border-color:var(--blue);color:white;box-shadow:0 0 0 5px #edf3ff}
-.stage.complete .stage-number{border-color:var(--blue);color:var(--blue);background:#edf3ff}
+.stage.complete .stage-number{border-color:var(--blue);color:var(--blue);background:white}
 .stage.active.complete .stage-number{background:var(--blue);color:white}
 .stage-label{white-space:pre;line-height:20px;font-size:clamp(11px,.8vw,14px);font-weight:600;text-align:center;height:40px}
 .stage.active .stage-label{color:var(--blue);font-weight:700}
@@ -80,14 +87,14 @@ body.workspace-ready .inquiry{height:100%;min-height:0;overflow:hidden}
 .brief{position:relative;background:var(--soft);border:1px solid #e4eaf4;border-radius:10px;padding:14px 52px 14px 14px;font-size:var(--body-size);line-height:var(--body-leading);overflow:visible}
 .brief-narrate{position:absolute;right:10px;top:10px;color:var(--blue);background:#fff;border:1px solid #cfdbef}
 .brief-narrate.playing{color:#fff;background:var(--blue);border-color:var(--blue);box-shadow:0 0 0 4px #dfe9ff}
-.brief-line{display:block;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;text-wrap:pretty;margin:0;line-height:var(--body-leading)}
+.brief-line{display:block;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;line-break:strict;text-wrap:balance;margin:0;line-height:var(--body-leading)}
 .brief-gap{height:.8lh;margin:0}
 .brief strong{font-weight:700;color:#192e50}
 .stage-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--muted);font-size:11px}
 .link{background:none;border:0;color:var(--muted);padding:0;white-space:nowrap;font-size:11px}
 .link:hover{color:var(--blue)}
 .messages{overflow:auto;min-height:130px;max-height:50vh;padding:8px 2px;scrollbar-width:thin}
-.msg{max-width:94%;width:fit-content;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;text-wrap:pretty;padding:10px 12px;margin-bottom:10px;border-radius:10px}
+.msg{max-width:94%;width:fit-content;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;line-break:strict;text-wrap:pretty;padding:10px 12px;margin-bottom:10px;border-radius:10px}
 .msg.user{background:#edf3ff;color:#244c90;margin-left:auto}
 .msg.agent{background:#f4f6f9}
 .msg.agent .feedback-label{font-weight:700;color:#192e50}
