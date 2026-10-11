@@ -87,14 +87,14 @@ body.workspace-ready .inquiry{height:100%;min-height:0;overflow:hidden}
 .brief{position:relative;background:var(--soft);border:1px solid #e4eaf4;border-radius:10px;padding:14px 52px 14px 14px;font-size:var(--body-size);line-height:var(--body-leading);overflow:visible}
 .brief-narrate{position:absolute;right:10px;top:10px;color:var(--blue);background:#fff;border:1px solid #cfdbef}
 .brief-narrate.playing{color:#fff;background:var(--blue);border-color:var(--blue);box-shadow:0 0 0 4px #dfe9ff}
-.brief-line{display:block;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;line-break:strict;text-wrap:balance;margin:0;line-height:var(--body-leading)}
+.brief-line{display:block;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;line-break:strict;text-wrap:normal;margin:0;line-height:var(--body-leading)}
 .brief-gap{height:.8lh;margin:0}
 .brief strong{font-weight:700;color:#192e50}
 .stage-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--muted);font-size:11px}
 .link{background:none;border:0;color:var(--muted);padding:0;white-space:nowrap;font-size:11px}
 .link:hover{color:var(--blue)}
 .messages{overflow:auto;min-height:130px;max-height:50vh;padding:8px 2px;scrollbar-width:thin}
-.msg{max-width:94%;width:fit-content;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;line-break:strict;text-wrap:pretty;padding:10px 12px;margin-bottom:10px;border-radius:10px}
+.msg{max-width:94%;width:fit-content;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;line-break:strict;text-wrap:normal;padding:10px 12px;margin-bottom:10px;border-radius:10px}
 .msg.user{background:#edf3ff;color:#244c90;margin-left:auto}
 .msg.agent{background:#f4f6f9}
 .msg.agent .feedback-label{font-weight:700;color:#192e50}
@@ -123,6 +123,11 @@ textarea:focus-visible{outline:none}
 @media(max-width:900px){
  .layout{grid-template-columns:1fr}.experiment{position:static;height:460px}.inquiry{min-height:700px}
  .stage-label{font-size:13px}.messages{max-height:350px}
+ body.workspace-ready .app{height:auto;min-height:100dvh;overflow:visible}
+ body.workspace-ready .layout{height:auto;min-height:0;overflow:visible}
+ body.workspace-ready .experiment{height:min(460px,60dvh);min-height:360px}
+ body.workspace-ready .coach{min-height:0;overflow:visible}
+ body.workspace-ready .inquiry{height:auto;min-height:700px;overflow:visible}
 }
 @media(max-width:480px){
  .app{padding:4px}.inquiry{padding:8px}.brief{padding:10px 48px 10px 10px;font-size:13px}
