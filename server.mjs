@@ -40,7 +40,7 @@ async function serveStatic(req,res,url){
  let info;try{info=await stat(path);}catch(error){if(['ENOENT','ENOTDIR'].includes(error.code))return json(res,404,{message:'文件不存在'});throw error;}
  if(!info.isFile())return json(res,404,{message:'文件不存在'});
  const type=extname(path),contentType=contentTypes[type]||'application/octet-stream',etag=`W/"${info.size}-${Math.trunc(info.mtimeMs)}"`;
- const cacheControl=type==='.png'?'public, max-age=31536000, immutable':type==='.mp4'?'public, max-age=0, must-revalidate':'no-cache';
+ const cacheControl=['.png','.mp4'].includes(type)?'public, max-age=31536000, immutable':'no-cache';
  if(!req.headers.range&&req.headers['if-none-match']===etag){res.writeHead(304,{etag,'cache-control':cacheControl});return res.end();}
  if(type==='.mp4'){
   let range;try{range=videoRange(req.headers.range,info.size);}catch(error){if(error.status===416)res.setHeader('Content-Range',`bytes */${info.size}`);throw error;}

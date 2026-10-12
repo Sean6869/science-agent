@@ -4,6 +4,10 @@ body:not(.workspace-ready)>.knowledge-pet,body:not(.workspace-ready)>.knowledge-
 #schoolScreen{max-width:1200px;margin:auto;padding:28px 20px;color:#233d60;font:16px/1.65 system-ui,"Microsoft YaHei",sans-serif}
 .school-card,.login-card{padding:32px;background:white;border:1px solid #dbe7f5;border-radius:22px;box-shadow:0 10px 35px #2749770b}
 .login-card{max-width:450px;margin:7vh auto}
+body.login-ready{height:100dvh;min-height:100vh;overflow:auto;position:relative;background:#edf4fb}
+body.login-ready::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background:url('/assets/login-background-20261012.png') center/cover no-repeat;opacity:.7843137255}
+body.login-ready #schoolScreen{position:relative;z-index:1;display:grid;place-items:center;width:100%;max-width:none;min-height:100dvh;box-sizing:border-box;padding:clamp(16px,4vw,48px)}
+body.login-ready .login-card{width:min(450px,100%);max-width:450px;box-sizing:border-box;margin:0;background:rgba(255,255,255,.96);box-shadow:0 20px 55px #21486f38}
 .school-heading{margin-bottom:26px}.school-heading img{width:140px;height:auto}.school-heading h1{font-size:25px;margin:16px 0 6px}.school-heading p,.school-note{color:#647a97}
 .school-field{display:flex;flex-direction:column;gap:7px;margin:12px 0;font-weight:600}
 .school-field input,#schoolScreen select{font:inherit;color:inherit;border:1px solid #c9d9ec;background:white;border-radius:10px;padding:10px 12px;min-width:0;max-width:100%;box-sizing:border-box;height:46px}
