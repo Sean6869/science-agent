@@ -1,5 +1,5 @@
 export function bilibiliUrl({bvid,page}){
- const params=new URLSearchParams({bvid,p:String(page),autoplay:'0',danmaku:'0',poster:'1'});
+ const params=new URLSearchParams({isOutside:'true',bvid,p:String(page),autoplay:'0',danmaku:'0',poster:'1'});
  return `https://player.bilibili.com/player.html?${params}`;
 }
 
