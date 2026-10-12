@@ -110,8 +110,8 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
     if(type==='scores'){columns=[...common,['测验','quizId'],['试卷版本','version'],['分数（满分100）','score'],['答对题数','correct'],['题目数','total'],['作答','answers'],['提交时间（UTC）','createdAt']];rows=store.allScores(actor,classId);}
     else if(type==='posttest'){columns=[...common,['完成三课','eligible'],['状态','status'],['预测答对题数','prediction'],['实际答对题数','correct'],['题目数','total'],['答题后信心（%）','confidence'],['题目顺序','questionOrder',60],['作答','answers',80],['开始时间（UTC）','startedAt'],['完成时间（UTC）','submittedAt']];rows=store.posttestReport(actor,classId).flatMap(item=>item.students.map(student=>({...student,eligible:student.eligible?'是':'否'})));}
     else{columns=[...common,['智能体','agent'],['课程','lessonId'],['环节','stage'],['学生内容','userText',50],['AI回答','reply',80],['回答来源','source'],['状态','status'],['提问时间（UTC）','createdAt'],['回复时间（UTC）','answeredAt']];rows=[];for(let offset=0;;offset+=500){const batch=store.conversations(url.searchParams.get('student')||'',500,offset,actor,classId);if(!batch.length)break;rows.push(...batch);}}
-    const sheetName=type==='scores'?'测验成绩':type==='posttest'?'课堂测试':'AI对话记录';const file=await workbookBuffer(columns,rows,sheetName);
-    res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':`attachment; filename="xiaoke-${type}.xlsx"`,'cache-control':'no-store'});res.end(file);
+    const sheetName=type==='scores'?'课前检验':type==='posttest'?'后测成绩':'AI对话记录',fileName=type==='scores'?'pretest':type==='posttest'?'posttest':'conversations';const file=await workbookBuffer(columns,rows,sheetName);
+    res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':`attachment; filename="xiaoke-${fileName}.xlsx"`,'cache-control':'no-store'});res.end(file);
     return true;
    }
   }
