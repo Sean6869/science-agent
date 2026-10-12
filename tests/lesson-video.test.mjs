@@ -1,10 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {bilibiliUrl} from '../public/lesson-video.js';
+import {codapanUrl} from '../public/lesson-video.js';
 
-test('Bilibili lesson player uses the selected part without tracking parameters',()=>{
- const url=new URL(bilibiliUrl({bvid:'BV1GQpR6iE44',page:3}));
- assert.equal(url.origin,'https://player.bilibili.com');
- assert.equal(url.pathname,'/player.html');
- assert.deepEqual(Object.fromEntries(url.searchParams),{isOutside:'true',bvid:'BV1GQpR6iE44',p:'3',autoplay:'1',danmaku:'0',poster:'1'});
+test('Codapan lesson player preserves embed layout and enables autoplay',()=>{
+ const url=new URL(codapanUrl('https://www.codapan.com/s/nquACrKoFNZJ?embed=1&layout=full'));
+ assert.equal(url.origin,'https://www.codapan.com');
+ assert.equal(url.pathname,'/s/nquACrKoFNZJ');
+ assert.deepEqual(Object.fromEntries(url.searchParams),{embed:'1',layout:'full',autoplay:'1'});
 });
