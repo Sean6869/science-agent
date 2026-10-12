@@ -9,6 +9,7 @@ import {createRoleHintButton,createRoleHintController} from './role-hints.js';
 import {createLessonVideo} from './lesson-video.js';
 import {apiFetch} from './school.js';
 import {updateMessageList} from './chat-scroll.js';
+import {formatFeedbackForDisplay} from './feedback-format.js';
 const KEY=`science-session-v4:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const LEGACY_KEY=`science-session-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const configuredDurations=()=>stages.map((_,index)=>{const seconds=Number(window.schoolStageDurations?.[index]);return Number.isInteger(seconds)&&seconds>=60&&seconds<=3600?seconds:DEFAULT_STAGE_SECONDS;});
@@ -81,6 +82,7 @@ async function syncShared(){
  }catch{}finally{sharedSyncing=false;}
 }
 function renderFeedback(div,text){
+ text=formatFeedbackForDisplay(text);
  const labels=['自我评价：','老师的评价：'];
  text.split('\n').forEach((line,index)=>{if(index)div.append(document.createTextNode('\n'));const label=labels.find(value=>line.startsWith(value));if(label){const strong=document.createElement('strong');strong.className='feedback-label';strong.textContent=label;div.append(strong,document.createTextNode(line.slice(label.length)));}else div.append(document.createTextNode(line));});
 }
