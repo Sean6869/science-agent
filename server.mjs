@@ -70,6 +70,7 @@ export async function defaultSchoolStore(){
 }
 export function createApp({store,synthesize}={}) {
  if(!store)throw new Error('createApp requires a school store');
+ const releaseVersion=cleanEnvValue(process.env.RAILWAY_GIT_COMMIT_SHA)||cleanEnvValue(process.env.RAILWAY_DEPLOYMENT_ID)||`process-${Date.now()}`;
  const speechAudio=synthesize||createSpeech({directory:resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR||resolve(root,'data'),'speech-audio')});
  const warming=new Set();
  function warmRoleSpeech(roles){
@@ -92,6 +93,7 @@ export function createApp({store,synthesize}={}) {
  try {
   const url = new URL(req.url,'http://localhost');
   if(url.pathname==='/health'&&req.method==='GET')return json(res,200,{ok:true});
+  if(url.pathname==='/api/version'&&req.method==='GET')return json(res,200,{version:releaseVersion});
   if(await schoolApi(req,res,url))return;
   if((url.pathname==='/audio/roles.wav'||url.pathname==='/audio/roles-preview.wav'||/^\/audio\/stages\/\d+\.wav$/.test(url.pathname))&&req.method==='GET'){
    if(!req.schoolUser||req.schoolUser.role!=='student')return json(res,403,{message:'请使用学生账号'});

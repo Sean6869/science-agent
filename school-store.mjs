@@ -116,7 +116,7 @@ export async function openSchoolStore(filename,bootstrap={}){
    const launch=u.class_id?db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(u.class_id):null,eligible=this.posttestEligible(userId);
    if(!launch)return {active:false,eligible,total:posttestBank.length,phase:'inactive'};
    const result=db.prepare('SELECT prediction,question_order AS questionOrder,answers,confidence,started_at AS startedAt,answered_at AS answeredAt,submitted_at AS submittedAt FROM posttest_results WHERE student_id=?').get(userId);
-   let phase=!eligible?'waiting':!result?'prediction':result.answers===null?'test':result.confidence===null?'confidence':'certificate';
+   let phase=!result?'prediction':result.answers===null?'test':result.confidence===null?'confidence':'certificate';
    const status={active:true,eligible,total:posttestBank.length,phase,launchKey:launch.startedAt,startedAt:result?.startedAt||null,submittedAt:result?.submittedAt||null};
    if(phase==='test'){const order=JSON.parse(result.questionOrder);status.questions=order.map(id=>publicPosttest.get(id)).filter(Boolean);}
    if(phase==='certificate')status.certificate={studentName:u.name,className:u.class_name,completedAt:result.submittedAt};
@@ -125,13 +125,12 @@ export async function openSchoolStore(filename,bootstrap={}){
   startPosttest(actor,classId){
    scope(actor,classId);if(!classId)fail('请选择班级');
    const students=this.students(actor,classId).filter(student=>student.active);if(!students.length)fail('班级中没有启用的学生账号');
-   const incomplete=students.filter(student=>!this.posttestEligible(student.id));if(incomplete.length)fail(`还有 ${incomplete.length} 名学生未完成三节课：${incomplete.slice(0,6).map(student=>student.name).join('、')}${incomplete.length>6?'等':''}`);
    const existing=db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(classId);if(existing)return existing;
    const startedAt=now();db.prepare('INSERT INTO posttest_launches VALUES(?,?,?)').run(classId,actor.id,startedAt);return {startedAt};
   },
   savePosttestPrediction(userId,prediction){
    const value=Number(prediction);if(!Number.isInteger(value)||value<0||value>30)fail('预测题数须为0–30的整数');
-   const status=this.posttestStatus(userId);if(!status.active)fail('教师尚未开启课堂测试',409);if(!status.eligible)fail('请先完成三节课',409);
+   const status=this.posttestStatus(userId);if(!status.active)fail('教师尚未开启课堂测试',409);
    if(db.prepare('SELECT student_id FROM posttest_results WHERE student_id=?').get(userId))return this.posttestStatus(userId);
    const order=posttestBank.map(question=>question.id).sort((a,b)=>createHash('sha256').update(`${userId}:${a}`).digest().compare(createHash('sha256').update(`${userId}:${b}`).digest()));
    db.prepare('INSERT INTO posttest_results(student_id,prediction,question_order,started_at) VALUES(?,?,?,?)').run(userId,value,JSON.stringify(order),now());return this.posttestStatus(userId);

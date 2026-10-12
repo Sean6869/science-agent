@@ -7,16 +7,15 @@ import {createApp} from '../server.mjs';
 
 const bootstrap={username:'posttest_admin',password:'Posttest-admin-password'};
 
-test('teacher launches one private randomized posttest after all lessons and students never receive their score',async()=>{
+test('teacher can launch the private randomized posttest at any time and students never receive their score',async()=>{
  const store=await openSchoolStore(':memory:',bootstrap);
  try{
   const teacher=await store.registerTeacher({name:'物理老师',username:'posttest_teacher',password:'Posttest-teacher-password'});
   const first=await store.addStudent({name:'学生甲',username:'posttest_a',password:'Posttest-student-password',gender:'男',className:'八年级一班'},teacher);
   const second=await store.addStudent({name:'学生乙',username:'posttest_b',password:'Posttest-student-password',gender:'女',className:'八年级一班'},teacher);
   const classId=store.classes(teacher)[0].id;
-  assert.throws(()=>store.startPosttest(teacher,classId),/未完成三节课/);
+  const launch=store.startPosttest(teacher,classId);assert.ok(launch.startedAt);assert.equal(store.posttestStatus(first.id).phase,'prediction');assert.equal(store.posttestStatus(first.id).eligible,false);
   for(const student of [first,second])for(const lesson of lessons)store.updateStageProgress(student.id,lesson.id,6);
-  const launch=store.startPosttest(teacher,classId);assert.ok(launch.startedAt);assert.equal(store.posttestStatus(first.id).phase,'prediction');
   const firstTest=store.savePosttestPrediction(first.id,18),secondTest=store.savePosttestPrediction(second.id,21);
   assert.equal(firstTest.questions.length,30);assert.equal(new Set(firstTest.questions.map(question=>question.id)).size,30);assert.doesNotMatch(JSON.stringify(firstTest),/"answer"/);
   assert.notDeepEqual(firstTest.questions.map(question=>question.id),secondTest.questions.map(question=>question.id));
