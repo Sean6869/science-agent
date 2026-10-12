@@ -25,6 +25,26 @@ test('knowledge response rejects missing sentences and multiple followups',()=>{
  assert.throws(()=>parseKnowledgeAnswer('{"sentences":["为什么？","你觉得呢？","解释。"]}'));
  assert.equal(parseKnowledgeAnswer('{"sentences":["解释一。","解释二。","你观察到什么？"]}').split('\n').length,3);
 });
+test('all three knowledge agents reject answers from another lesson',()=>{
+ const cases=[['bending-light','像距'],['geometric-optics-basics','折射角'],['energy-skate-park','焦距']];
+ for(const [lessonId,leak] of cases){
+  const messages=knowledgeMessages({lessonId,text:'请解释本课概念',history:[]});assert.match(messages[0].content,/当前唯一课程/);
+  assert.throws(()=>parseKnowledgeAnswer(JSON.stringify({sentences:[`这里提到${leak}。`,'这是第二句话。','这是第三句话。']}),lessonId),/course boundary/i);
+ }
+});
+test('knowledge agent retries a cross-course answer before returning it',async()=>{
+ let calls=0;
+ const answer=await answerKnowledge({lessonId:'bending-light',text:'怎样设计本课实验？',history:[]},{env:{DEEPSEEK_API_KEY:'test'},fetchImpl:async()=>{
+  calls++;
+  const sentences=calls===1
+   ? ['可以记录像距。','再比较图像大小。','你准备怎样测量？']
+   : ['可以依次改变入射角。','每次记录对应的折射角。','你准备保持哪些条件不变？'];
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({sentences})}}]});
+ }});
+ assert.equal(calls,2);
+ assert.match(answer.content,/入射角/);
+ assert.doesNotMatch(answer.content,/像距/);
+});
 test('knowledge answers do not carry metacognitive attempt counters',async()=>{
  const result=await answerKnowledge({text:'什么是虚像？',history:[]},{env:{DEEPSEEK_API_KEY:'test'},fetchImpl:async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({sentences:['虚像是光线反向延长线的会聚位置形成的像。','它不能用光屏承接。','眼睛接收光线后仍能看到虚像。']})}}]})});
  assert.equal(result.agent,'knowledge');assert.equal('remainingAttempts' in result,false);
