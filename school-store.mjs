@@ -7,11 +7,14 @@ import {pinyin} from 'pinyin-pro';
 import {createGroupStore} from './school-groups.mjs';
 import {credentialVault,migrateSchool} from './school-credentials.mjs';
 import {isSelfAssessmentText} from './public/turn-kind.js';
+import {lessons} from './lessons.mjs';
 const scrypt=promisify(scryptCallback),now=()=>new Date().toISOString();
 export const SESSION_IDLE_MS=30*60*1000;
 export const DEFAULT_STAGE_DURATIONS=Object.freeze([300,300,300,300,300,300]);
 export const quizzes=JSON.parse(readFileSync(new URL('./quizzes.json',import.meta.url),'utf8'));
 export const publicQuizzes=quizzes.map(q=>({...q,questions:q.questions.map(({answer,...question})=>question)}));
+const posttestBank=quizzes.flatMap(quiz=>quiz.questions.map(question=>({...question,id:`${quiz.id}:${question.id}`,sourceQuizId:quiz.id})));
+const publicPosttest=new Map(posttestBank.map(({answer,...question})=>[question.id,question]));
 const hashToken=t=>createHash('sha256').update(t).digest('hex');
 export async function passwordHash(password){const salt=randomBytes(16).toString('hex');return `${salt}:${Buffer.from(await scrypt(password,salt,64)).toString('hex')}`;}
 async function matches(password,stored){const [salt,key]=stored.split(':');return timingSafeEqual(Buffer.from(await scrypt(password,salt,64)),Buffer.from(key,'hex'));}
@@ -48,6 +51,11 @@ export async function openSchoolStore(filename,bootstrap={}){
  `);
  migrateSchool(db);
  db.exec(`CREATE TABLE IF NOT EXISTS stage_progress(student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,stage INTEGER NOT NULL CHECK(stage BETWEEN 1 AND 6),updated_at TEXT NOT NULL,PRIMARY KEY(student_id,lesson_id));`);
+ db.exec(`CREATE TABLE IF NOT EXISTS posttest_launches(class_id TEXT PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE,started_by TEXT NOT NULL,started_at TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS posttest_results(student_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,prediction INTEGER NOT NULL CHECK(prediction BETWEEN 0 AND 30),question_order TEXT NOT NULL,answers TEXT,correct INTEGER,total INTEGER,confidence INTEGER CHECK(confidence BETWEEN 0 AND 100),started_at TEXT NOT NULL,answered_at TEXT,submitted_at TEXT);`);
+ db.exec(`CREATE TABLE IF NOT EXISTS class_broadcasts(id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,sender_id TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS broadcast_reads(broadcast_id TEXT NOT NULL REFERENCES class_broadcasts(id) ON DELETE CASCADE,student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,read_at TEXT NOT NULL,PRIMARY KEY(broadcast_id,student_id));
+ CREATE INDEX IF NOT EXISTS broadcast_class_time ON class_broadcasts(class_id,created_at);`);
  if(!db.prepare('PRAGMA table_info(classes)').all().some(c=>c.name==='stage_durations'))db.exec(`ALTER TABLE classes ADD COLUMN stage_durations TEXT NOT NULL DEFAULT '${JSON.stringify(DEFAULT_STAGE_DURATIONS)}'`);
  for(const column of [['ai_enabled','INTEGER NOT NULL DEFAULT 1'],['subject',"TEXT NOT NULL DEFAULT ''"],['school',"TEXT NOT NULL DEFAULT ''"]]){if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE users ADD COLUMN '+column[0]+' '+column[1]);}
  for(const column of [['kind','TEXT'],['complete','INTEGER']]){if(!db.prepare('PRAGMA table_info(conversations)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE conversations ADD COLUMN '+column[0]+' '+column[1]);}
@@ -98,6 +106,56 @@ export async function openSchoolStore(filename,bootstrap={}){
    if(stage>current.stage)db.prepare('UPDATE stage_progress SET stage=?,updated_at=? WHERE student_id=? AND lesson_id=?').run(stage,now(),userId,lessonId);
    return Math.max(current.stage,stage);
   },
+  posttestEligible(userId){
+   const u=getUser(userId);if(!u||u.role!=='student')return false;
+   const completed=new Set(db.prepare('SELECT lesson_id FROM stage_progress WHERE student_id=? AND stage=6').all(userId).map(row=>row.lesson_id));
+   return lessons.every(lesson=>completed.has(lesson.id));
+  },
+  posttestStatus(userId){
+   const u=getUser(userId);if(!u||u.role!=='student')fail('请使用学生账号',403);
+   const launch=u.class_id?db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(u.class_id):null,eligible=this.posttestEligible(userId);
+   if(!launch)return {active:false,eligible,total:posttestBank.length,phase:'inactive'};
+   const result=db.prepare('SELECT prediction,question_order AS questionOrder,answers,confidence,started_at AS startedAt,answered_at AS answeredAt,submitted_at AS submittedAt FROM posttest_results WHERE student_id=?').get(userId);
+   let phase=!eligible?'waiting':!result?'prediction':result.answers===null?'test':result.confidence===null?'confidence':'certificate';
+   const status={active:true,eligible,total:posttestBank.length,phase,launchKey:launch.startedAt,startedAt:result?.startedAt||null,submittedAt:result?.submittedAt||null};
+   if(phase==='test'){const order=JSON.parse(result.questionOrder);status.questions=order.map(id=>publicPosttest.get(id)).filter(Boolean);}
+   if(phase==='certificate')status.certificate={studentName:u.name,className:u.class_name,completedAt:result.submittedAt};
+   return status;
+  },
+  startPosttest(actor,classId){
+   scope(actor,classId);if(!classId)fail('请选择班级');
+   const students=this.students(actor,classId).filter(student=>student.active);if(!students.length)fail('班级中没有启用的学生账号');
+   const incomplete=students.filter(student=>!this.posttestEligible(student.id));if(incomplete.length)fail(`还有 ${incomplete.length} 名学生未完成三节课：${incomplete.slice(0,6).map(student=>student.name).join('、')}${incomplete.length>6?'等':''}`);
+   const existing=db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(classId);if(existing)return existing;
+   const startedAt=now();db.prepare('INSERT INTO posttest_launches VALUES(?,?,?)').run(classId,actor.id,startedAt);return {startedAt};
+  },
+  savePosttestPrediction(userId,prediction){
+   const value=Number(prediction);if(!Number.isInteger(value)||value<0||value>30)fail('预测题数须为0–30的整数');
+   const status=this.posttestStatus(userId);if(!status.active)fail('教师尚未开启课堂测试',409);if(!status.eligible)fail('请先完成三节课',409);
+   if(db.prepare('SELECT student_id FROM posttest_results WHERE student_id=?').get(userId))return this.posttestStatus(userId);
+   const order=posttestBank.map(question=>question.id).sort((a,b)=>createHash('sha256').update(`${userId}:${a}`).digest().compare(createHash('sha256').update(`${userId}:${b}`).digest()));
+   db.prepare('INSERT INTO posttest_results(student_id,prediction,question_order,started_at) VALUES(?,?,?,?)').run(userId,value,JSON.stringify(order),now());return this.posttestStatus(userId);
+  },
+  savePosttestAnswers(userId,answers){
+   const row=db.prepare('SELECT question_order AS questionOrder,answers FROM posttest_results WHERE student_id=?').get(userId);if(!row)fail('请先完成答题数量预测',409);if(row.answers!==null)return this.posttestStatus(userId);
+   const order=JSON.parse(row.questionOrder);if(!answers||Array.isArray(answers)||Object.keys(answers).length!==order.length||order.some(id=>!posttestBank.find(question=>question.id===id)?.options.some(option=>option.id===answers[id])))fail('请完成全部题目，不会的题目可选“我不知道”');
+   const correct=posttestBank.filter(question=>answers[question.id]===question.answer).length;db.prepare('UPDATE posttest_results SET answers=?,correct=?,total=?,answered_at=? WHERE student_id=?').run(JSON.stringify(answers),correct,posttestBank.length,now(),userId);return this.posttestStatus(userId);
+  },
+  savePosttestConfidence(userId,confidence){
+   const value=Number(confidence),row=db.prepare('SELECT answers,confidence FROM posttest_results WHERE student_id=?').get(userId);if(!row?.answers)fail('请先完成课堂测试',409);if(!Number.isInteger(value)||value<0||value>100)fail('信心值须为0%–100%的整数');
+   if(row.confidence===null)db.prepare('UPDATE posttest_results SET confidence=?,submitted_at=? WHERE student_id=?').run(value,now(),userId);return this.posttestStatus(userId);
+  },
+  posttestReport(actor,classId=''){
+   const classes=this.classes(actor).filter(item=>!classId||item.id===classId);if(classId)scope(actor,classId);
+   return classes.map(classroom=>{const launch=db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(classroom.id);const students=this.students(actor,classroom.id).filter(student=>student.active).map(student=>{const result=db.prepare('SELECT prediction,correct,total,confidence,question_order AS questionOrder,answers,started_at AS startedAt,answered_at AS answeredAt,submitted_at AS submittedAt FROM posttest_results WHERE student_id=?').get(student.id);return {...student,eligible:this.posttestEligible(student.id),status:result?.submittedAt?'已完成':result?.answeredAt?'待填写信心值':result?'答题中':launch?'等待进入':'未开启',...result};});return {...classroom,active:!!launch,startedAt:launch?.startedAt||null,ready:students.length>0&&students.every(student=>student.eligible),students};});
+  },
+  sendBroadcast(actor,classId,message){
+   scope(actor,classId);const text=String(message||'').trim();if(!classId)fail('请选择班级');if(!text)fail('请输入广播内容');if(text.length>1000)fail('广播内容不能超过1000字');const item={id:randomUUID(),classId,message:text,createdAt:now()};db.prepare('INSERT INTO class_broadcasts VALUES(?,?,?,?,?)').run(item.id,classId,actor.id,text,item.createdAt);return item;
+  },
+  broadcasts(actor,classId=''){scope(actor,classId);return db.prepare(`SELECT b.id,b.class_id AS classId,c.name AS className,u.name AS senderName,b.message,b.created_at AS createdAt,(SELECT COUNT(*) FROM broadcast_reads r WHERE r.broadcast_id=b.id) AS readCount,(SELECT COUNT(*) FROM users s WHERE s.class_id=b.class_id AND s.role='student' AND s.active=1) AS studentCount FROM class_broadcasts b JOIN classes c ON c.id=b.class_id LEFT JOIN users u ON u.id=b.sender_id WHERE (?='' OR b.class_id IN (SELECT id FROM classes WHERE teacher_id=?)) AND (?='' OR b.class_id=?) ORDER BY b.created_at DESC LIMIT 100`).all(...scopeArgs(actor,classId));
+  },
+  nextBroadcast(userId){const u=getUser(userId);if(!u||u.role!=='student')fail('请使用学生账号',403);return db.prepare(`SELECT b.id,b.message,b.created_at AS createdAt FROM class_broadcasts b WHERE b.class_id=? AND NOT EXISTS(SELECT 1 FROM broadcast_reads r WHERE r.broadcast_id=b.id AND r.student_id=?) ORDER BY b.created_at LIMIT 1`).get(u.class_id,userId)||null;},
+  readBroadcast(userId,broadcastId){const u=getUser(userId),item=db.prepare('SELECT id FROM class_broadcasts WHERE id=? AND class_id=?').get(broadcastId,u?.class_id);if(!u||u.role!=='student'||!item)fail('广播不存在或无权访问',404);db.prepare('INSERT OR IGNORE INTO broadcast_reads VALUES(?,?,?)').run(item.id,userId,now());},
   stageProgress(actor,classId='',lessonId=''){
    if(typeof lessonId!=='string'||!lessonId.trim())fail('请选择课程');
    return this.students(actor,classId).filter(student=>student.active).map(student=>{

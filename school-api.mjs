@@ -49,6 +49,16 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
    if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号作答'});return true;}
    const p=await body(req);try{store.submit(session.user.id,p?.quizId,p?.answers);json(res,200,{saved:true,completed:store.completed(session.user.id),ready:store.ready(session.user.id)});}catch(e){json(res,400,{message:e.message});}return true;
   }
+  if(path==='/api/posttest'&&req.method==='GET'){
+   if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}
+   try{json(res,200,store.posttestStatus(session.user.id));}catch(e){json(res,e.status||400,{message:e.message});}return true;
+  }
+  if(path.startsWith('/api/posttest/')&&req.method==='POST'){
+   if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}
+   const p=await body(req);try{const result=path==='/api/posttest/prediction'?store.savePosttestPrediction(session.user.id,p?.prediction):path==='/api/posttest/answers'?store.savePosttestAnswers(session.user.id,p?.answers):path==='/api/posttest/confidence'?store.savePosttestConfidence(session.user.id,p?.confidence):null;if(!result){json(res,404,{message:'接口不存在'});return true;}json(res,200,result);}catch(e){json(res,e.status||400,{message:e.message});}return true;
+  }
+  if(path==='/api/broadcasts/latest'&&req.method==='GET'){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}json(res,200,{broadcast:store.nextBroadcast(session.user.id)});return true;}
+  if(/^\/api\/broadcasts\/[^/]+\/read$/.test(path)&&req.method==='POST'){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}try{store.readBroadcast(session.user.id,path.split('/')[3]);json(res,200,{ok:true});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
   if(path==='/api/groups/roles'&&['GET','POST'].includes(req.method)){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}const change=req.method==='POST'?await body(req):undefined;if(req.method==='POST'&&(!change||typeof change!=='object'||Array.isArray(change))){json(res,400,{message:'请提交有效的角色分工'});return true;}const roles=store.groupRoles(session.user.id,change);onRoles(roles);json(res,200,roles);return true;}
   if(path==='/api/groups/join'&&req.method==='POST'){if(session.user.role!=='student'){json(res,403,{message:'请使用学生账号'});return true;}const p=await body(req),group=store.joinGroup(session.user.id,p?.code);onRoles(store.groupRoles(session.user.id));json(res,200,{group});return true;}
   if(path.startsWith('/api/teacher/')){
@@ -66,6 +76,10 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
     const lessonId=url.searchParams.get('lesson')||lessons[0]?.id;if(!lessons.some(lesson=>lesson.id===lessonId)){json(res,400,{message:'请选择有效课程'});return true;}
     json(res,200,{lessonId,lessons:lessons.map(({id,title,number})=>({id,title,number})),rows:store.stageProgress(actor,classId,lessonId)});return true;
    }
+   if(path==='/api/teacher/posttest'&&req.method==='GET'){json(res,200,{classes:store.posttestReport(actor,classId)});return true;}
+   if(path==='/api/teacher/posttest/start'&&req.method==='POST'){try{const p=await body(req);json(res,200,{launch:store.startPosttest(actor,p?.classId)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
+   if(path==='/api/teacher/broadcasts'&&req.method==='GET'){json(res,200,{broadcasts:store.broadcasts(actor,classId)});return true;}
+   if(path==='/api/teacher/broadcasts'&&req.method==='POST'){try{const p=await body(req);json(res,201,{broadcast:store.sendBroadcast(actor,p?.classId,p?.message)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
    if(path==='/api/teacher/groups'&&req.method==='PUT'){const p=await body(req);store.editGroups(actor,p?.classId,p?.batchId,p?.groups);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/groups/approve'&&req.method==='POST'){const p=await body(req);store.approveGroups(actor,p?.classId,p?.batchId);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/groups.xlsx'&&req.method==='GET'){
@@ -88,14 +102,15 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
    if(path==='/api/teacher/scores'&&req.method==='GET'){json(res,200,{scores:store.allScores(actor,classId),quizzes:publicQuizzes.map(({id,title,version})=>({id,title,version}))});return true;}
    if(path==='/api/teacher/conversations'&&req.method==='GET'){const page=Math.max(0,Math.min(100000,Math.floor(Number(url.searchParams.get('page')))||0));json(res,200,{conversations:store.conversations(url.searchParams.get('student')||'',100,page*100,actor,classId),page});return true;}
    if(path==='/api/teacher/export'&&req.method==='GET'){
-    const type=url.searchParams.get('type');if(!['scores','conversations'].includes(type)){json(res,400,{message:'请选择导出内容'});return true;}
+    const type=url.searchParams.get('type');if(!['scores','conversations','posttest'].includes(type)){json(res,400,{message:'请选择导出内容'});return true;}
     const common=[['姓名','name'],['性别','gender'],['班级','className'],['账号','username']];
     // Check scope before sending download headers, including guessed student IDs.
     store.students(actor,classId);if(type==='conversations')store.conversations(url.searchParams.get('student')||'',1,0,actor,classId);
     let columns,rows;
     if(type==='scores'){columns=[...common,['测验','quizId'],['试卷版本','version'],['分数（满分100）','score'],['答对题数','correct'],['题目数','total'],['作答','answers'],['提交时间（UTC）','createdAt']];rows=store.allScores(actor,classId);}
+    else if(type==='posttest'){columns=[...common,['完成三课','eligible'],['状态','status'],['预测答对题数','prediction'],['实际答对题数','correct'],['题目数','total'],['答题后信心（%）','confidence'],['题目顺序','questionOrder',60],['作答','answers',80],['开始时间（UTC）','startedAt'],['完成时间（UTC）','submittedAt']];rows=store.posttestReport(actor,classId).flatMap(item=>item.students.map(student=>({...student,eligible:student.eligible?'是':'否'})));}
     else{columns=[...common,['智能体','agent'],['课程','lessonId'],['环节','stage'],['学生内容','userText',50],['AI回答','reply',80],['回答来源','source'],['状态','status'],['提问时间（UTC）','createdAt'],['回复时间（UTC）','answeredAt']];rows=[];for(let offset=0;;offset+=500){const batch=store.conversations(url.searchParams.get('student')||'',500,offset,actor,classId);if(!batch.length)break;rows.push(...batch);}}
-    const file=await workbookBuffer(columns,rows,type==='scores'?'测验成绩':'AI对话记录');
+    const sheetName=type==='scores'?'测验成绩':type==='posttest'?'课堂测试':'AI对话记录';const file=await workbookBuffer(columns,rows,sheetName);
     res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':`attachment; filename="xiaoke-${type}.xlsx"`,'cache-control':'no-store'});res.end(file);
     return true;
    }
