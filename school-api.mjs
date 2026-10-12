@@ -64,6 +64,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
   if(path.startsWith('/api/teacher/')){
    if(!['admin','teacher'].includes(session.user.role)){json(res,403,{message:'仅教师或管理员可以访问'});return true;}
    const actor=session.user,classId=url.searchParams.get('class')||'';
+   if(actor.role==='teacher'&&req.method==='GET'&&path!=='/api/teacher/classes'&&!classId){json(res,400,{message:'请选择一个班级'});return true;}
    if(path==='/api/teacher/timers'&&req.method==='PUT'){const p=await body(req);json(res,200,{stageDurations:store.setStageDurations(actor,p?.classId,p?.minutes)});return true;}
    if(path==='/api/teacher/ai-permissions'&&req.method==='PUT'){const p=await body(req);store.setAiPermission(actor,p?.classId,p?.aiEnabled);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/knowledge/reset'&&req.method==='POST'){const p=await body(req);if(!lessons.some(l=>l.id===p?.lessonId)){json(res,400,{message:'请选择有效课程'});return true;}store.resetKnowledgeQuota(actor,p.classId,p.lessonId);json(res,200,{ok:true});return true;}
@@ -91,7 +92,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
     try{const p=await body(req,1500000);const parsed=await parseStudentsWorkbook(p?.data);json(res,200,await store.importStudents(parsed.rows,parsed.fingerprint,actor,p?.aiEnabled??true));}catch(e){json(res,e.status||400,{message:e.message});}return true;
    }
    if(path==='/api/teacher/accounts.xlsx'&&req.method==='GET'){
-    const rows=store.studentCredentials(actor,classId).map(s=>({...s,permissionGroup:s.aiEnabled?'动态组':'静态组'}));const file=await workbookBuffer([['姓名','name'],['性别','gender',10],['年龄','age',10],['班级','className'],['账号','username',30],['密码','password',20],['权限分组','permissionGroup']],rows);
+    const rows=store.studentCredentials(actor,classId).map(s=>({...s,permissionGroup:s.aiEnabled?'动态组':'静态组'}));const file=await workbookBuffer([['姓名','name'],['性别','gender',10],['班级','className'],['账号','username',30],['密码','password',20],['权限分组','permissionGroup']],rows);
     res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':'attachment; filename="student-accounts.xlsx"','cache-control':'no-store'});res.end(file);return true;
    }
    if(path==='/api/teacher/students'){
@@ -107,10 +108,10 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{}}){
     // Check scope before sending download headers, including guessed student IDs.
     store.students(actor,classId);if(type==='conversations')store.conversations(url.searchParams.get('student')||'',1,0,actor,classId);
     let columns,rows;
-    if(type==='scores'){columns=[['姓名','name'],['性别','gender'],['班级','className'],['第一课答对题数','lesson1'],['第二课答对题数','lesson2'],['第三课答对题数','lesson3']];const scores=store.allScores(actor,classId);rows=store.students(actor,classId).map(student=>{const correct=quiz=>{const result=scores.find(row=>row.studentId===student.id&&row.quizId===quiz.id&&row.version===quiz.version);return result?`${result.correct} / ${result.total}`:'未完成';};return {...student,lesson1:correct(publicQuizzes[0]),lesson2:correct(publicQuizzes[1]),lesson3:correct(publicQuizzes[2])};});}
+    if(type==='scores'){columns=[['姓名','name'],['性别','gender'],['班级','className'],['第一课答对题数','lesson1'],['第二课答对题数','lesson2'],['第三课答对题数','lesson3'],['提交时间','submittedAt']];const scores=store.allScores(actor,classId);rows=store.students(actor,classId).map(student=>{const result=quiz=>scores.find(row=>row.studentId===student.id&&row.quizId===quiz.id&&row.version===quiz.version),correct=quiz=>{const row=result(quiz);return row?`${row.correct} / ${row.total}`:'未完成';},submitted=publicQuizzes.map(result).filter(Boolean).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0];return {...student,lesson1:correct(publicQuizzes[0]),lesson2:correct(publicQuizzes[1]),lesson3:correct(publicQuizzes[2]),submittedAt:submitted?new Date(submitted.createdAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未提交'};});}
     else if(type==='posttest'){columns=[...common,['完成三课','eligible'],['状态','status'],['预测答对题数','prediction'],['实际答对题数','correct'],['题目数','total'],['答题后信心（%）','confidence'],['题目顺序','questionOrder',60],['作答','answers',80],['开始时间（UTC）','startedAt'],['完成时间（UTC）','submittedAt']];rows=store.posttestReport(actor,classId).flatMap(item=>item.students.map(student=>({...student,eligible:student.eligible?'是':'否'})));}
     else{columns=[...common,['智能体','agent'],['课程','lessonId'],['环节','stage'],['学生内容','userText',50],['AI回答','reply',80],['回答来源','source'],['状态','status'],['提问时间（UTC）','createdAt'],['回复时间（UTC）','answeredAt']];rows=[];for(let offset=0;;offset+=500){const batch=store.conversations(url.searchParams.get('student')||'',500,offset,actor,classId);if(!batch.length)break;rows.push(...batch);}}
-    const sheetName=type==='scores'?'课前检验':type==='posttest'?'后测成绩':'AI对话记录',fileName=type==='scores'?'pretest':type==='posttest'?'posttest':'conversations',className=classId?(store.classes(actor).find(item=>item.id===classId)?.name||'未知班级'):'全部班级',downloadName=`小科-${sheetName}-${className}.xlsx`;const file=await workbookBuffer(columns,rows,sheetName);
+    const sheetName=type==='scores'?'课前检验':type==='posttest'?'后测成绩':'AI对话记录',fileName=type==='scores'?'pretest':type==='posttest'?'posttest':'conversations',downloadLabel=type==='scores'?'前测成绩':sheetName,className=classId?(store.classes(actor).find(item=>item.id===classId)?.name||'未知班级'):'全部班级',downloadName=`${downloadLabel}-${className}.xlsx`;const file=await workbookBuffer(columns,rows,sheetName);
     res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':`attachment; filename="xiaoke-${fileName}.xlsx"; filename*=UTF-8''${encodeURIComponent(downloadName)}`,'cache-control':'no-store'});res.end(file);
     return true;
    }

@@ -28,7 +28,7 @@ test('surname-aware import handles collisions without renaming existing accounts
  try{
   const {user}=await store.login('admin','Test-admin-password');
   await store.addStudent({name:'小曾',username:'xiaoceng_student',password:'12345678',gender:'男',className:'旧班'},user);
-  await store.importStudents([{name:'小曾',gender:'男',age:15,className:'一班'},{name:'小曾',gender:'女',age:15,className:'二班'}],'surname-import',user);
+  await store.importStudents([{name:'小曾',gender:'男',className:'一班'},{name:'小曾',gender:'女',className:'二班'}],'surname-import',user);
   assert.deepEqual(store.students(user).map(s=>s.username).sort(),['xiaoceng_student','xiaozeng2_student','xiaozeng_student'].sort());
   assert.ok(await store.login('xiaoceng_student','12345678'));
  }finally{store.close();}

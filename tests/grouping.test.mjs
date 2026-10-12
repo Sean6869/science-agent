@@ -51,14 +51,14 @@ test('three private tests lead to a draft; only owner review creates codes; memb
   assert.equal((await request('/api/teacher/groups/approve',tb,{classId:s1.classId,batchId:draft.batchId})).status,403);
   assert.equal((await request('/api/teacher/groups/approve',student,{classId:s1.classId,batchId:draft.batchId})).status,403);
   assert.equal((await request('/api/groups/join',student,{code:'ABCDEFGH'})).status,400);
-  const beforeExport=await request('/api/teacher/groups.xlsx',ta),empty=new ExcelJS.Workbook();await empty.xlsx.load(Buffer.from(await beforeExport.arrayBuffer()));assert.equal(empty.worksheets[0].rowCount,1);
+  const beforeExport=await request('/api/teacher/groups.xlsx?class='+s1.classId,ta),empty=new ExcelJS.Workbook();await empty.xlsx.load(Buffer.from(await beforeExport.arrayBuffer()));assert.equal(empty.worksheets[0].rowCount,1);
   assert.equal((await request('/api/teacher/groups/approve',ta,{classId:s1.classId,batchId:draft.batchId})).status,200);
   const approved=store.listGroups(a,s1.classId)[0],code=approved.groups[0].code;assert.match(code,/^[A-F0-9]{8}$/);
   assert.equal((await request('/api/config',student)).status,403);
   assert.equal((await request('/api/groups/join',outside,{code})).status,400);
   const joined=await(await request('/api/groups/join',student,{code})).json();assert.deepEqual(joined.group.members,['学生甲','学生乙']);assert.doesNotMatch(JSON.stringify(joined),/"(?:total|type|level|threshold|score)"/);assert.equal((await request('/api/config',student)).status,200);
   await request('/api/groups/join',student2,{code});assert.equal(store.groupStatus(s2.id).id,joined.group.id);
-  const exported=await request('/api/teacher/groups.xlsx',ta),book=new ExcelJS.Workbook();await book.xlsx.load(Buffer.from(await exported.arrayBuffer()));assert.equal(book.worksheets[0].getCell('C2').value,code);assert.equal((await request('/api/teacher/groups.xlsx?class='+s1.classId,tb)).status,403);assert.equal((await request('/api/teacher/groups.xlsx',student)).status,403);
+  const exported=await request('/api/teacher/groups.xlsx?class='+s1.classId,ta),book=new ExcelJS.Workbook();await book.xlsx.load(Buffer.from(await exported.arrayBuffer()));assert.equal(book.worksheets[0].getCell('C2').value,code);assert.equal((await request('/api/teacher/groups.xlsx?class='+s1.classId,tb)).status,403);assert.equal((await request('/api/teacher/groups.xlsx',student)).status,403);
   store.deleteScores(s2.id,a);assert.equal(store.groupStatus(s1.id).status,'waiting');assert.equal((await request('/api/config',student)).status,403);assert.equal((await request('/api/groups/join',student,{code})).status,400);
   for(const q of quizzes)store.submit(s2.id,q.id,answer(q));assert.equal((await request('/api/teacher/groups/approve',ta,{classId:s1.classId,batchId:draft.batchId})).status,400);
   assert.equal(store.listGroups(a,other.classId)[0].status,'waiting');

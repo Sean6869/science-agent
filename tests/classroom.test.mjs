@@ -10,7 +10,7 @@ import {parseStudentsWorkbook,workbookBuffer} from '../school-excel.mjs';
 import {createApp} from '../server.mjs';
 const bootstrap={username:'administrator',password:'Test-admin-password-123'};
 const teacherData=(username)=>({name:username,username,password:'Test-teacher-password-123',role:'admin'});
-const makeFile=async(rows)=>{const book=new ExcelJS.Workbook(),sheet=book.addWorksheet('学生');sheet.addRow(['姓名','性别','年龄','班级']);rows.forEach(row=>sheet.addRow([...row,'七年级一班']));return Buffer.from(await book.xlsx.writeBuffer()).toString('base64');};
+const makeFile=async(rows)=>{const book=new ExcelJS.Workbook(),sheet=book.addWorksheet('学生');sheet.addRow(['姓名','性别','班级']);rows.forEach(row=>sheet.addRow([...row,'七年级一班']));return Buffer.from(await book.xlsx.writeBuffer()).toString('base64');};
 
 test('teacher registration, scoped APIs, import, exports and password resets enforce ownership',async()=>{
  const store=await openSchoolStore(':memory:',bootstrap),server=createApp({store});await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
@@ -21,10 +21,11 @@ test('teacher registration, scoped APIs, import, exports and password resets enf
   const a=await store.login('teacher_a',teacherData('a').password),b=await store.login('teacher_b',teacherData('b').password);
   assert.equal(a.user.role,'teacher');assert.equal(a.user.classId,null);assert.equal(store.classes(a.user).length,0);assert.equal(store.classes(admin.user).length,0);
   assert.equal((await request('/api/admin/teachers',a)).status,403);
-  const data=await makeFile([['陈辉','男',14],['陈辉','女',13],['单明','男',12]]);
+  const data=await makeFile([['陈辉','男'],['陈辉','女'],['单明','男']]);
 
   assert.equal(store.students(admin.user).length,0);
   const result=await(await request('/api/teacher/import',a,{data})).json();assert.equal(result.created,3);const classA=store.classes(a.user)[0].id;await store.addStudent({name:'乙班学生',gender:'男',className:'七年级一班',username:'b_student',password:'Student-123'},b.user);assert.notEqual(classA,store.classes(b.user)[0].id);
+  assert.equal((await request('/api/teacher/students',a)).status,400);assert.equal((await request('/api/teacher/students',admin)).status,200);
   assert.equal((await(await request('/api/teacher/import',a,{data})).json()).alreadyImported,true);
   assert.equal(store.students(a.user).length,3);assert.equal(store.students(b.user).length,1);
   const credentials=store.studentCredentials(a.user);assert.deepEqual(credentials.map(s=>s.username).sort(),['chenhui2_student','chenhui_student','shanming_student'].sort());
@@ -34,13 +35,13 @@ test('teacher registration, scoped APIs, import, exports and password resets enf
   store.submit(student.id,quizzes[0].id,Object.fromEntries(quizzes[0].questions.map(q=>[q.id,q.answer])));
   const turn=store.begin(student.id,'knowledge',{text:'什么是动能？',lessonId:'energy-skate-park'});store.finish(turn,{content:'测试回答',source:'model'});
   for(const path of ['/api/teacher/students','/api/teacher/scores','/api/teacher/conversations','/api/teacher/accounts.xlsx','/api/teacher/export?type=scores','/api/teacher/export?type=conversations'])assert.equal((await request(path+(path.includes('?')?'&':'?')+'class='+classA,b)).status,403,path);
-  assert.equal((await request('/api/teacher/conversations?student='+student.id,b)).status,403);
-  assert.equal((await request('/api/teacher/export?type=conversations&student='+student.id,b)).status,403);
+  assert.equal((await request('/api/teacher/conversations?class='+classA+'&student='+student.id,b)).status,403);
+  assert.equal((await request('/api/teacher/export?type=conversations&class='+classA+'&student='+student.id,b)).status,403);
   assert.equal((await request('/api/teacher/students/'+student.id,b,{...student,password:''},'PUT')).status,403);
   assert.equal(store.allScores(b.user).length,0);assert.equal(store.conversations('',100,0,b.user).length,0);assert.equal(store.allScores(admin.user).length,1);
-  const download=await request('/api/teacher/accounts.xlsx',a);assert.equal(download.status,200);assert.equal(download.headers.get('cache-control'),'no-store');
-  const book=new ExcelJS.Workbook();await book.xlsx.load(Buffer.from(await download.arrayBuffer()));const sheet=book.worksheets[0];assert.equal(sheet.rowCount,4);assert.equal(sheet.getCell('F2').value,credentials[0].password);assert.equal(typeof sheet.getCell('F2').value,'string');
-  const pretestDownload=await request('/api/teacher/export?type=scores&class='+classA,a),pretestBook=new ExcelJS.Workbook();assert.equal(pretestDownload.status,200);const pretestDisposition=pretestDownload.headers.get('content-disposition');assert.match(pretestDisposition,/xiaoke-pretest\.xlsx/);assert.match(pretestDisposition,/filename\*=UTF-8''/);assert.match(pretestDisposition,new RegExp(encodeURIComponent('七年级一班')));await pretestBook.xlsx.load(Buffer.from(await pretestDownload.arrayBuffer()));const pretestSheet=pretestBook.worksheets[0];assert.equal(pretestSheet.name,'课前检验');assert.equal(pretestSheet.rowCount,4);assert.deepEqual(pretestSheet.getRow(1).values.slice(1),['姓名','性别','班级','第一课答对题数','第二课答对题数','第三课答对题数']);const pretestRows=pretestSheet.getRows(2,3).map(row=>row.values.slice(1));assert.equal(pretestRows.filter(row=>row[3]==='10 / 10').length,1);assert.equal(pretestRows.filter(row=>row[4]==='未完成'&&row[5]==='未完成').length,3);
+  const download=await request('/api/teacher/accounts.xlsx?class='+classA,a);assert.equal(download.status,200);assert.equal(download.headers.get('cache-control'),'no-store');
+  const book=new ExcelJS.Workbook();await book.xlsx.load(Buffer.from(await download.arrayBuffer()));const sheet=book.worksheets[0];assert.equal(sheet.rowCount,4);assert.deepEqual(sheet.getRow(1).values.slice(1),['姓名','性别','班级','账号','密码','权限分组']);assert.equal(sheet.getCell('E2').value,credentials[0].password);assert.equal(typeof sheet.getCell('E2').value,'string');
+  const pretestDownload=await request('/api/teacher/export?type=scores&class='+classA,a),pretestBook=new ExcelJS.Workbook();assert.equal(pretestDownload.status,200);const pretestDisposition=pretestDownload.headers.get('content-disposition');assert.match(pretestDisposition,/xiaoke-pretest\.xlsx/);assert.match(pretestDisposition,/filename\*=UTF-8''/);assert.match(pretestDisposition,new RegExp(encodeURIComponent('前测成绩-七年级一班.xlsx')));await pretestBook.xlsx.load(Buffer.from(await pretestDownload.arrayBuffer()));const pretestSheet=pretestBook.worksheets[0];assert.equal(pretestSheet.name,'课前检验');assert.equal(pretestSheet.rowCount,4);assert.deepEqual(pretestSheet.getRow(1).values.slice(1),['姓名','性别','班级','第一课答对题数','第二课答对题数','第三课答对题数','提交时间']);const pretestRows=pretestSheet.getRows(2,3).map(row=>row.values.slice(1));assert.equal(pretestRows.filter(row=>row[3]==='10 / 10').length,1);assert.equal(pretestRows.filter(row=>row[4]==='未完成'&&row[5]==='未完成').length,3);assert.equal(pretestRows.filter(row=>row[6]!=='未提交').length,1);
   const teacherList=await(await request('/api/admin/teachers',admin)).json();assert.equal(teacherList.teachers.length,2);assert.equal(teacherList.teachers[0].password,teacherData('a').password);assert.equal('credential' in teacherList.teachers[0],false);
   const changed=await request('/api/admin/teachers/'+a.user.id,admin,{...teacherData('teacher_a'),password:'Changed-teacher-123',className:'八年级一班'},'PUT');assert.equal(changed.status,200);assert.equal(store.session(a.token),null);assert.equal(await store.login('teacher_a',teacherData('a').password),null);assert.ok(await store.login('teacher_a','Changed-teacher-123'));assert.equal(store.students(admin.user,classA)[0].className,'七年级一班');
   assert.equal(store.teachers(admin.user).find(t=>t.id===a.user.id).password,'Changed-teacher-123');
@@ -58,10 +59,9 @@ test('teacher registration, scoped APIs, import, exports and password resets enf
 });
 
 test('Excel validation rejects empty templates, formulas and invalid rows before importing',async()=>{
- const template=await readFile(new URL('../public/student-template.xlsx',import.meta.url));await assert.rejects(parseStudentsWorkbook(template.toString('base64')),/示例/);
- await assert.rejects(parseStudentsWorkbook(await makeFile([['学生','未知',14]])),/性别/);
- await assert.rejects(parseStudentsWorkbook(await makeFile([['学生','男',0]])),/年龄/);
- await assert.rejects(parseStudentsWorkbook(await makeFile([['学生','男',14],[{formula:'1+1'},'女',13]])),/不支持公式/);
+ const template=await readFile(new URL('../public/student-template.xlsx',import.meta.url)),templateBook=new ExcelJS.Workbook();await templateBook.xlsx.load(template);assert.deepEqual(templateBook.worksheets[0].getRow(1).values.slice(1,4),['姓名','性别','班级']);assert.equal(templateBook.worksheets[0].getRow(1).values.includes('年龄'),false);await assert.rejects(parseStudentsWorkbook(template.toString('base64')),/示例/);
+ await assert.rejects(parseStudentsWorkbook(await makeFile([['学生','未知']])),/性别/);
+ await assert.rejects(parseStudentsWorkbook(await makeFile([['学生','男'],[{formula:'1+1'},'女']])),/不支持公式/);
  await assert.rejects(parseStudentsWorkbook('not a workbook'),/无效/);
  const file=await workbookBuffer([['账号','username'],['密码','password']],[{username:'=HYPERLINK("x")',password:'01234567'}]);const book=new ExcelJS.Workbook();await book.xlsx.load(file);assert.equal(book.worksheets[0].getCell('A2').type,ExcelJS.ValueType.String);assert.equal(book.worksheets[0].getCell('B2').value,'01234567');
 });
@@ -94,7 +94,7 @@ test('legacy class assignment preserves records and same names across classes ge
  assert.throws(()=>store.assignClass(old.classId,teacher.id,teacher),/仅管理员/);
  store.assignClass(old.classId,teacher.id,admin);assert.equal(store.students(teacher)[0].id,old.id);assert.equal(store.allScores(teacher)[0].score,100);assert.equal(store.conversations(old.id,10,0,teacher)[0].reply,'旧回答');
  store.assignClass(old.classId,'',admin);assert.equal(store.students(teacher).length,0);assert.equal(store.students(admin)[0].id,old.id);store.assignClass(old.classId,teacher.id,admin);
- await store.importStudents([{name:'陈辉',gender:'男',className:'新一班',age:14},{name:'陈辉',gender:'女',className:'新二班',age:14}],'unique-test',teacher);
+ await store.importStudents([{name:'陈辉',gender:'男',className:'新一班'},{name:'陈辉',gender:'女',className:'新二班'}],'unique-test',teacher);
  assert.deepEqual(store.students(teacher).map(s=>s.username).sort(),['chenhui2_student','chenhui3_student','chenhui_student']);assert.ok(await store.login('chenhui_student','12345678'));
  }finally{store.close();}
 });

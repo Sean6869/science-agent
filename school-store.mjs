@@ -27,7 +27,6 @@ export function validateStudent(p,creating=true){
  validateAccount(p,creating);
  if(p.aiEnabled!==undefined&&typeof p.aiEnabled!=='boolean')fail('请选择有效的权限分组');
  if(!['男','女','未填写'].includes(p.gender))fail('请选择有效的性别');
- if(p.age!==undefined&&p.age!==null&&p.age!==''&&(!Number.isInteger(Number(p.age))||Number(p.age)<1||Number(p.age)>120))fail('年龄须为1–120的整数');
 }
 export function studentAccountBase(name){
  const text=name.trim(),options={toneType:'none',surname:'head',type:'array'};
@@ -61,7 +60,7 @@ export async function openSchoolStore(filename,bootstrap={}){
  for(const column of [['kind','TEXT'],['complete','INTEGER']]){if(!db.prepare('PRAGMA table_info(conversations)').all().some(c=>c.name===column[0]))db.exec('ALTER TABLE conversations ADD COLUMN '+column[0]+' '+column[1]);}
  const setLegacyKind=db.prepare('UPDATE conversations SET kind=? WHERE id=?');for(const row of db.prepare("SELECT id,stage,user_text AS text FROM conversations WHERE agent='metacognitive' AND kind IS NULL").all())setLegacyKind.run(row.stage===4?'assessment':isSelfAssessmentText(row.text)?'self_assessment':'content',row.id);
  const vault=credentialVault(filename,!!db.prepare('SELECT id FROM users WHERE credential IS NOT NULL LIMIT 1').get());
- const profile=u=>u&&({id:u.id,username:u.username,role:u.role,name:u.name,gender:u.gender,className:u.class_name,classId:u.class_id,age:u.age,active:!!u.active,aiEnabled:!!u.ai_enabled,subject:u.subject||'',school:u.school||''});
+ const profile=u=>u&&({id:u.id,username:u.username,role:u.role,name:u.name,gender:u.gender,className:u.class_name,classId:u.class_id,active:!!u.active,aiEnabled:!!u.ai_enabled,subject:u.subject||'',school:u.school||''});
  const stageDurations=value=>{try{const durations=JSON.parse(value);if(Array.isArray(durations)&&durations.length===6&&durations.every(n=>Number.isInteger(n)&&n>=60&&n<=3600))return durations;}catch{}return [...DEFAULT_STAGE_DURATIONS];};
  const classProfile=({stage_durations,...c})=>({...c,stageDurations:stageDurations(stage_durations)});
  const getUser=id=>db.prepare('SELECT * FROM users WHERE id=?').get(id);
@@ -80,7 +79,7 @@ export async function openSchoolStore(filename,bootstrap={}){
  function targetStudent(id,actor){const u=getUser(id);if(!u||u.role!=='student')fail('学生不存在或无权访问',403);scope(actor,u.class_id);return u;}
  const scopedWhere="(?='' OR u.class_id IN (SELECT id FROM classes WHERE teacher_id=?)) AND (?='' OR u.class_id=?)";
  const scopeArgs=(actor,classId='')=>{const s=scope(actor,classId);return [s.owner,s.owner,s.classId,s.classId];};
- function insertStudent(p,hash,c){const id=randomUUID();groups.invalidate(c.id);db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,class_id,age,credential,ai_enabled) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id,p.username,hash,'student',p.name.trim(),p.gender,c.name,now(),c.id,p.age?Number(p.age):null,vault.encrypt(p.password),p.aiEnabled===false?0:1);return profile(getUser(id));}
+ function insertStudent(p,hash,c){const id=randomUUID();groups.invalidate(c.id);db.prepare('INSERT INTO users(id,username,password,role,name,gender,class_name,created_at,class_id,age,credential,ai_enabled) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id,p.username,hash,'student',p.name.trim(),p.gender,c.name,now(),c.id,null,vault.encrypt(p.password),p.aiEnabled===false?0:1);return profile(getUser(id));}
  const groups=createGroupStore(db,{quizzes,getUser,scope,fail});
  const store={
   close(){db.close();},
@@ -187,7 +186,7 @@ export async function openSchoolStore(filename,bootstrap={}){
   },
   async editStudent(id,p,actor){
    const u=targetStudent(id,actor);validateStudent(p,false);const hash=p.password?await passwordHash(p.password):u.password;
-   return transaction(()=>{targetStudent(id,actor);const c=classroom(actor,{...p,classId:p.classId||(!p.className?u.class_id:undefined)});if(c.id!==u.class_id||p.gender!==u.gender||(p.active!==false)!==!!u.active){groups.invalidate(u.class_id);groups.invalidate(c.id);}db.prepare('UPDATE users SET username=?,password=?,credential=?,name=?,gender=?,class_name=?,class_id=?,age=?,active=?,ai_enabled=? WHERE id=?').run(p.username,hash,p.password?vault.encrypt(p.password):u.credential,p.name.trim(),p.gender,c.name,c.id,p.age?Number(p.age):null,p.active===false?0:1,p.aiEnabled===undefined?u.ai_enabled:Number(p.aiEnabled),id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return profile(getUser(id));});
+   return transaction(()=>{targetStudent(id,actor);const c=classroom(actor,{...p,classId:p.classId||(!p.className?u.class_id:undefined)});if(c.id!==u.class_id||p.gender!==u.gender||(p.active!==false)!==!!u.active){groups.invalidate(u.class_id);groups.invalidate(c.id);}db.prepare('UPDATE users SET username=?,password=?,credential=?,name=?,gender=?,class_name=?,class_id=?,age=?,active=?,ai_enabled=? WHERE id=?').run(p.username,hash,p.password?vault.encrypt(p.password):u.credential,p.name.trim(),p.gender,c.name,c.id,u.age,p.active===false?0:1,p.aiEnabled===undefined?u.ai_enabled:Number(p.aiEnabled),id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return profile(getUser(id));});
   },
   async importStudents(rows,fingerprint,actor,aiEnabled=true){
    if(typeof aiEnabled!=='boolean')fail('请选择有效的权限分组');
