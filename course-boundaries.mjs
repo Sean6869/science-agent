@@ -18,6 +18,18 @@ export const courseBoundaries={
 
 export function courseBoundary(lessonId){return courseBoundaries[lessonId]||null;}
 
+export function sanitizeCourseText(text,lessonId,replacement='【其他课程内容】'){
+ const boundary=courseBoundary(lessonId);if(!boundary||typeof text!=='string')return text;
+ return [...boundary.forbidden].sort((a,b)=>b.length-a.length).reduce((value,term)=>value.replaceAll(term,replacement),text);
+}
+
+export function sanitizeCourseData(value,lessonId){
+ if(typeof value==='string')return sanitizeCourseText(value,lessonId);
+ if(Array.isArray(value))return value.map(item=>sanitizeCourseData(item,lessonId));
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,sanitizeCourseData(item,lessonId)]));
+ return value;
+}
+
 export function assertCourseReply(text,lessonId){
  const boundary=courseBoundary(lessonId);if(!boundary)return;
  const leaked=boundary.forbidden.find(term=>String(text).includes(term));

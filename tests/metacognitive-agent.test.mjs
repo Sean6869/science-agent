@@ -46,7 +46,7 @@ test('all-three-star feedback becomes a metacognitive reflection and closes the 
  assert.equal(isStructuredFeedbackComplete(JSON.stringify({ratings:[{stars:3},{stars:2}]})),false);
 });
 
-test('all three inquiry agents receive lesson-specific rubrics and reject cross-course feedback',()=>{
+test('all three inquiry agents receive lesson-specific rubrics and redact cross-course feedback without failing',()=>{
  const cases=[
   ['bending-light','光的折射','像距'],
   ['geometric-optics-basics','凸透镜成像','折射角'],
@@ -57,20 +57,28 @@ test('all three inquiry agents receive lesson-specific rubrics and reject cross-
   assert.match(messages[0].content,new RegExp(`当前唯一课程是“${title}”`));
   const rubric=rubricForLesson(lessonId,3);assert.doesNotMatch(JSON.stringify(rubric),new RegExp(leak));
   const ratings=rubric.dimensions.map(item=>({dimension:item.name,stars:2,reason:`提到了${leak}`}));
-  assert.throws(()=>formatStructuredFeedback(JSON.stringify({selfAssessmentGuide:'请自评。',ratings,feedback:'请继续修改。',allThreeStars:false}),{lessonId,stage:3,kind:'content',attempt:1}),/course boundary/i);
+  const content=formatStructuredFeedback(JSON.stringify({selfAssessmentGuide:'请自评。',ratings,feedback:`请继续修改${leak}。`,allThreeStars:false}),{lessonId,stage:3,kind:'content',attempt:1});
+  assert.doesNotMatch(content,new RegExp(leak));
+  assert.match(content,/其他课程内容/);
  }
 });
 
-test('inquiry agent retries cross-course feedback before it reaches students',async()=>{
+test('inquiry agent restores the stable single-response mode and sanitizes cross-course content',async()=>{
  const payload={lessonId:'bending-light',stage:3,kind:'content',attempt:1,text:'改变入射角并记录结果。',context:[]};
  const rubric=rubricForLesson(payload.lessonId,payload.stage);
  let calls=0;
  const content=await completeStructured(buildFeedbackMessages(payload),raw=>formatStructuredFeedback(raw,payload),{env:{DEEPSEEK_API_KEY:'test'},fetchImpl:async()=>{
   calls++;
-  const ratings=rubric.dimensions.map(item=>({dimension:item.name,stars:2,reason:calls===1?'还需要记录像距':'还需要写明具体测量方法'}));
-  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({selfAssessmentGuide:'请逐项检查实验计划。',ratings,feedback:calls===1?'请补充凸透镜的焦距。':'请说明怎样测量入射角和折射角。',allThreeStars:false})}}]});
+  const ratings=rubric.dimensions.map(item=>({dimension:item.name,stars:2,reason:'还需要记录像距'}));
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({selfAssessmentGuide:'请逐项检查实验计划。',ratings,feedback:'请补充凸透镜的焦距。',allThreeStars:false})}}]});
  }});
- assert.equal(calls,2);
- assert.match(content,/入射角和折射角/);
+ assert.equal(calls,1);
+ assert.match(content,/其他课程内容/);
  assert.doesNotMatch(content,/像距|凸透镜|焦距/);
+});
+
+test('cross-course student text and history are redacted before the inquiry model sees them',()=>{
+ const messages=buildFeedbackMessages({lessonId:'bending-light',stage:1,kind:'content',attempt:1,text:'像距很重要',latestSubmission:'请记录焦距',context:[{text:'凸透镜'}],conversation:[{text:'物距'}]});
+ assert.doesNotMatch(messages[1].content,/像距|焦距|凸透镜|物距/);
+ assert.match(messages[1].content,/其他课程内容/);
 });
