@@ -13,7 +13,6 @@ import {openSchoolStore} from './school-store.mjs';
 import {createSchoolApi} from './school-api.mjs';
 import {roleGuidance} from './social-roles.mjs';
 import {assessmentsForLesson,stages} from './public/content.js';
-import {createCodapanVideoProxy} from './codapan-video.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
 try { process.loadEnvFile(resolve(root, '.env.local')); } catch {}
 const pub = resolve(root, 'public');
@@ -53,7 +52,7 @@ export async function defaultSchoolStore(){
  if(process.env.RAILWAY_ENVIRONMENT_ID&&!process.env.RAILWAY_VOLUME_MOUNT_PATH)throw new Error('请先为 Railway 服务挂载持久化 Volume，建议挂载到 /data，以保存账号、成绩和对话');
  return openSchoolStore(resolve(dataDir||resolve(root,'data'),'school.sqlite'),{username:process.env.ADMIN_USERNAME,password:process.env.ADMIN_PASSWORD});
 }
-export function createApp({store,synthesize,fetchMedia=globalThis.fetch}={}) {
+export function createApp({store,synthesize}={}) {
  if(!store)throw new Error('createApp requires a school store');
  const releaseVersion=cleanEnvValue(process.env.RAILWAY_GIT_COMMIT_SHA)||cleanEnvValue(process.env.RAILWAY_DEPLOYMENT_ID)||`process-${Date.now()}`;
  const speechAudio=synthesize||createSpeech({directory:resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR||resolve(root,'data'),'speech-audio')});
@@ -66,7 +65,6 @@ export function createApp({store,synthesize,fetchMedia=globalThis.fetch}={}) {
   for(const text of texts){if(warming.has(text))continue;warming.add(text);speechAudio(text).catch(error=>console.error('[speech-warmup]',error.code||error.name)).finally(()=>warming.delete(text));}
  }
  const schoolApi=createSchoolApi(store,{json,body,onRoles:warmRoleSpeech});
- const lessonVideoProxy=createCodapanVideoProxy({lessons,fetchImpl:fetchMedia});
  async function recorded(req,agent,p,run){
   const safe={...p,id:typeof p.id==='string'?p.id.slice(0,80):undefined,lessonId:lessons.some(l=>l.id===p.lessonId)?p.lessonId:'unknown'};
   const id=store.begin(req.schoolUser.id,agent,safe);
@@ -81,10 +79,6 @@ export function createApp({store,synthesize,fetchMedia=globalThis.fetch}={}) {
   if(url.pathname==='/health'&&req.method==='GET')return json(res,200,{ok:true});
   if(url.pathname==='/api/version'&&req.method==='GET')return json(res,200,{version:releaseVersion});
   if(await schoolApi(req,res,url))return;
-  if(await lessonVideoProxy(req,res,url))return;
-  if(url.pathname==='/vendor/hls.min.js'&&['GET','HEAD'].includes(req.method)){
-   const file=await readFile(resolve(root,'node_modules/hls.js/dist/hls.min.js'));res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','content-length':file.length,'cache-control':'public, max-age=31536000, immutable','x-content-type-options':'nosniff'});return res.end(req.method==='HEAD'?undefined:file);
-  }
   if((url.pathname==='/audio/roles.wav'||url.pathname==='/audio/roles-preview.wav'||/^\/audio\/stages\/\d+\.wav$/.test(url.pathname))&&req.method==='GET'){
    if(!req.schoolUser||req.schoolUser.role!=='student')return json(res,403,{message:'请使用学生账号'});
    if(url.searchParams.get('user')!==req.schoolUser.id)return json(res,409,{message:'账号已切换，请重新载入'});
