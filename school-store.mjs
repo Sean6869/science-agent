@@ -8,6 +8,7 @@ import {createGroupStore} from './school-groups.mjs';
 import {credentialVault,migrateSchool} from './school-credentials.mjs';
 import {isSelfAssessmentText} from './public/turn-kind.js';
 import {lessons} from './lessons.mjs';
+import {reasoningTest} from './reasoning-test.mjs';
 const scrypt=promisify(scryptCallback),now=()=>new Date().toISOString();
 export const SESSION_IDLE_MS=30*60*1000;
 export const DEFAULT_STAGE_DURATIONS=Object.freeze([300,300,300,300,300,300]);
@@ -52,6 +53,8 @@ export async function openSchoolStore(filename,bootstrap={}){
  db.exec(`CREATE TABLE IF NOT EXISTS stage_progress(student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,stage INTEGER NOT NULL CHECK(stage BETWEEN 1 AND 6),updated_at TEXT NOT NULL,PRIMARY KEY(student_id,lesson_id));`);
  db.exec(`CREATE TABLE IF NOT EXISTS posttest_launches(class_id TEXT PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE,started_by TEXT NOT NULL,started_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS posttest_results(student_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,prediction INTEGER NOT NULL CHECK(prediction BETWEEN 0 AND 30),question_order TEXT NOT NULL,answers TEXT,correct INTEGER,total INTEGER,confidence INTEGER CHECK(confidence BETWEEN 0 AND 100),started_at TEXT NOT NULL,answered_at TEXT,submitted_at TEXT);`);
+ db.exec(`CREATE TABLE IF NOT EXISTS reasoning_results(student_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,prediction INTEGER NOT NULL CHECK(prediction BETWEEN 0 AND 100),answers TEXT,score INTEGER CHECK(score BETWEEN 0 AND 100),breakdown TEXT,confidence INTEGER CHECK(confidence BETWEEN 0 AND 100),started_at TEXT NOT NULL,answered_at TEXT,scored_at TEXT,submitted_at TEXT);`);
+ db.exec(`CREATE TABLE IF NOT EXISTS group_learning_state(group_id TEXT PRIMARY KEY REFERENCES student_groups(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,stage INTEGER NOT NULL CHECK(stage BETWEEN 1 AND 6),updated_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,updated_at TEXT NOT NULL);`);
  db.exec(`CREATE TABLE IF NOT EXISTS class_broadcasts(id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,sender_id TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS broadcast_reads(broadcast_id TEXT NOT NULL REFERENCES class_broadcasts(id) ON DELETE CASCADE,student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,read_at TEXT NOT NULL,PRIMARY KEY(broadcast_id,student_id));
  CREATE INDEX IF NOT EXISTS broadcast_class_time ON class_broadcasts(class_id,created_at);`);
@@ -105,6 +108,24 @@ export async function openSchoolStore(filename,bootstrap={}){
    if(stage>current.stage)db.prepare('UPDATE stage_progress SET stage=?,updated_at=? WHERE student_id=? AND lesson_id=?').run(stage,now(),userId,lessonId);
    return Math.max(current.stage,stage);
   },
+  groupLearningState(userId){
+   const group=db.prepare(`SELECT g.id FROM student_groups g JOIN group_members gm ON gm.group_id=g.id JOIN group_batches b ON b.class_id=g.class_id WHERE gm.user_id=? AND gm.joined=1 AND b.approved_at IS NOT NULL`).get(userId);
+   if(!group)fail('请先加入已审核的小组',403);
+   const row=db.prepare('SELECT lesson_id AS lessonId,stage,updated_by AS updatedBy,updated_at AS updatedAt FROM group_learning_state WHERE group_id=?').get(group.id);
+   return row||null;
+  },
+  setGroupLearningState(userId,lessonId,stage){
+   const u=getUser(userId);if(!u||u.role!=='student')fail('仅学生可以同步学习进度',403);
+   if(!lessons.some(lesson=>lesson.id===lessonId)||!Number.isInteger(stage)||stage<1||stage>6)fail('课程进度无效');
+   const group=db.prepare(`SELECT g.id FROM student_groups g JOIN group_members gm ON gm.group_id=g.id JOIN group_batches b ON b.class_id=g.class_id WHERE gm.user_id=? AND gm.joined=1 AND b.approved_at IS NOT NULL`).get(userId);
+   if(!group)fail('请先加入已审核的小组',403);
+   const updatedAt=`${now()}|${randomUUID()}`;
+   transaction(()=>{
+    db.prepare(`INSERT INTO group_learning_state(group_id,lesson_id,stage,updated_by,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(group_id) DO UPDATE SET lesson_id=excluded.lesson_id,stage=excluded.stage,updated_by=excluded.updated_by,updated_at=excluded.updated_at`).run(group.id,lessonId,stage,userId,updatedAt);
+    for(const member of db.prepare('SELECT user_id AS id FROM group_members WHERE group_id=? AND joined=1 AND user_id IS NOT NULL').all(group.id))this.updateStageProgress(member.id,lessonId,stage);
+   });
+   return {lessonId,stage,updatedBy:userId,updatedAt};
+  },
   posttestEligible(userId){
    const u=getUser(userId);if(!u||u.role!=='student')return false;
    const completed=new Set(db.prepare('SELECT lesson_id FROM stage_progress WHERE student_id=? AND stage=6').all(userId).map(row=>row.lesson_id));
@@ -115,10 +136,12 @@ export async function openSchoolStore(filename,bootstrap={}){
    const launch=u.class_id?db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(u.class_id):null,eligible=this.posttestEligible(userId);
    if(!launch)return {active:false,eligible,total:posttestBank.length,phase:'inactive'};
    const result=db.prepare('SELECT prediction,question_order AS questionOrder,answers,confidence,started_at AS startedAt,answered_at AS answeredAt,submitted_at AS submittedAt FROM posttest_results WHERE student_id=?').get(userId);
-   let phase=!result?'prediction':result.answers===null?'test':result.confidence===null?'confidence':'certificate';
+   const reasoning=db.prepare('SELECT prediction,answers,score,breakdown,confidence,started_at AS startedAt,answered_at AS answeredAt,scored_at AS scoredAt,submitted_at AS submittedAt FROM reasoning_results WHERE student_id=?').get(userId);
+   let phase=!result?'prediction':result.answers===null?'test':result.confidence===null?'confidence':!reasoning?'reasoning_prediction':reasoning.answers===null?'reasoning_test':reasoning.score===null?'reasoning_scoring':reasoning.confidence===null?'reasoning_confidence':'certificate';
    const status={active:true,eligible,total:posttestBank.length,phase,launchKey:launch.startedAt,startedAt:result?.startedAt||null,submittedAt:result?.submittedAt||null};
    if(phase==='test'){const order=JSON.parse(result.questionOrder);status.questions=order.map(id=>publicPosttest.get(id)).filter(Boolean);}
-   if(phase==='certificate')status.certificate={studentName:u.name,className:u.class_name,completedAt:result.submittedAt};
+   if(phase==='reasoning_test')status.reasoningTest=reasoningTest;
+   if(phase==='certificate')status.certificate={studentName:u.name,className:u.class_name,completedAt:reasoning.submittedAt};
    return status;
   },
   startPosttest(actor,classId){
@@ -143,9 +166,30 @@ export async function openSchoolStore(filename,bootstrap={}){
    const value=Number(confidence),row=db.prepare('SELECT answers,confidence FROM posttest_results WHERE student_id=?').get(userId);if(!row?.answers)fail('请先完成课堂测试',409);if(!Number.isInteger(value)||value<0||value>100)fail('信心值须为0%–100%的整数');
    if(row.confidence===null)db.prepare('UPDATE posttest_results SET confidence=?,submitted_at=? WHERE student_id=?').run(value,now(),userId);return this.posttestStatus(userId);
   },
+  saveReasoningPrediction(userId,prediction){
+   const value=Number(prediction),status=this.posttestStatus(userId);if(status.phase!=='reasoning_prediction')return status;
+   if(!Number.isInteger(value)||value<0||value>100)fail('预测分数须为0–100的整数');
+   db.prepare('INSERT INTO reasoning_results(student_id,prediction,started_at) VALUES(?,?,?)').run(userId,value,now());return this.posttestStatus(userId);
+  },
+  saveReasoningAnswers(userId,answers){
+   const row=db.prepare('SELECT answers FROM reasoning_results WHERE student_id=?').get(userId);if(!row)fail('请先完成科学推理测试成绩预测',409);if(row.answers!==null)return this.posttestStatus(userId);
+   if(!answers||Array.isArray(answers)||Object.keys(answers).length!==reasoningTest.questions.length)fail('请完成全部简答题');
+   const clean={};for(const question of reasoningTest.questions){const value=typeof answers[question.id]==='string'?answers[question.id].trim():'';if(!value)fail('请完成全部简答题');if(value.length>3000)fail('每题回答不能超过3000字');clean[question.id]=value;}
+   db.prepare('UPDATE reasoning_results SET answers=?,answered_at=? WHERE student_id=?').run(JSON.stringify(clean),now(),userId);return this.posttestStatus(userId);
+  },
+  reasoningAnswers(userId){const row=db.prepare('SELECT answers FROM reasoning_results WHERE student_id=?').get(userId);if(!row?.answers)fail('请先完成科学推理能力测试',409);return JSON.parse(row.answers);},
+  saveReasoningScore(userId,result){
+   const row=db.prepare('SELECT answers,score FROM reasoning_results WHERE student_id=?').get(userId);if(!row?.answers)fail('请先完成科学推理能力测试',409);if(row.score!==null)return this.posttestStatus(userId);
+   const score=Number(result?.total),items=result?.items;if(!Number.isInteger(score)||score<0||score>100||!Array.isArray(items)||items.length!==5)fail('评分结果无效');
+   db.prepare('UPDATE reasoning_results SET score=?,breakdown=?,scored_at=? WHERE student_id=?').run(score,JSON.stringify(items),now(),userId);return this.posttestStatus(userId);
+  },
+  saveReasoningConfidence(userId,confidence){
+   const value=Number(confidence),row=db.prepare('SELECT score,confidence FROM reasoning_results WHERE student_id=?').get(userId);if(row?.score===null||row?.score===undefined)fail('请等待科学推理能力测试评分完成',409);if(!Number.isInteger(value)||value<0||value>100)fail('信心值须为0%–100%的整数');
+   if(row.confidence===null)db.prepare('UPDATE reasoning_results SET confidence=?,submitted_at=? WHERE student_id=?').run(value,now(),userId);return this.posttestStatus(userId);
+  },
   posttestReport(actor,classId=''){
    const classes=this.classes(actor).filter(item=>!classId||item.id===classId);if(classId)scope(actor,classId);
-   return classes.map(classroom=>{const launch=db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(classroom.id);const students=this.students(actor,classroom.id).filter(student=>student.active).map(student=>{const result=db.prepare('SELECT prediction,correct,total,confidence,question_order AS questionOrder,answers,started_at AS startedAt,answered_at AS answeredAt,submitted_at AS submittedAt FROM posttest_results WHERE student_id=?').get(student.id);return {...student,eligible:this.posttestEligible(student.id),status:result?.submittedAt?'已完成':result?.answeredAt?'待填写信心值':result?'答题中':launch?'等待进入':'未开启',...result};});return {...classroom,active:!!launch,startedAt:launch?.startedAt||null,ready:students.length>0&&students.every(student=>student.eligible),students};});
+   return classes.map(classroom=>{const launch=db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(classroom.id);const students=this.students(actor,classroom.id).filter(student=>student.active).map(student=>{const result=db.prepare('SELECT prediction,correct,total,confidence,question_order AS questionOrder,answers,started_at AS startedAt,answered_at AS answeredAt,submitted_at AS submittedAt FROM posttest_results WHERE student_id=?').get(student.id),reasoning=db.prepare('SELECT prediction AS reasoningPrediction,answers AS reasoningAnswers,score AS reasoningScore,breakdown AS reasoningBreakdown,confidence AS reasoningConfidence,started_at AS reasoningStartedAt,answered_at AS reasoningAnsweredAt,scored_at AS reasoningScoredAt,submitted_at AS reasoningSubmittedAt FROM reasoning_results WHERE student_id=?').get(student.id);const status=reasoning?.reasoningSubmittedAt?'已完成':reasoning?.reasoningScore!==null&&reasoning?.reasoningScore!==undefined?'待填写推理信心':reasoning?.reasoningAnsweredAt?'AI评分中':reasoning?'科学推理答题中':result?.confidence!==null&&result?.confidence!==undefined?'待科学推理测试':result?.answeredAt?'待填写物理信心':result?'物理测试答题中':launch?'等待进入':'未开启';return {...student,eligible:this.posttestEligible(student.id),status,...result,...reasoning};});return {...classroom,active:!!launch,startedAt:launch?.startedAt||null,ready:students.length>0&&students.every(student=>student.eligible),students};});
   },
   sendBroadcast(actor,classId,message){
    scope(actor,classId);const text=String(message||'').trim();if(!classId)fail('请选择班级');if(!text)fail('请输入广播内容');if(text.length>1000)fail('广播内容不能超过1000字');const item={id:randomUUID(),classId,message:text,createdAt:now()};db.prepare('INSERT INTO class_broadcasts VALUES(?,?,?,?,?)').run(item.id,classId,actor.id,text,item.createdAt);return item;

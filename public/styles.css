@@ -89,6 +89,7 @@ body.workspace-ready .inquiry{height:100%;min-height:0;overflow:hidden}
 .brief-narrate.playing{color:#fff;background:var(--blue);border-color:var(--blue);box-shadow:0 0 0 4px #dfe9ff}
 .brief-line{display:block;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;line-break:strict;text-wrap:normal;margin:0;line-height:var(--body-leading)}
 .brief-gap{height:.8lh;margin:0}
+.brief-example{margin:.22rem 0;padding:.48rem .7rem;border-left:3px solid #e79a42;border-radius:0 7px 7px 0;background:#fff8ee;color:#914817;font-family:KaiTi,STKaiti,"Microsoft YaHei",sans-serif;font-size:1.02em;font-weight:600;line-height:1.65}
 .brief strong{font-weight:700;color:#192e50}
 .stage-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--muted);font-size:11px}
 .link{background:none;border:0;color:var(--muted);padding:0;white-space:nowrap;font-size:11px}
@@ -110,6 +111,9 @@ body.workspace-ready .inquiry{height:100%;min-height:0;overflow:hidden}
 .input-row{display:flex;flex-direction:column;gap:4px}
 textarea{display:block;width:100%;height:58px;resize:vertical;min-height:50px;max-height:150px;border:0;background:transparent;font-size:14px;line-height:1.6;padding:3px 2px;color:var(--ink)}
 textarea:focus-visible{outline:none}
+.reasoning-context{display:grid;gap:10px;margin:8px 0 22px;padding:18px;border:1px solid var(--line);border-radius:14px;background:#f7faff}
+.reasoning-context h2{margin-top:8px;color:#173a68;font-size:18px}.reasoning-context p{line-height:1.75}.reasoning-hint{padding-left:1em;position:relative}.reasoning-hint::before{content:'•';position:absolute;left:0;color:var(--blue);font-weight:700}
+.reasoning-form{display:grid;gap:14px}.reasoning-answer{height:128px;max-height:none;padding:12px;border:1px solid #ccd8e8;border-radius:10px;background:#fff;resize:vertical}.reasoning-answer:focus-visible{outline:3px solid #91b3f1;outline-offset:2px;border-color:#87a8e9}
 .composer-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px}
 .icon-button{display:grid;place-items:center;width:34px;height:34px;padding:7px;border:0;border-radius:50%;background:#f1f4f9}
 .icon-button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}

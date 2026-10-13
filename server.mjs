@@ -13,6 +13,7 @@ import {openSchoolStore} from './school-store.mjs';
 import {createSchoolApi} from './school-api.mjs';
 import {roleGuidance} from './social-roles.mjs';
 import {assessmentsForLesson,stages} from './public/content.js';
+import {scoreReasoningResponses} from './reasoning-test.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
 try { process.loadEnvFile(resolve(root, '.env.local')); } catch {}
 const pub = resolve(root, 'public');
@@ -52,7 +53,7 @@ export async function defaultSchoolStore(){
  if(process.env.RAILWAY_ENVIRONMENT_ID&&!process.env.RAILWAY_VOLUME_MOUNT_PATH)throw new Error('请先为 Railway 服务挂载持久化 Volume，建议挂载到 /data，以保存账号、成绩和对话');
  return openSchoolStore(resolve(dataDir||resolve(root,'data'),'school.sqlite'),{username:process.env.ADMIN_USERNAME,password:process.env.ADMIN_PASSWORD});
 }
-export function createApp({store,synthesize}={}) {
+export function createApp({store,synthesize,scoreReasoning=scoreReasoningResponses}={}) {
  if(!store)throw new Error('createApp requires a school store');
  const releaseVersion=cleanEnvValue(process.env.RAILWAY_GIT_COMMIT_SHA)||cleanEnvValue(process.env.RAILWAY_DEPLOYMENT_ID)||`process-${Date.now()}`;
  const speechAudio=synthesize||createSpeech({directory:resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR||resolve(root,'data'),'speech-audio')});
@@ -64,7 +65,7 @@ export function createApp({store,synthesize}={}) {
   else if(members.length===2){texts.push(roleGuidance(roles.type,members,members[0].id,members[1].id),roleGuidance(roles.type,members,members[1].id,members[0].id));}
   for(const text of texts){if(warming.has(text))continue;warming.add(text);speechAudio(text).catch(error=>console.error('[speech-warmup]',error.code||error.name)).finally(()=>warming.delete(text));}
  }
- const schoolApi=createSchoolApi(store,{json,body,onRoles:warmRoleSpeech});
+ const schoolApi=createSchoolApi(store,{json,body,onRoles:warmRoleSpeech,scoreReasoning});
  async function recorded(req,agent,p,run){
   const safe={...p,id:typeof p.id==='string'?p.id.slice(0,80):undefined,lessonId:lessons.some(l=>l.id===p.lessonId)?p.lessonId:'unknown'};
   const id=store.begin(req.schoolUser.id,agent,safe);

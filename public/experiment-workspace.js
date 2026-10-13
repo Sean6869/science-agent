@@ -70,6 +70,7 @@ export async function createExperimentWorkspace(){
   };
   document.getElementById('previousLesson').onclick=()=>step(-1);
   document.getElementById('nextLesson').onclick=()=>step(1);
+  window.addEventListener('science:select-lesson',event=>{const lesson=lessons.find(item=>item.id===event.detail?.lessonId);if(lesson)select(lesson);});
   select(lessons.find(lesson=>lesson.id===saved)||lessons.find(lesson=>lesson.id===defaultLessonId)||lessons[0]);
  }catch{loading.textContent='无法加载实验课程，请刷新重试。';}
 }
