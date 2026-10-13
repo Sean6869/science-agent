@@ -1,4 +1,7 @@
 import {createNarrator} from './narration.js';
+export function guidanceParagraphs(value){
+ return String(value||'').split(/\n{2,}/).map(text=>text.trim()).filter(Boolean).map(text=>({text,emphasis:text.startsWith('🔔')}));
+}
 export async function setupRoles(api,bar){
  const userId=window.schoolUser.id;
  const node=(tag,text)=>{const el=document.createElement(tag);if(text)el.textContent=text;return el;};
@@ -8,7 +11,12 @@ export async function setupRoles(api,bar){
 
  const roleAudio=version=>'/audio/roles.wav?'+new URLSearchParams({version,user:userId});
  function showGuidance(dialog,form,done=()=>{},preparedSource=null,releasePrepared=()=>{}){
-  form.replaceChildren(heading('🤝 合作建议'));const text=node('p',state.guidance);text.className='social-guidance';form.append(text);
+  form.replaceChildren(heading('🤝 合作建议'));
+  const guidance=node('div');guidance.className='social-guidance';
+  for(const paragraph of guidanceParagraphs(state.guidance)){
+   const text=node('p',paragraph.text);if(paragraph.emphasis)text.className='social-guidance-alert';guidance.append(text);
+  }
+  form.append(guidance);
   const replay=node('button','播放合作建议');replay.type='button';replay.className='school-button';
   const status=node('span');status.className='school-note';status.setAttribute('role','status');
   const narrator=createNarrator({onState:playing=>{status.textContent=playing?'正在播放':'';},onLoading:()=>{status.textContent='正在准备语音…';},onError:()=>{status.textContent='语音暂不可用，请点击播放合作建议';}});

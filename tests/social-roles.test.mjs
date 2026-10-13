@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {openSchoolStore,quizzes} from '../school-store.mjs';
 import {roleGuidance} from '../social-roles.mjs';
+import {guidanceParagraphs} from '../public/social-roles.js';
 test('roles belong to joined groups, reject invalid and stale edits and share swaps',async()=>{
  const store=await openSchoolStore(':memory:',{username:'admin',password:'Test-admin-password'});
  try{
@@ -33,4 +34,8 @@ test('prescribed guidance differs by prior knowledge and uses member names',()=>
  assert.match(mismatched,/当前的分工与这项建议不一致/);
  assert.match(mismatched,/点击“交换角色”/);
  assert.match(mismatched,/让小甲担任领航发言员、小乙担任记录与质疑员/);
+ const paragraphs=guidanceParagraphs(mismatched);
+ assert.equal(paragraphs.filter(paragraph=>paragraph.emphasis).length,1);
+ assert.match(paragraphs.find(paragraph=>paragraph.emphasis).text,/点击“交换角色”/);
+ assert.ok(guidanceParagraphs(recommended).every(paragraph=>!paragraph.emphasis));
 });
