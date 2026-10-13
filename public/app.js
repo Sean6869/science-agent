@@ -106,7 +106,7 @@ function renderBrief(stage) {
   node.textContent=line;
   return node;
  });
- $('brief').replaceChildren(narrationButton,...nodes,...(stage.id===1?[lessonVideo.button]:[]));
+ $('brief').replaceChildren(...nodes,...(stage.id===1?[lessonVideo.button]:[]));
 }
 function render(forceMessagesBottom=false){
  const s=stages[state.stage-1],d=state.data[s.id];
