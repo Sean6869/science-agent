@@ -16,6 +16,10 @@ export const quizzes=JSON.parse(readFileSync(new URL('./quizzes.json',import.met
 export const publicQuizzes=quizzes.map(q=>({...q,questions:q.questions.map(({answer,...question})=>question)}));
 const posttestBank=quizzes.flatMap(quiz=>quiz.questions.map(question=>({...question,id:`${quiz.id}:${question.id}`,sourceQuizId:quiz.id})));
 const publicPosttest=new Map(posttestBank.map(({answer,...question})=>[question.id,question]));
+// One versioned, deterministic order is shared by every student. The salt keeps
+// the posttest order distinct from the three pretests concatenated in source order.
+const FIXED_POSTTEST_ORDER=Object.freeze(posttestBank.map(question=>question.id).sort((a,b)=>createHash('sha256').update(`xiaoke-posttest-order-v1:${a}`).digest().compare(createHash('sha256').update(`xiaoke-posttest-order-v1:${b}`).digest())));
+export const fixedPosttestQuestions=Object.freeze(FIXED_POSTTEST_ORDER.map(id=>posttestBank.find(question=>question.id===id)));
 const hashToken=t=>createHash('sha256').update(t).digest('hex');
 export async function passwordHash(password){const salt=randomBytes(16).toString('hex');return `${salt}:${Buffer.from(await scrypt(password,salt,64)).toString('hex')}`;}
 async function matches(password,stored){const [salt,key]=stored.split(':');return timingSafeEqual(Buffer.from(await scrypt(password,salt,64)),Buffer.from(key,'hex'));}
@@ -53,6 +57,7 @@ export async function openSchoolStore(filename,bootstrap={}){
  db.exec(`CREATE TABLE IF NOT EXISTS stage_progress(student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,stage INTEGER NOT NULL CHECK(stage BETWEEN 1 AND 6),updated_at TEXT NOT NULL,PRIMARY KEY(student_id,lesson_id));`);
  db.exec(`CREATE TABLE IF NOT EXISTS posttest_launches(class_id TEXT PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE,started_by TEXT NOT NULL,started_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS posttest_results(student_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,prediction INTEGER NOT NULL CHECK(prediction BETWEEN 0 AND 30),question_order TEXT NOT NULL,answers TEXT,correct INTEGER,total INTEGER,confidence INTEGER CHECK(confidence BETWEEN 0 AND 100),started_at TEXT NOT NULL,answered_at TEXT,submitted_at TEXT);`);
+ db.prepare('UPDATE posttest_results SET question_order=? WHERE question_order<>?').run(JSON.stringify(FIXED_POSTTEST_ORDER),JSON.stringify(FIXED_POSTTEST_ORDER));
  db.exec(`CREATE TABLE IF NOT EXISTS reasoning_results(student_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,prediction INTEGER NOT NULL CHECK(prediction BETWEEN 0 AND 100),answers TEXT,score INTEGER CHECK(score BETWEEN 0 AND 100),breakdown TEXT,confidence INTEGER CHECK(confidence BETWEEN 0 AND 100),started_at TEXT NOT NULL,answered_at TEXT,scored_at TEXT,submitted_at TEXT);`);
  db.exec(`CREATE TABLE IF NOT EXISTS group_learning_state(group_id TEXT PRIMARY KEY REFERENCES student_groups(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,stage INTEGER NOT NULL CHECK(stage BETWEEN 1 AND 6),updated_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,updated_at TEXT NOT NULL);`);
  db.exec(`CREATE TABLE IF NOT EXISTS class_broadcasts(id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,sender_id TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL);
@@ -154,8 +159,7 @@ export async function openSchoolStore(filename,bootstrap={}){
    const value=Number(prediction);if(!Number.isInteger(value)||value<0||value>30)fail('预测题数须为0–30的整数');
    const status=this.posttestStatus(userId);if(!status.active)fail('教师尚未开启课堂测试',409);
    if(db.prepare('SELECT student_id FROM posttest_results WHERE student_id=?').get(userId))return this.posttestStatus(userId);
-   const order=posttestBank.map(question=>question.id).sort((a,b)=>createHash('sha256').update(`${userId}:${a}`).digest().compare(createHash('sha256').update(`${userId}:${b}`).digest()));
-   db.prepare('INSERT INTO posttest_results(student_id,prediction,question_order,started_at) VALUES(?,?,?,?)').run(userId,value,JSON.stringify(order),now());return this.posttestStatus(userId);
+   db.prepare('INSERT INTO posttest_results(student_id,prediction,question_order,started_at) VALUES(?,?,?,?)').run(userId,value,JSON.stringify(FIXED_POSTTEST_ORDER),now());return this.posttestStatus(userId);
   },
   savePosttestAnswers(userId,answers){
    const row=db.prepare('SELECT question_order AS questionOrder,answers FROM posttest_results WHERE student_id=?').get(userId);if(!row)fail('请先完成答题数量预测',409);if(row.answers!==null)return this.posttestStatus(userId);

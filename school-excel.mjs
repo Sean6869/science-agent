@@ -28,13 +28,18 @@ export async function parseStudentsWorkbook(data){
  if(!rows.length)throw new Error('模板中还没有学生，请在第二行开始填写');
  return {rows,fingerprint:createHash('sha256').update(JSON.stringify(rows)).digest('hex')};
 }
-export async function workbookBuffer(columns,rows,title='学生账号'){
- const book=new ExcelJS.Workbook(),sheet=book.addWorksheet(title);book.creator='小科';
+function appendSheet(book,columns,rows,title){
+ const sheet=book.addWorksheet(title);
  sheet.columns=columns.map(([header,key,width=20])=>({header,key,width}));
  for(const row of rows)sheet.addRow(Object.fromEntries(columns.map(([,key])=>[key,row[key]??''])));
  sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF376DDB'}};sheet.getRow(1).height=26;
  sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,rows.length+1),column:columns.length}};
  sheet.eachRow((row,index)=>{if(index>1){row.height=Math.min(409,23*Math.max(1,...columns.map(([,key,width=20],i)=>String(row.getCell(i+1).value??'').split('\n').reduce((n,line)=>n+Math.max(1,Math.ceil(line.length*1.7/width)),0))));row.alignment={vertical:'middle',wrapText:true};}});
  for(const key of ['username','password'])if(columns.some(c=>c[1]===key))sheet.getColumn(key).numFmt='@';
+ return sheet;
+}
+export async function workbookBuffer(columns,rows,title='学生账号',additionalSheets=[]){
+ const book=new ExcelJS.Workbook();book.creator='小科';appendSheet(book,columns,rows,title);
+ for(const item of additionalSheets)appendSheet(book,item.columns,item.rows,item.title);
  return Buffer.from(await book.xlsx.writeBuffer());
 }

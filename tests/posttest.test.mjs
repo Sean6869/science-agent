@@ -1,13 +1,13 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
-import {openSchoolStore} from '../school-store.mjs';
+import {openSchoolStore,quizzes} from '../school-store.mjs';
 import {lessons} from '../lessons.mjs';
 import {createApp} from '../server.mjs';
 
 const bootstrap={username:'posttest_admin',password:'Posttest-admin-password'};
 
-test('teacher can launch the private randomized posttest at any time and students never receive their score',async()=>{
+test('teacher can launch the private fixed-order posttest at any time and students never receive their score',async()=>{
  const store=await openSchoolStore(':memory:',bootstrap);
  try{
   const teacher=await store.registerTeacher({name:'物理老师',username:'posttest_teacher',password:'Posttest-teacher-password'});
@@ -17,8 +17,9 @@ test('teacher can launch the private randomized posttest at any time and student
   const launch=store.startPosttest(teacher,classId);assert.ok(launch.startedAt);assert.equal(store.posttestStatus(first.id).phase,'prediction');assert.equal(store.posttestStatus(first.id).eligible,false);
   for(const student of [first,second])for(const lesson of lessons)store.updateStageProgress(student.id,lesson.id,6);
   const firstTest=store.savePosttestPrediction(first.id,18),secondTest=store.savePosttestPrediction(second.id,21);
-  assert.equal(firstTest.questions.length,30);assert.equal(new Set(firstTest.questions.map(question=>question.id)).size,30);assert.doesNotMatch(JSON.stringify(firstTest),/"answer"/);
-  assert.notDeepEqual(firstTest.questions.map(question=>question.id),secondTest.questions.map(question=>question.id));
+  const firstOrder=firstTest.questions.map(question=>question.id),secondOrder=secondTest.questions.map(question=>question.id),pretestOrder=quizzes.flatMap(quiz=>quiz.questions.map(question=>`${quiz.id}:${question.id}`));
+  assert.equal(firstOrder.length,30);assert.equal(new Set(firstOrder).size,30);assert.doesNotMatch(JSON.stringify(firstTest),/"answer"/);
+  assert.deepEqual(firstOrder,secondOrder);assert.deepEqual(store.posttestStatus(first.id).questions.map(question=>question.id),firstOrder);assert.notDeepEqual(firstOrder,pretestOrder);
   const answers=Object.fromEntries(firstTest.questions.map(question=>[question.id,question.options[0].id]));const confidence=store.savePosttestAnswers(first.id,answers);
   assert.equal(confidence.phase,'confidence');assert.equal('correct' in confidence,false);
   let next=store.savePosttestConfidence(first.id,87);assert.equal(next.phase,'reasoning_prediction');
@@ -48,7 +49,7 @@ test('posttest APIs keep scores private and export complete teacher records',asy
   payload=await(await request('/api/posttest/reasoning-answers',studentSession,{answers:Object.fromEntries(['1','2','3','4','5'].map(id=>[id,`第${id}题回答`]))})).json();assert.equal(payload.phase,'reasoning_confidence');assert.equal('reasoningScore' in payload,false);
   payload=await(await request('/api/posttest/reasoning-confidence',studentSession,{confidence:82})).json();assert.equal(payload.phase,'certificate');assert.equal('correct' in payload,false);
   assert.equal((await request('/api/teacher/posttest',studentSession)).status,403);const report=await(await request(`/api/teacher/posttest?class=${classId}`,teacherSession)).json();assert.equal(report.classes[0].students[0].confidence,76);assert.equal(report.classes[0].students[0].reasoningScore,90);assert.equal(Number.isInteger(report.classes[0].students[0].correct),true);
-  const exported=await request(`/api/teacher/export?type=posttest&class=${classId}`,teacherSession),book=new ExcelJS.Workbook();assert.equal(exported.status,200);const disposition=exported.headers.get('content-disposition');assert.match(disposition,/xiaoke-posttest\.xlsx/);assert.match(disposition,new RegExp(encodeURIComponent('后测成绩-八年级二班.xlsx')));assert.doesNotMatch(decodeURIComponent(disposition),/小科-后测成绩/);await book.xlsx.load(Buffer.from(await exported.arrayBuffer()));assert.equal(book.worksheets[0].name,'后测成绩');assert.equal(book.worksheets[0].getCell('A2').value,'学生丙');
+  const exported=await request(`/api/teacher/export?type=posttest&class=${classId}`,teacherSession),book=new ExcelJS.Workbook();assert.equal(exported.status,200);const disposition=exported.headers.get('content-disposition');assert.match(disposition,/xiaoke-posttest\.xlsx/);assert.match(disposition,new RegExp(encodeURIComponent('后测成绩-八年级二班.xlsx')));assert.doesNotMatch(decodeURIComponent(disposition),/小科-后测成绩/);await book.xlsx.load(Buffer.from(await exported.arrayBuffer()));assert.equal(book.worksheets[0].name,'后测成绩');assert.equal(book.worksheets[0].getCell('A2').value,'学生丙');const detail=book.getWorksheet('逐题答题情况');assert.equal(detail.rowCount,31);assert.deepEqual(detail.getRow(1).values.slice(1),['姓名','班级','测验','全卷题号','题目编号','来源课程','题目','学生答案','学生答案内容','正确答案','正确答案内容','判定']);const detailRows=detail.getRows(2,30).map(row=>row.values.slice(1));assert.ok(detailRows.every(row=>row[0]==='学生丙'&&row[2]==='课后测验'&&row[7]!=='—'&&['正确','错误'].includes(row[11])));assert.deepEqual(detailRows.map(row=>row[4]),JSON.parse(report.classes[0].students[0].questionOrder));
   const text='请查看实验资料：https://example.com/physics';assert.equal((await request('/api/teacher/broadcasts',teacherSession,{classId,message:text})).status,201);let inbox=await(await request('/api/broadcasts/latest',studentSession)).json();assert.equal(inbox.broadcast.message,text);assert.equal((await request(`/api/broadcasts/${inbox.broadcast.id}/read`,studentSession,{})).status,200);inbox=await(await request('/api/broadcasts/latest',studentSession)).json();assert.equal(inbox.broadcast,null);const history=await(await request(`/api/teacher/broadcasts?class=${classId}`,teacherSession)).json();assert.equal(history.broadcasts[0].readCount,1);assert.equal(history.broadcasts[0].studentCount,1);
  }finally{await new Promise(resolve=>server.close(resolve));store.close();}
 });
