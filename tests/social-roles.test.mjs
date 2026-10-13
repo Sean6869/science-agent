@@ -23,8 +23,14 @@ test('roles belong to joined groups, reject invalid and stale edits and share sw
  }finally{store.close();}
 });
 test('prescribed guidance differs by prior knowledge and uses member names',()=>{
- const members=[{id:'a',name:'小甲',total:200},{id:'b',name:'小乙',total:50}];
- assert.match(roleGuidance('LL',members,'a','b'),/每个环节结束后都交换/);
+ const members=[{id:'a',name:'小甲',total:200,level:'high'},{id:'b',name:'小乙',total:50,level:'low'}];
+ assert.match(roleGuidance('LL',members,'a','b'),/至少交换一次角色/);
  assert.match(roleGuidance('HH',members,'a','b'),/太快达成同意/);
- assert.match(roleGuidance('HL',members,'a','b'),/由小甲担任领航/);
+ const recommended=roleGuidance('HL',members,'a','b');
+ assert.match(recommended,/由小甲担任领航发言员，由小乙担任记录与质疑员/);
+ assert.doesNotMatch(recommended,/分工与这项建议不一致/);
+ const mismatched=roleGuidance('HL',members,'b','a');
+ assert.match(mismatched,/当前的分工与这项建议不一致/);
+ assert.match(mismatched,/点击“交换角色”/);
+ assert.match(mismatched,/让小甲担任领航发言员、小乙担任记录与质疑员/);
 });
