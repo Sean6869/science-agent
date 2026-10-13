@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {openSchoolStore} from '../school-store.mjs';
-test('obsolete avatar data is removed on upgrade while profiles and sessions survive',async()=>{
+test('legacy avatar data is cleared while the new teacher avatar field and sessions survive',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'profile-upgrade-')),file=join(dir,'school.sqlite');let store;
  try{
   store=await openSchoolStore(file,{username:'migration_admin',password:'Migration-admin-password'});
@@ -15,12 +15,12 @@ test('obsolete avatar data is removed on upgrade while profiles and sessions sur
   const student=await store.addStudent({name:'测试学生',username:'migration_student',password:'12345678',gender:'男',className:'一班'},teacher);
   store.close();store=null;
   const legacy=new DatabaseSync(file);
-  legacy.exec("ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''; UPDATE users SET avatar='data:image/png;base64,obsolete'");legacy.close();
+  legacy.exec("UPDATE users SET avatar='data:image/png;base64,obsolete'");legacy.close();
   store=await openSchoolStore(file);
   assert.equal(store.session(session.token).user.id,teacher.id);
   const restored=(await store.login('migration_teacher','Teacher-password')).user;
   assert.equal(restored.subject,'物理');assert.equal(restored.school,'实验中学');assert.equal(store.students(restored)[0].id,student.id);
-  const db=new DatabaseSync(file);try{assert.ok(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='avatar'));}finally{db.close();}
+  const db=new DatabaseSync(file);try{assert.ok(db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='avatar'));assert.equal(db.prepare('SELECT avatar FROM users WHERE id=?').get(teacher.id).avatar,'');}finally{db.close();}
   store.close();store=null;
   store=await openSchoolStore(file);assert.ok(await store.login('migration_student','12345678'));
  }finally{store?.close();await rm(dir,{recursive:true,force:true});}
@@ -44,4 +44,4 @@ test('deployment admin credentials synchronize on restart, preserve identity and
   store=await openSchoolStore(file);assert.equal((await store.login('new_admin','New-admin-password')).user.id,old.user.id);assert.ok(await store.login('test_student','12345678'));
  }finally{store?.close();await rm(dir,{recursive:true,force:true});}
 });
-test('teacher profile saves subject and school without changing registered name',async()=>{const store=await openSchoolStore(':memory:',{username:'admin_profile',password:'Admin-profile-password'});try{const t=await store.registerTeacher({name:'王老师',username:'profile_teacher',password:'Teacher-profile-password'});const out=store.updateTeacherProfile(t.id,{subject:'物理',school:'实验中学'},t);assert.equal(out.name,'王老师');assert.equal(out.subject,'物理');assert.equal(out.school,'实验中学');assert.throws(()=>store.updateTeacherProfile(t.id,{subject:'x'.repeat(81)},t),/过长/);}finally{store.close();}});
+test('teacher profile saves gender, avatar, subject and school without changing registered name',async()=>{const store=await openSchoolStore(':memory:',{username:'admin_profile',password:'Admin-profile-password'});try{const t=await store.registerTeacher({name:'王老师',username:'profile_teacher',password:'Teacher-profile-password',gender:'男'}),avatar='data:image/webp;base64,AAAA';const out=store.updateTeacherProfile(t.id,{subject:'物理',school:'实验中学',gender:'女',avatar},t);assert.equal(out.name,'王老师');assert.equal(out.gender,'女');assert.equal(out.avatar,avatar);assert.equal(out.subject,'物理');assert.equal(out.school,'实验中学');assert.throws(()=>store.updateTeacherProfile(t.id,{subject:'x'.repeat(81)},t),/过长/);assert.throws(()=>store.updateTeacherProfile(t.id,{avatar:'data:image/png;base64,AAAA'},t),/头像格式无效/);}finally{store.close();}});

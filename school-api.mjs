@@ -28,7 +28,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
   if(!path.startsWith('/api/'))return false;
   if(!session){json(res,401,{message:'请先登录'});return true;}
   if(session.user.role==='student'&&!session.user.aiEnabled&&['/api/chat','/api/knowledge','/api/assessment','/api/group-conversations'].includes(path)){json(res,403,{message:'静态组不使用知识答疑和探究支架',code:'AI_DISABLED'});return true;}
-  if(path==='/api/teacher/profile'&&req.method==='PUT'){try{if(session.user.role!=='teacher')throw Object.assign(new Error('仅教师可以编辑资料'),{status:403});json(res,200,{user:store.updateTeacherProfile(session.user.id,await body(req),session.user)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
+  if(path==='/api/teacher/profile'&&req.method==='PUT'){try{if(session.user.role!=='teacher')throw Object.assign(new Error('仅教师可以编辑资料'),{status:403});json(res,200,{user:store.updateTeacherProfile(session.user.id,await body(req,500000),session.user)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
   if(path==='/api/auth/activity'&&req.method==='POST'){store.touchSession(token(req));json(res,200,{ok:true});return true;}
   if(path==='/api/auth/logout'&&req.method==='POST'){store.logout(token(req));res.setHeader('Set-Cookie',cookie(req,'',true));json(res,200,{ok:true});return true;}
   if(path==='/api/progress'&&req.method==='POST'){
