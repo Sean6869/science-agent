@@ -18,7 +18,7 @@ export async function setupRoles(api,bar){
   const enter=node('button','开始探究');enter.type='button';enter.className='school-button primary';
   enter.onclick=()=>{narrator.stop();releasePrepared();dialog.close();dialog.remove();done();};
   window.addEventListener('pagehide',()=>{narrator.stop();releasePrepared();},{once:true});
-  form.append(replay,status,enter);
+  const actions=node('div');actions.className='social-role-actions';actions.append(status,replay,enter);form.append(actions);
  }
  function render(){
   display.replaceChildren();if(!state.leaderId)return;

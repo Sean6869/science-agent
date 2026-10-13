@@ -110,6 +110,7 @@ function renderBrief(stage) {
 }
 function render(forceMessagesBottom=false){
  const s=stages[state.stage-1],d=state.data[s.id];
+ document.querySelector('.inquiry').classList.toggle('assessment-active',s.id===4);
  document.querySelectorAll('.stage').forEach(b=>{const active=+b.dataset.id===s.id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));const done=state.data[b.dataset.id].submissions.length>0;b.classList.toggle('complete',done);});
  renderBrief(s);
  $('stageStatus').textContent=`第 ${s.id} 步 · ${s.id===4?(d.submissions.length?'已完成自评':'进行中'):`内容提交 ${Math.min(d.submissions.length,3)}/3`}${d.awaitingSelfAssessment?' · 等待星级自评':''}${d.stale?' · 依据已更新，请复核':''}${d.draft?' · 有未提交草稿':''}`;
