@@ -116,7 +116,7 @@ function renderBrief(stage) {
  });
  const brief=$('brief'),content=document.createElement('div'),toggle=document.createElement('button'),collapsed=collapsedBriefs.has(stage.id);
  content.className='brief-content';content.append(...nodes,...(stage.id===1?[lessonVideo.button]:[]));
- toggle.type='button';toggle.className='brief-collapse';toggle.innerHTML='<span aria-hidden="true">⌃</span>';toggle.setAttribute('aria-expanded',String(!collapsed));toggle.setAttribute('aria-label',collapsed?'展开教学提示':'折叠教学提示');toggle.title=collapsed?'展开教学提示':'折叠教学提示';
+ toggle.type='button';toggle.className='brief-collapse';toggle.innerHTML='<svg viewBox="0 0 24 12" aria-hidden="true"><path d="m6 8 6-5 6 5"/></svg>';toggle.setAttribute('aria-expanded',String(!collapsed));toggle.setAttribute('aria-label',collapsed?'展开教学提示':'折叠教学提示');toggle.title=collapsed?'展开教学提示':'折叠教学提示';
  brief.classList.toggle('collapsed',collapsed);toggle.onclick=()=>{const next=!brief.classList.contains('collapsed');brief.classList.toggle('collapsed',next);if(next)collapsedBriefs.add(stage.id);else collapsedBriefs.delete(stage.id);toggle.setAttribute('aria-expanded',String(!next));toggle.setAttribute('aria-label',next?'展开教学提示':'折叠教学提示');toggle.title=next?'展开教学提示':'折叠教学提示';};
  brief.replaceChildren(content,toggle);
 }
