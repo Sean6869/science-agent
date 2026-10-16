@@ -96,7 +96,7 @@ body.workspace-ready .inquiry{height:100%;min-height:0;overflow-x:hidden;overflo
 .stage-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--muted);font-size:11px}
 .link{background:none;border:0;color:var(--muted);padding:0;white-space:nowrap;font-size:11px}
 .link:hover{color:var(--blue)}
-.messages{overflow:auto;min-height:130px;max-height:50vh;padding:8px 2px;scrollbar-width:thin}
+.messages{overflow:auto;min-height:130px;height:100%;max-height:none;padding:8px 2px;scrollbar-width:thin}
 .msg{max-width:94%;width:fit-content;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;line-break:strict;text-wrap:normal;padding:10px 12px;margin-bottom:10px;border-radius:10px}
 .msg.user{background:#edf3ff;color:#244c90;margin-left:auto}
 .msg.agent{background:#f4f6f9}
@@ -131,7 +131,7 @@ textarea:focus-visible{outline:none}
 @media(max-width:900px){
  body.workspace-ready{overflow:auto}
  .layout{grid-template-columns:1fr}.experiment{position:static;height:460px}.inquiry{min-height:700px}
- .stage-label{font-size:13px}.messages{max-height:350px}
+ .stage-label{font-size:13px}.messages{height:auto;max-height:350px}
  body.workspace-ready .app{height:auto;min-height:100dvh;overflow:visible}
  body.workspace-ready .layout{height:auto;min-height:0;overflow:visible}
  body.workspace-ready .experiment{height:min(460px,60dvh);min-height:360px}
