@@ -10,15 +10,17 @@ import {createLessonVideo} from './lesson-video.js';
 import {apiFetch} from './school.js';
 import {updateMessageList} from './chat-scroll.js';
 import {formatFeedbackForDisplay} from './feedback-format.js';
+import {normalizeSpeechTranscript} from './speech-text.js';
+import {shouldShowHalfwayEncouragement} from './stage-milestone.js';
 const KEY=`science-session-v4:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const LEGACY_KEY=`science-session-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const configuredDurations=()=>stages.map((_,index)=>{const seconds=Number(window.schoolStageDurations?.[index]);return Number.isInteger(seconds)&&seconds>=60&&seconds<=3600?seconds:DEFAULT_STAGE_SECONDS;});
-const fresh=()=>{const durations=configuredDurations();return {version:4,timerConfig:durations.join(','),stage:1,timers:createStageTimers(stages.map(s=>s.id),durations),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))};};
+const fresh=()=>{const durations=configuredDurations();return {version:4,timerConfig:durations.join(','),stage:1,milestones:{halfwayEncouragementShown:false},timers:createStageTimers(stages.map(s=>s.id),durations),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))};};
 let state=fresh();
 let activeLessonId=null,legacyState=null;
 function normalizeState(saved){
  const validData=[2,3,4].includes(saved?.version)&&stages.every(s=>saved.data?.[s.id]?.submissions&&saved.data[s.id].messages)&&stages.some(s=>s.id===saved.stage);
- if(!validData)return fresh();const base=fresh(),savedConfig=saved.timerConfig||stages.map(s=>saved.timers?.[s.id]?.durationSeconds).join(','),preserveTimers=saved.version>=3&&savedConfig===base.timerConfig&&stages.every(s=>saved.timers?.[s.id]);const next={...base,...saved,version:4,timerConfig:base.timerConfig,timers:preserveTimers?saved.timers:base.timers};for(const s of stages)next.data[s.id]={...base.data[s.id],...saved.data[s.id]};return next;
+ if(!validData)return fresh();const base=fresh(),savedConfig=saved.timerConfig||stages.map(s=>saved.timers?.[s.id]?.durationSeconds).join(','),preserveTimers=saved.version>=3&&savedConfig===base.timerConfig&&stages.every(s=>saved.timers?.[s.id]);const next={...base,...saved,version:4,timerConfig:base.timerConfig,milestones:{...base.milestones,...saved.milestones},timers:preserveTimers?saved.timers:base.timers};for(const s of stages)next.data[s.id]={...base.data[s.id],...saved.data[s.id]};return next;
 }
 try{legacyState=JSON.parse(sessionStorage.getItem(LEGACY_KEY));}catch{}
 const $=id=>document.getElementById(id);
@@ -26,6 +28,7 @@ const busy=new Set();
 let sharedRows=[],sharedLoaded=false,sharedSyncing=false;
 let speech=null;
 let alarmContext=null;
+const collapsedBriefs=new Set();
 const narrationButton=$('narrate');
 const roleHintButton=createRoleHintButton(),roleHint=createRoleHintController(roleHintButton);$('stageTimer').append(roleHintButton);
 const lessonVideo=createLessonVideo({userId:window.schoolUser.id,onWatched:()=>render()});
@@ -42,6 +45,11 @@ function loadLessonState(lessonId){
  return fresh();
 }
 function save(){if(!activeLessonId)return;try {sessionStorage.setItem(lessonKey(activeLessonId),JSON.stringify(state));} catch {$('voiceState').textContent='存储不可用，刷新前请复制保存产出。';}}
+function showHalfwayEncouragement(previousStage,nextStage){
+ if(!shouldShowHalfwayEncouragement(previousStage,nextStage,state.milestones.halfwayEncouragementShown))return;
+ state.milestones.halfwayEncouragementShown=true;save();
+ const dialog=$('halfwayEncouragement');if(typeof dialog.showModal==='function')dialog.showModal();else dialog.hidden=false;
+}
 function unlockAlarm(){
  const AudioContext=window.AudioContext||window.webkitAudioContext;
  if(!AudioContext)return Promise.resolve(false);
@@ -106,7 +114,11 @@ function renderBrief(stage) {
   node.textContent=line;
   return node;
  });
- $('brief').replaceChildren(...nodes,...(stage.id===1?[lessonVideo.button]:[]));
+ const brief=$('brief'),content=document.createElement('div'),toggle=document.createElement('button'),collapsed=collapsedBriefs.has(stage.id);
+ content.className='brief-content';content.append(...nodes,...(stage.id===1?[lessonVideo.button]:[]));
+ toggle.type='button';toggle.className='brief-collapse';toggle.innerHTML='<span aria-hidden="true">⌃</span>';toggle.setAttribute('aria-expanded',String(!collapsed));toggle.setAttribute('aria-label',collapsed?'展开教学提示':'折叠教学提示');toggle.title=collapsed?'展开教学提示':'折叠教学提示';
+ brief.classList.toggle('collapsed',collapsed);toggle.onclick=()=>{const next=!brief.classList.contains('collapsed');brief.classList.toggle('collapsed',next);if(next)collapsedBriefs.add(stage.id);else collapsedBriefs.delete(stage.id);toggle.setAttribute('aria-expanded',String(!next));toggle.setAttribute('aria-label',next?'展开教学提示':'折叠教学提示');toggle.title=next?'展开教学提示':'折叠教学提示';};
+ brief.replaceChildren(content,toggle);
 }
 function render(forceMessagesBottom=false){
  const s=stages[state.stage-1],d=state.data[s.id];
@@ -151,7 +163,7 @@ function submit(e){
 }
 $('stages').replaceChildren();
 for(const s of stages){const b=document.createElement('button');b.className='stage';b.dataset.id=s.id;const number=document.createElement('span');number.className='stage-number';number.textContent=s.id;const label=document.createElement('span');label.className='stage-label';label.textContent=[['共同观察与','问题界定'],['提出并','确认假设'],['协作设计','实验'],['协作采集','证据'],['协作评估证据','并得出结论'],['反思','讨论']][s.id-1].join('\n');b.title=s.title;b.setAttribute('aria-label',s.title);b.append(number,label);b.onclick=()=>{
- if(speech)speech.stop();const now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;recordStageProgress(window.__scienceLesson?.id,s.id);startTimer(state.timers[s.id],now);roleHint.enter(s.id);narrator.stop();void unlockAlarm();render(true);
+ if(speech)speech.stop();const previousStage=state.stage,now=Date.now();pauseTimer(state.timers[state.stage],now);state.stage=s.id;recordStageProgress(window.__scienceLesson?.id,s.id);startTimer(state.timers[s.id],now);roleHint.enter(s.id);narrator.stop();void unlockAlarm();render(true);showHalfwayEncouragement(previousStage,s.id);
  void publishGroupLearningState(window.__scienceLesson?.id,s.id);
 };$('stages').append(b);}
 $('timerToggle').onclick=()=>{void unlockAlarm();const timer=state.timers[state.stage];timer.running?pauseTimer(timer):startTimer(timer);save();renderTimer();};
@@ -176,7 +188,7 @@ $('voice').onclick=()=>{
  const recognition=new Recognition();speech=recognition;recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;
  const maxTimer=setTimeout(()=>recognition.stop(),90000),armSilence=()=>{clearTimeout(silenceTimer);silenceTimer=setTimeout(()=>recognition.stop(),3000)};
  recognition.onstart=()=>{$('voice').classList.add('recording');$('voice').setAttribute('aria-label','停止录音');$('voice').title='停止录音';$('voiceState').textContent='正在识别…';armSilence();};
- recognition.onresult=e=>{transcript=Array.from(e.results).map(r=>r[0].transcript).join('');if(state===epoch){state.data[id].draft=(base+(base?'\n':'')+transcript).slice(0,2000);if(state.stage===id)$('draft').value=state.data[id].draft;save();}armSilence();};
+ recognition.onresult=e=>{transcript=normalizeSpeechTranscript(Array.from(e.results).map(r=>r[0].transcript).join(''));if(state===epoch){state.data[id].draft=(base+(base?'\n':'')+transcript).slice(0,2000);if(state.stage===id)$('draft').value=state.data[id].draft;save();}armSilence();};
  recognition.onerror=e=>{recognitionError=true;$('voiceState').textContent=`语音识别未完成（${e.error}），已有文字已保留，请编辑后提交。`;};
  recognition.onend=()=>{clearTimeout(maxTimer);clearTimeout(silenceTimer);speech=null;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','语音输入');$('voice').title='语音输入';if(!recognitionError)$('voiceState').textContent=transcript?'识别完成，请检查文字。':'未识别到语音。';};
  try{recognition.start();}catch{speech=null;clearTimeout(maxTimer);clearTimeout(silenceTimer);$('voiceState').textContent='无法启动语音识别，请使用文字输入。';}
@@ -187,7 +199,7 @@ createKnowledgeChat();
 function recordStageProgress(lessonId,stage){if(!lessonId||!Number.isInteger(stage))return;void apiFetch('/api/progress',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lessonId,stage})}).catch(()=>{});}
 let pendingGroupLearningState=null,lastGroupLearningUpdate='',groupLearningInitialized=false;
 async function publishGroupLearningState(lessonId,stage){if(!lessonId||!Number.isInteger(stage))return;try{const response=await apiFetch('/api/group-learning-state',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lessonId,stage})});if(response.ok){const payload=await response.json();lastGroupLearningUpdate=payload.state?.updatedAt||lastGroupLearningUpdate;}}catch{}}
-async function syncGroupLearningState(){try{const response=await apiFetch('/api/group-learning-state');if(!response.ok)return;const {state:groupState}=await response.json();groupLearningInitialized=true;if(!groupState){await publishGroupLearningState(activeLessonId,state.stage);return;}if(groupState.updatedAt===lastGroupLearningUpdate)return;lastGroupLearningUpdate=groupState.updatedAt;if(groupState.lessonId!==activeLessonId){pendingGroupLearningState=groupState;window.dispatchEvent(new CustomEvent('science:select-lesson',{detail:{lessonId:groupState.lessonId}}));return;}if(groupState.stage!==state.stage){pauseTimer(state.timers[state.stage]);state.stage=groupState.stage;startTimer(state.timers[state.stage]);roleHint.enter(state.stage);render(true);}}catch{}}
+async function syncGroupLearningState(){try{const response=await apiFetch('/api/group-learning-state');if(!response.ok)return;const {state:groupState}=await response.json();groupLearningInitialized=true;if(!groupState){await publishGroupLearningState(activeLessonId,state.stage);return;}if(groupState.updatedAt===lastGroupLearningUpdate)return;lastGroupLearningUpdate=groupState.updatedAt;if(groupState.lessonId!==activeLessonId){pendingGroupLearningState=groupState;window.dispatchEvent(new CustomEvent('science:select-lesson',{detail:{lessonId:groupState.lessonId}}));return;}if(groupState.stage!==state.stage){const previousStage=state.stage;pauseTimer(state.timers[state.stage]);state.stage=groupState.stage;startTimer(state.timers[state.stage]);roleHint.enter(state.stage);render(true);showHalfwayEncouragement(previousStage,state.stage);}}catch{}}
 window.addEventListener('science:lesson-change',event=>{if(activeLessonId){pauseTimer(state.timers[state.stage]);save();}narrator.stop();activeLessonId=event.detail.id;state=loadLessonState(activeLessonId);const synced=pendingGroupLearningState?.lessonId===activeLessonId?pendingGroupLearningState:null;if(synced){state.stage=synced.stage;pendingGroupLearningState=null;}recordStageProgress(activeLessonId,state.stage);sharedRows=[];sharedLoaded=false;renderAssessmentOptions();roleHint.enter(state.stage);render(true);void syncShared();if(!synced)void (groupLearningInitialized?publishGroupLearningState(activeLessonId,state.stage):syncGroupLearningState());});window.addEventListener('focus',()=>{void syncShared();void syncGroupLearningState();});const sharedTimer=setInterval(()=>{if(!document.hidden){void syncShared();void syncGroupLearningState();}},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
 setInterval(()=>{const result=advanceTimer(state.timers[state.stage]);if(result.warning){ringAlarm();save();}if(result.finished){ringAlarm(true);save();}renderTimer();},250);
 createExperimentWorkspace();
