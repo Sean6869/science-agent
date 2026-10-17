@@ -31,6 +31,7 @@ export function createKnowledgeChat(){
  function submitText(value){const text=value.trim();if(!text||busy||groupBusy)return;const turn={id:crypto.randomUUID(),lessonId:window.__scienceLesson?.id,text};local.push({role:'user',text,senderName:window.schoolUser.name,turnId:turn.id});draft.value='';saveDraft();render(true);void request(turn);}
  draft.oninput=saveDraft;form.onsubmit=event=>{event.preventDefault();submitText(draft.value);};draft.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
  window.addEventListener('focus',()=>{void sync();void refreshQuota();});window.addEventListener('science:lesson-change',event=>setLesson(event.detail));
+ window.addEventListener('science:knowledge-suggestion',event=>{if(event.detail?.question){draft.value=event.detail.question;saveDraft();}queueMicrotask(()=>draft.focus());});
  const timer=setInterval(()=>{if(!document.hidden)void sync();},2000);window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
  render();setLesson(window.__scienceLesson||{questions:[]});
 }

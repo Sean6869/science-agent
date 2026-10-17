@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url';
 import {openSchoolStore} from './school-store.mjs';
 import {createSchoolApi} from './school-api.mjs';
 import {roleGuidance} from './social-roles.mjs';
+import {roleHints} from './public/role-hints.js';
+import {fallbackPersonalizedRoleHint,personalizeRoleHint,pretestProfile} from './role-hint-agent.mjs';
 import {assessmentsForLesson,stages} from './public/content.js';
 import {scoreReasoningResponses} from './reasoning-test.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -53,11 +55,12 @@ export async function defaultSchoolStore(){
  if(process.env.RAILWAY_ENVIRONMENT_ID&&!process.env.RAILWAY_VOLUME_MOUNT_PATH)throw new Error('请先为 Railway 服务挂载持久化 Volume，建议挂载到 /data，以保存账号、成绩和对话');
  return openSchoolStore(resolve(dataDir||resolve(root,'data'),'school.sqlite'),{username:process.env.ADMIN_USERNAME,password:process.env.ADMIN_PASSWORD});
 }
-export function createApp({store,synthesize,scoreReasoning=scoreReasoningResponses}={}) {
+export function createApp({store,synthesize,scoreReasoning=scoreReasoningResponses,generateRoleHint=personalizeRoleHint}={}) {
  if(!store)throw new Error('createApp requires a school store');
  const releaseVersion=cleanEnvValue(process.env.RAILWAY_GIT_COMMIT_SHA)||cleanEnvValue(process.env.RAILWAY_DEPLOYMENT_ID)||`process-${Date.now()}`;
  const speechAudio=synthesize||createSpeech({directory:resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR||resolve(root,'data'),'speech-audio')});
  const warming=new Set();
+ const roleHintCache=new Map();
  function warmRoleSpeech(roles){
   const members=roles.members||[],texts=[];
   if(roles.guidance)texts.push(roles.guidance);
@@ -80,6 +83,15 @@ export function createApp({store,synthesize,scoreReasoning=scoreReasoningRespons
   if(url.pathname==='/health'&&req.method==='GET')return json(res,200,{ok:true});
   if(url.pathname==='/api/version'&&req.method==='GET')return json(res,200,{version:releaseVersion});
   if(await schoolApi(req,res,url))return;
+  if(url.pathname==='/api/role-hint'&&req.method==='GET'){
+   if(req.schoolUser?.role!=='student')return json(res,403,{message:'请使用学生账号'});
+   const template=roleHints.find(item=>item.id===Number(url.searchParams.get('stage')));if(!template)return json(res,400,{message:'请选择有效探究环节'});
+   const roles=store.groupRoles(req.schoolUser.id);if(!roles.leaderId)return json(res,409,{message:'请先完成小组角色分工'});
+   const role=roles.leaderId===req.schoolUser.id?'领航发言员':'记录与质疑员',profile=pretestProfile(store.scores(req.schoolUser.id));
+   const payload={template,studentName:req.schoolUser.name,role,profile},key=JSON.stringify([req.schoolUser.id,template.id,roles.version,profile.lessons]);
+   if(!roleHintCache.has(key))roleHintCache.set(key,Promise.resolve(generateRoleHint(payload)).catch(error=>{console.error('[role-hint]',error.code||error.name);return fallbackPersonalizedRoleHint(payload);}));
+   return json(res,200,{hint:await roleHintCache.get(key)});
+  }
   if((url.pathname==='/audio/roles.wav'||url.pathname==='/audio/roles-preview.wav'||/^\/audio\/stages\/\d+\.wav$/.test(url.pathname))&&req.method==='GET'){
    if(!req.schoolUser||req.schoolUser.role!=='student')return json(res,403,{message:'请使用学生账号'});
    if(url.searchParams.get('user')!==req.schoolUser.id)return json(res,409,{message:'账号已切换，请重新载入'});

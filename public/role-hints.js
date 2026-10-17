@@ -9,14 +9,16 @@ export const roleHints=[
 
 const bulb='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M8.5 14.5A6 6 0 1 1 15.5 14.5c-.8.7-1.2 1.3-1.3 2.2h-4.4c-.1-.9-.5-1.5-1.3-2.2Z"/></svg>';
 export function createRoleHintButton(){const button=document.createElement('button');button.type='button';button.className='role-hint-button';button.innerHTML=bulb;return button;}
-function openHint(hint){
+function openHint(hint,loading=false){
  const dialog=document.createElement('dialog');dialog.className='role-hint-dialog';const head=document.createElement('header'),title=document.createElement('h2'),logo=document.createElement('img');title.textContent=`💡 第 ${hint.id} 环节角色提示`;logo.src='/assets/xiaoke-logo-transparent.png?v=20260917';logo.alt='小科';head.append(title,logo);
- const stage=document.createElement('h3');stage.textContent=hint.title;const prompt=document.createElement('p');prompt.textContent=hint.prompt;const record=document.createElement('p');record.textContent=hint.record;const close=document.createElement('button');close.type='button';close.className='school-button primary';close.textContent='知道了';close.onclick=()=>dialog.close();dialog.append(head,stage,prompt,record,close);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
+ const stage=document.createElement('h3');stage.textContent=hint.title;const prompt=document.createElement('p'),record=document.createElement('p'),encouragement=document.createElement('p');encouragement.className='role-hint-encouragement';
+ const update=(value,pending=false)=>{dialog.classList.toggle('loading',pending);prompt.textContent=pending?'小科正在结合你的前测情况准备本环节提醒…':value.prompt;record.textContent=pending?'':value.record;encouragement.textContent=pending?'':value.encouragement||'';record.hidden=!record.textContent;encouragement.hidden=!encouragement.textContent;};update(hint,loading);
+ const close=document.createElement('button');close.type='button';close.className='school-button primary';close.textContent='知道了';close.onclick=()=>dialog.close();dialog.append(head,stage,prompt,record,encouragement,close);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();return {update,dialog};
 }
-export function createRoleHintController(button){
- let current=roleHints[0];
- const enter=id=>{current=roleHints.find(item=>item.id===Number(id))||roleHints[0];button.dataset.attention='true';button.title=`第 ${current.id} 环节角色提示`;button.setAttribute('aria-label',button.title);};
- button.onclick=()=>{button.dataset.attention='false';openHint(current);};enter(1);return {enter};
+export function createRoleHintController(button,{load}={}){
+ let current=roleHints[0];const cache=new Map(),ready=new Map(),prepare=hint=>{if(!load)return Promise.resolve(hint);if(!cache.has(hint.id))cache.set(hint.id,Promise.resolve(load(hint)).then(value=>{const result={...hint,...value};ready.set(hint.id,result);return result;}).catch(()=>{ready.set(hint.id,hint);return hint;}));return cache.get(hint.id);};
+ const enter=id=>{current=roleHints.find(item=>item.id===Number(id))||roleHints[0];button.dataset.attention='true';button.title=`第 ${current.id} 环节角色提示`;button.setAttribute('aria-label',button.title);void prepare(current);};
+ button.onclick=async()=>{button.dataset.attention='false';const selected=current,prepared=ready.get(selected.id),view=openHint(prepared||selected,!!load&&!prepared),value=await prepare(selected);if(view.dialog.isConnected)view.update(value);};enter(1);return {enter};
 }
 export function createStaticRoleHints(experiment,videoButton,onStageChange=()=>{}){
  const bar=document.createElement('section');bar.className='static-role-hints';const label=document.createElement('label');label.textContent='探究环节';const select=document.createElement('select');select.setAttribute('aria-label','当前探究环节');for(const hint of roleHints){const option=document.createElement('option');option.value=hint.id;option.textContent=`第 ${hint.id} 环节 · ${hint.title}`;select.append(option);}label.append(select);

@@ -101,6 +101,8 @@ body.workspace-ready .inquiry{height:100%;min-height:0;overflow-x:hidden;overflo
 .msg.user{background:#edf3ff;color:#244c90;margin-left:auto}
 .msg.agent{background:#f4f6f9}
 .msg.agent .feedback-label{font-weight:700;color:#192e50}
+.concept-guidance{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px 12px;margin:12px -2px 0;padding:12px 13px;white-space:normal;color:#43358b;background:linear-gradient(145deg,#f4f0ff,#e8efff);border:1px solid #cfc8f7;border-left:4px solid #7567db;border-radius:13px;box-shadow:0 7px 16px #3e348d1a,inset 0 1px 0 #fff}.concept-guidance>strong{padding:4px 8px;color:#fff;background:linear-gradient(135deg,#8776e8,#6558c9);border-radius:999px;font-size:12px;white-space:nowrap}.concept-guidance span{line-height:1.65}.concept-guidance button{flex:none;padding:7px 12px;color:#fff;background:linear-gradient(135deg,#5a9af2,#3975df);border-color:#3c78df;box-shadow:0 6px 13px #3972df2d,inset 0 1px 0 #ffffff66;font-weight:700}@media(max-width:560px){.concept-guidance{grid-template-columns:auto 1fr}.concept-guidance button{grid-column:1/-1;justify-self:end}}
+.role-hint-encouragement{padding:10px 12px;color:#245a9b;background:#edf5ff;border-radius:10px;font-weight:700}.role-hint-dialog.loading p{color:var(--muted)}
 .msg.system{background:#fff6e7;color:#855b22}
 .msg-sender{display:block;font-weight:700;color:#57729a;margin-bottom:2px}
 #composer,.chat-composer{align-self:end;padding:10px 12px;background:white;border:1px solid #ccd8e8;border-radius:16px;box-shadow:0 3px 12px #1a3d7210}

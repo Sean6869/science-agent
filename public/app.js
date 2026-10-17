@@ -30,7 +30,7 @@ let speech=null;
 let alarmContext=null;
 const collapsedBriefs=new Set();
 const narrationButton=$('narrate');
-const roleHintButton=createRoleHintButton(),roleHint=createRoleHintController(roleHintButton);$('stageTimer').append(roleHintButton);
+const roleHintButton=createRoleHintButton(),roleHint=createRoleHintController(roleHintButton,{load:async hint=>{const response=await apiFetch(`/api/role-hint?stage=${hint.id}`),result=await response.json();if(!response.ok)throw new Error(result.message);return result.hint;}});$('stageTimer').append(roleHintButton);
 const lessonVideo=createLessonVideo({userId:window.schoolUser.id,onWatched:()=>render()});
 const narrator=createNarrator({onError:()=>{narrationButton.title='语音暂不可用，请点击重试';},onLoading:()=>{narrationButton.title='正在准备语音，点击可停止';},onState:playing=>{
  narrationButton.classList.toggle('playing',playing);
@@ -92,7 +92,7 @@ async function syncShared(){
 function renderFeedback(div,text){
  text=formatFeedbackForDisplay(text);
  const labels=['自我评价：','老师的评价：'];
- text.split('\n').forEach((line,index)=>{if(index)div.append(document.createTextNode('\n'));const label=labels.find(value=>line.startsWith(value));if(label){const strong=document.createElement('strong');strong.className='feedback-label';strong.textContent=label;div.append(strong,document.createTextNode(line.slice(label.length)));}else div.append(document.createTextNode(line));});
+ text.split('\n').forEach((line,index)=>{if(line.startsWith('知识答疑提示：')){const guidance=document.createElement('aside'),badge=document.createElement('strong'),copy=document.createElement('span'),button=document.createElement('button'),value=line.slice('知识答疑提示：'.length),concepts=[...value.matchAll(/“([^”]+)”/g)].map(match=>match[1]);guidance.className='concept-guidance';badge.textContent='概念联想';copy.textContent=value;button.type='button';button.textContent='去问小科';button.onclick=()=>window.dispatchEvent(new CustomEvent('science:knowledge-suggestion',{detail:{question:concepts.length>=2?`${concepts[0]}和${concepts[1]}有什么联系？`:''}}));guidance.append(badge,copy,button);div.append(guidance);return;}if(index)div.append(document.createTextNode('\n'));const label=labels.find(value=>line.startsWith(value));if(label){const strong=document.createElement('strong');strong.className='feedback-label';strong.textContent=label;div.append(strong,document.createTextNode(line.slice(label.length)));}else div.append(document.createTextNode(line));});
 }
 function renderMessages(forceBottom=false){
  const list=$('messages');updateMessageList(list,()=>{list.replaceChildren();

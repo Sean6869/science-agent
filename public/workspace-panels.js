@@ -23,6 +23,7 @@ export function createWorkspacePanels(){
  avatar.onpointerup=finish;avatar.onpointercancel=finish;
  avatar.onclick=e=>{if(suppressClick&&e.detail!==0){suppressClick=false;return;}setKnowledge(knowledge.hidden);};
  document.getElementById('knowledgeClose').onclick=()=>setKnowledge(false);
+ window.addEventListener('science:knowledge-suggestion',()=>setKnowledge(true));
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!knowledge.hidden){e.stopPropagation();setKnowledge(false);}});
  window.addEventListener('resize',()=>{const r=avatar.getBoundingClientRect();positionPet(r.left,r.top);});
  try{setCoach(sessionStorage.getItem('science-coach-open')!=='false');const p=JSON.parse(sessionStorage.getItem('science-pet-position'));if(p&&Number.isFinite(p.x)&&Number.isFinite(p.y))positionPet(p.x,p.y);}catch{setCoach(true);}
