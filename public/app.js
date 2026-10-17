@@ -184,14 +184,14 @@ $('voice').onclick=()=>{
  narrator.stop();
  if(speech){speech.stop();return;}
  if(!Recognition){$('voiceState').textContent='当前浏览器不支持语音转写，请使用文字输入或支持语音识别的浏览器。';return;}
- const id=state.stage,epoch=state,base=state.data[id].draft;let transcript='',recognitionError=false,silenceTimer;
+ const id=state.stage,epoch=state,base=state.data[id].draft;let transcript='',recognitionError=false;
  const recognition=new Recognition();speech=recognition;recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;
- const maxTimer=setTimeout(()=>recognition.stop(),90000),armSilence=()=>{clearTimeout(silenceTimer);silenceTimer=setTimeout(()=>recognition.stop(),3000)};
- recognition.onstart=()=>{$('voice').classList.add('recording');$('voice').setAttribute('aria-label','停止录音');$('voice').title='停止录音';$('voiceState').textContent='正在识别…';armSilence();};
- recognition.onresult=e=>{transcript=normalizeSpeechTranscript(Array.from(e.results).map(r=>r[0].transcript).join(''));if(state===epoch){state.data[id].draft=(base+(base?'\n':'')+transcript).slice(0,2000);if(state.stage===id)$('draft').value=state.data[id].draft;save();}armSilence();};
+ const maxTimer=setTimeout(()=>recognition.stop(),90000);
+ recognition.onstart=()=>{$('voice').classList.add('recording');$('voice').setAttribute('aria-label','停止录音');$('voice').title='停止录音';$('voiceState').textContent='正在识别…';};
+ recognition.onresult=e=>{transcript=normalizeSpeechTranscript(Array.from(e.results).map(r=>r[0].transcript).join(''));if(state===epoch){state.data[id].draft=(base+(base?'\n':'')+transcript).slice(0,2000);if(state.stage===id)$('draft').value=state.data[id].draft;save();}};
  recognition.onerror=e=>{recognitionError=true;$('voiceState').textContent=`语音识别未完成（${e.error}），已有文字已保留，请编辑后提交。`;};
- recognition.onend=()=>{clearTimeout(maxTimer);clearTimeout(silenceTimer);speech=null;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','语音输入');$('voice').title='语音输入';if(!recognitionError)$('voiceState').textContent=transcript?'识别完成，请检查文字。':'未识别到语音。';};
- try{recognition.start();}catch{speech=null;clearTimeout(maxTimer);clearTimeout(silenceTimer);$('voiceState').textContent='无法启动语音识别，请使用文字输入。';}
+ recognition.onend=()=>{clearTimeout(maxTimer);speech=null;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','语音输入');$('voice').title='语音输入';if(!recognitionError)$('voiceState').textContent=transcript?'识别完成，请检查文字。':'未识别到语音。';};
+ try{recognition.start();}catch{speech=null;clearTimeout(maxTimer);$('voiceState').textContent='无法启动语音识别，请使用文字输入。';}
 };
 render(true);
 createWorkspacePanels();
