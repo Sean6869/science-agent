@@ -120,9 +120,12 @@ export function createDataReasoningCoach(){
   const pageTitle=document.createElement('h3');pageTitle.textContent=page.title;
   const instruction=document.createElement('p');instruction.className='data-reasoning-instruction';instruction.textContent=page.instruction;
   const form=document.createElement('form');form.className='data-reasoning-form';
+  if(page.questions.length>1)form.classList.add('multi-question');
   page.questions.forEach((item,questionIndex)=>{
    const fieldset=document.createElement('fieldset');
-   const legend=document.createElement('legend');legend.textContent=`${questionIndex+1}. ${item.prompt}`;fieldset.append(legend);
+   const questionText=`${questionIndex+1}. ${item.prompt}`;
+   const prompt=document.createElement('p');prompt.id=`data-reasoning-question-${pageIndex}-${questionIndex}`;prompt.className='data-reasoning-question';prompt.textContent=questionText;
+   fieldset.setAttribute('aria-labelledby',prompt.id);fieldset.append(prompt);
    const options=document.createElement('div');options.className='data-reasoning-options';
    item.options.forEach(itemOption=>{const label=document.createElement('label'),input=document.createElement('input'),copy=document.createElement('span');input.type='radio';input.name=`question-${questionIndex}`;input.value=itemOption.id;input.required=true;input.checked=selected(questionIndex)===itemOption.id;input.disabled=pageComplete();copy.textContent=itemOption.label;label.append(input,copy);options.append(label);});
    fieldset.append(options);
