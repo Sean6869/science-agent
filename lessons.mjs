@@ -1,7 +1,7 @@
 const lessonVideoEmbeds=[
- 'https://www.codapan.com/s/6ohKt2GRp9Gf?embed=1&layout=full',
- 'https://www.codapan.com/s/tquigusvPrir?embed=1&layout=full',
- 'https://www.codapan.com/s/nquACrKoFNZJ?embed=1&layout=full'
+ 'https://www.codapan.com/s/ml0bvYyxEBnn?embed=1&layout=full',
+ 'https://www.codapan.com/s/cXe9oczg1sef?embed=1&layout=full',
+ 'https://www.codapan.com/s/x9HHqkHnMMjI?embed=1&layout=full'
 ];
 
 export const lessons = [

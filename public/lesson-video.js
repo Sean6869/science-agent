@@ -3,17 +3,16 @@ export function codapanUrl(source){
 }
 
 export function createLessonVideo({userId,onWatched=()=>{}}={}){
- let lesson=window.__scienceLesson||null,dialog=null;
+ let lesson=window.__scienceLesson||null,dialog=null,openRequested=Boolean(window.__scienceStartExplorationPending);
  const button=document.createElement('button');button.type='button';button.className='intro-video-button';
  const key=()=>lesson?.id&&`science-intro-video-v1:${userId}:${lesson.id}`;
  const isWatched=()=>{try{return !!key()&&localStorage.getItem(key())==='watched';}catch{return false;}};
  const hasMedia=()=>!!lesson?.videoEmbed;
  const render=()=>{button.hidden=!hasMedia();button.textContent=isWatched()?'重新观看导入视频':'▶ 开始观看导入视频';button.setAttribute('aria-label',`${lesson?.title||''}${button.textContent.replace('▶ ','')}`);};
  const closeDialog=()=>{if(!dialog)return;const frame=dialog.querySelector('iframe');if(frame)frame.src='about:blank';dialog.close();dialog.remove();dialog=null;};
- const setLesson=next=>{if(dialog)closeDialog();lesson=next;render();};
- const markWatched=status=>{try{localStorage.setItem(key(),'watched');}catch{}status.textContent='已确认看完，现在可以提出科学问题。';const complete=dialog?.querySelector('.intro-video-actions .primary');if(complete){complete.textContent='已看完';complete.disabled=true;}render();onWatched(true);};
- button.onclick=()=>{
+ const openDialog=()=>{
   if(!hasMedia()||dialog)return;
+  openRequested=false;window.__scienceStartExplorationPending=false;
   dialog=document.createElement('dialog');dialog.className='intro-video-dialog';
   const header=document.createElement('header'),title=document.createElement('h2'),logo=document.createElement('img');title.textContent=`第 ${lesson.number} 节课导入视频`;logo.src='/assets/xiaoke-logo-transparent.png?v=20260917';logo.alt='小科';header.append(title,logo);
   const media=document.createElement('div');media.className='intro-video-media';
@@ -24,5 +23,10 @@ export function createLessonVideo({userId,onWatched=()=>{}}={}){
   const close=document.createElement('button');close.type='button';close.className='school-button';close.textContent='关闭';close.onclick=closeDialog;actions.append(complete,close);
   dialog.append(header,media,status,actions);document.body.append(dialog);dialog.addEventListener('cancel',event=>{event.preventDefault();closeDialog();});dialog.showModal();
  };
- window.addEventListener('science:lesson-change',event=>setLesson(event.detail));render();return {button,isWatched,setLesson};
+ const requestOpen=()=>{openRequested=true;if(hasMedia())openDialog();};
+ const setLesson=next=>{if(dialog)closeDialog();lesson=next;render();if(openRequested)queueMicrotask(openDialog);};
+ const markWatched=status=>{try{localStorage.setItem(key(),'watched');}catch{}status.textContent='已确认看完，现在可以提出科学问题。';const complete=dialog?.querySelector('.intro-video-actions .primary');if(complete){complete.textContent='已看完';complete.disabled=true;}render();onWatched(true);};
+ button.onclick=openDialog;
+ window.addEventListener('science:open-lesson-video',requestOpen);
+ window.addEventListener('science:lesson-change',event=>setLesson(event.detail));render();if(openRequested&&lesson)queueMicrotask(openDialog);return {button,isWatched,setLesson,open:requestOpen};
 }

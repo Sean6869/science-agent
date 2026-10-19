@@ -2,7 +2,7 @@ import {createNarrator} from './narration.js';
 export function guidanceParagraphs(value){
  return String(value||'').split(/\n{2,}/).map(text=>text.trim()).filter(Boolean).map(text=>({text,emphasis:text.startsWith('🔔')}));
 }
-export async function setupRoles(api,bar){
+export async function setupRoles(api,bar,{onStartExploration=()=>{}}={}){
  const userId=window.schoolUser.id;
  const node=(tag,text)=>{const el=document.createElement(tag);if(text)el.textContent=text;return el;};
  const heading=title=>{const head=node('div');head.className='social-role-heading';const logo=node('img');logo.src='/assets/xiaoke-logo-transparent.png?v=20260917';logo.alt='小科';head.append(node('h2',title),logo);return head;};
@@ -24,7 +24,7 @@ export async function setupRoles(api,bar){
   const playPrepared=async()=>{try{localSource=await preparedSource;if(localSource)narrator.play(localSource);else narrator.play(source);}catch{narrator.play(source);}};
   replay.onclick=()=>localSource?narrator.play(localSource):void playPrepared();
   const enter=node('button','开始探究');enter.type='button';enter.className='school-button primary';
-  enter.onclick=()=>{narrator.stop();releasePrepared();dialog.close();dialog.remove();done();};
+  enter.onclick=()=>{narrator.stop();releasePrepared();onStartExploration();dialog.close();dialog.remove();done();};
   window.addEventListener('pagehide',()=>{narrator.stop();releasePrepared();},{once:true});
   const actions=node('div');actions.className='social-role-actions';actions.append(status,replay,enter);form.append(actions);
  }
