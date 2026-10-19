@@ -10,8 +10,8 @@ test('speech uses authoritative current names, roles and stage text and enforces
  const server=createApp({store,synthesize:async text=>{calls.push(text);return Buffer.from('audio');}});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
  try{
- assert.equal((await fetch(base+'/audio/roles.wav?version=1&user=a&text=override')).status,200);assert.match(calls.at(-1),/请小甲担任领航/);
- assert.equal((await fetch(base+'/audio/roles-preview.wav?version=1&leader=b&challenger=a&user=a')).status,200);assert.match(calls.at(-1),/请小乙担任领航/);
+ assert.equal((await fetch(base+'/audio/roles.wav?version=1&user=a&text=override')).status,200);assert.match(calls.at(-1),/由小甲担任领航/);
+ assert.equal((await fetch(base+'/audio/roles-preview.wav?version=1&leader=b&challenger=a&user=a')).status,200);assert.match(calls.at(-1),/由小乙担任领航/);
  assert.equal((await fetch(base+'/audio/roles-preview.wav?version=1&leader=a&challenger=a&user=a')).status,400);
  assert.equal((await fetch(base+'/audio/roles.wav?version=1&user=b')).status,409);
  version=2;leader='b';assert.equal((await fetch(base+'/audio/roles.wav?version=1&user=a')).status,409);
@@ -30,7 +30,7 @@ test('opening role assignment warms both possible role narrations before submiss
  try{
   const response=await fetch(`http://127.0.0.1:${server.address().port}/api/groups/roles`);assert.equal(response.status,200);
   await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(texts.length,2);assert.ok(texts.some(text=>/请小甲担任领航/.test(text)));assert.ok(texts.some(text=>/请小乙担任领航/.test(text)));
+  assert.equal(texts.length,2);assert.ok(texts.some(text=>/由小甲担任领航/.test(text)));assert.ok(texts.some(text=>/由小乙担任领航/.test(text)));
  }finally{await new Promise(resolve=>server.close(resolve));}
 });
 test('preview speech is available before roles are submitted',async()=>{

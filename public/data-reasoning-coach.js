@@ -107,7 +107,7 @@ export function createDataReasoningCoach(){
   const header=document.createElement('header');
   const avatar=document.createElement('img');avatar.src='/assets/xiaoke-icon-transparent.png?v=20260917';avatar.alt='小科';
   const heading=document.createElement('div');heading.className='data-reasoning-heading';
-  const eyebrow=document.createElement('small');eyebrow.textContent='小科 · 数据推理教练';
+  const eyebrow=document.createElement('small');eyebrow.textContent='小科 · 科学推理教练';
   const title=document.createElement('h2');title.id='dataReasoningTitle';title.textContent='从实验数据走向科学结论';
   heading.append(eyebrow,title);header.append(avatar,heading);
 

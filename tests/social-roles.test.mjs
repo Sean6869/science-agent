@@ -29,6 +29,9 @@ test('prescribed guidance differs by prior knowledge and uses member names',()=>
  assert.match(roleGuidance('HH',members,'a','b'),/太快达成同意/);
  const recommended=roleGuidance('HL',members,'a','b');
  assert.match(recommended,/由小甲担任领航发言员，由小乙担任记录与质疑员/);
+ assert.match(recommended,/你们的小组分工老师已收到！根据你们的摸底考试情况/);
+ assert.doesNotMatch(recommended,/接下来请小甲担任领航发言员/);
+ assert.match(guidanceParagraphs(recommended)[0].text,/根据你们的摸底考试情况/);
  assert.doesNotMatch(recommended,/分工与这项建议不一致/);
  const mismatched=roleGuidance('HL',members,'b','a');
  assert.match(mismatched,/当前的分工与这项建议不一致/);
