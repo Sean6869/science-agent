@@ -42,6 +42,17 @@ test('structured model data is converted to the fixed student-facing format',()=
  assert.throws(()=>formatStructuredFeedback('{"ratings":[]}',{stage:1,kind:'content',attempt:1}));
 });
 
+test('a directional science question is not marked as missing direction and quota text is not duplicated',()=>{
+ const payload={lessonId:'energy-skate-park',stage:1,kind:'content',attempt:2,text:'物体的质量越大，动能会越大吗？'};
+ const raw=JSON.stringify({selfAssessmentGuide:'请对照标准自评。',ratings:[{dimension:'明确具体',stars:2,reason:'问题提到质量和动能两个变量，但没有写清质量变化与动能变化的关系方向'},{dimension:'可探究性',stars:2,reason:'还需说明观察方法'}],feedback:'请把变量关系写得更明确。本环节还剩1次内容提交机会。',hasConcepts:false});
+ const formatted=formatStructuredFeedback(raw,payload);
+ assert.match(buildFeedbackMessages(payload)[0].content,/越大吗.*关系方向/);
+ assert.match(formatted,/明确具体⭐⭐⭐（明确提出质量增大时动能是否增大的关系方向）/);
+ assert.doesNotMatch(formatted,/没有写清|请把变量关系写得更明确/);
+ assert.equal(formatted.match(/本环节还剩1次内容提交机会/g)?.length,1);
+ assert.equal(isStructuredFeedbackComplete(raw,payload),false);
+});
+
 test('each lesson uses its own criteria and examples across all assessed stages',()=>{
  for(const [lessonId,expected,excluded] of [
   ['bending-light','入射角','像距|物距|凸透镜'],
@@ -85,6 +96,8 @@ test('concept guidance appears only when the answer contains a lesson concept',(
  assert.match(fallbackConceptPrompt({lessonId:'bending-light',text:'我们观察折射角。'}),/“折射角”.*“入射角”/);
  const withoutConcept=formatStructuredFeedback(JSON.stringify({selfAssessmentGuide:'请逐项自评。',ratings:[{dimension:'明确具体',stars:2,reason:'任务步骤较清楚'},{dimension:'可探究性',stars:2,reason:'能够继续操作验证'}],feedback:'请补充具体的科学变量。',allThreeStars:false,hasConcepts:false,concepts:[],relatedConcepts:[],conceptPrompt:''}),{stage:1,kind:'content',attempt:1});
  assert.doesNotMatch(withoutConcept,/知识答疑提示/);
- assert.throws(()=>formatStructuredFeedback(JSON.stringify({selfAssessmentGuide:'请逐项自评。',ratings:[{dimension:'明确具体',stars:2,reason:'包含变量'},{dimension:'可探究性',stars:2,reason:'可以验证'}],feedback:'继续完善。',allThreeStars:false,hasConcepts:true,concepts:['物距'],relatedConcepts:['像距'],conceptPrompt:'点击左侧小科。'}),{stage:1,kind:'content',attempt:1}),/Invalid concept guidance/);
- assert.throws(()=>formatStructuredFeedback(JSON.stringify({selfAssessmentGuide:'请逐项自评。',ratings:[{dimension:'明确具体',stars:2,reason:'包含变量'},{dimension:'可探究性',stars:2,reason:'可以验证'}],feedback:'继续完善。',allThreeStars:false,hasConcepts:true,concepts:['物距'],relatedConcepts:['像距'],conceptPrompt:'你们提到“物距”，可以联系“像距”。'}),{stage:1,kind:'content',attempt:1,lessonId:'geometric-optics-basics',text:'我们认真分工。'}),/Invalid concept guidance/);
+ const invalidPrompt=formatStructuredFeedback(JSON.stringify({selfAssessmentGuide:'请逐项自评。',ratings:[{dimension:'明确具体',stars:2,reason:'包含变量'},{dimension:'可探究性',stars:2,reason:'可以验证'}],feedback:'继续完善。',allThreeStars:false,hasConcepts:true,concepts:['物距'],relatedConcepts:['像距'],conceptPrompt:'点击左侧小科。'}),{stage:1,kind:'content',attempt:1});
+ assert.match(invalidPrompt,/老师的评价/);assert.doesNotMatch(invalidPrompt,/知识答疑提示/);
+ const unrelated=formatStructuredFeedback(JSON.stringify({selfAssessmentGuide:'请逐项自评。',ratings:[{dimension:'明确具体',stars:2,reason:'包含变量'},{dimension:'可探究性',stars:2,reason:'可以验证'}],feedback:'继续完善。',allThreeStars:false,hasConcepts:true,concepts:['物距'],relatedConcepts:['像距'],conceptPrompt:'你们提到“物距”，可以联系“像距”。'}),{stage:1,kind:'content',attempt:1,lessonId:'geometric-optics-basics',text:'我们认真分工。'});
+ assert.match(unrelated,/老师的评价/);assert.doesNotMatch(unrelated,/知识答疑提示/);
 });

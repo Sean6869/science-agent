@@ -19,7 +19,7 @@ test('default request explicitly disables thinking and exposes only final conten
   const body = JSON.parse(init.body);
   assert.equal(body.model, 'deepseek-flash');
   assert.deepEqual(body.thinking, {type:'disabled'});
-  assert.equal(body.max_tokens, 700);
+  assert.equal(body.max_tokens, 1200);
   assert.deepEqual(body.messages, messages);
   assert.equal(body.stream, false);
   return Response.json({choices:[{finish_reason:'stop',message:{content:' 请补充观察条件。 ',reasoning_content:'private reasoning'}}]});

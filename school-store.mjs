@@ -60,6 +60,8 @@ export async function openSchoolStore(filename,bootstrap={}){
  db.prepare('UPDATE posttest_results SET question_order=? WHERE question_order<>?').run(JSON.stringify(FIXED_POSTTEST_ORDER),JSON.stringify(FIXED_POSTTEST_ORDER));
  db.exec(`CREATE TABLE IF NOT EXISTS reasoning_results(student_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,prediction INTEGER NOT NULL CHECK(prediction BETWEEN 0 AND 100),answers TEXT,score INTEGER CHECK(score BETWEEN 0 AND 100),breakdown TEXT,confidence INTEGER CHECK(confidence BETWEEN 0 AND 100),started_at TEXT NOT NULL,answered_at TEXT,scored_at TEXT,submitted_at TEXT);`);
  db.exec(`CREATE TABLE IF NOT EXISTS group_learning_state(group_id TEXT PRIMARY KEY REFERENCES student_groups(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,stage INTEGER NOT NULL CHECK(stage BETWEEN 1 AND 6),updated_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,updated_at TEXT NOT NULL);`);
+ db.exec(`CREATE TABLE IF NOT EXISTS inquiry_record_resets(group_id TEXT NOT NULL REFERENCES student_groups(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,stage INTEGER NOT NULL CHECK(stage BETWEEN 1 AND 6),after_rowid INTEGER NOT NULL,revision TEXT NOT NULL,PRIMARY KEY(group_id,lesson_id,stage));`);
+ db.exec(`CREATE TABLE IF NOT EXISTS student_record_resets(student_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,reset_at TEXT NOT NULL);`);
  db.exec(`CREATE TABLE IF NOT EXISTS class_broadcasts(id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,sender_id TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS broadcast_reads(broadcast_id TEXT NOT NULL REFERENCES class_broadcasts(id) ON DELETE CASCADE,student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,read_at TEXT NOT NULL,PRIMARY KEY(broadcast_id,student_id));
  CREATE INDEX IF NOT EXISTS broadcast_class_time ON class_broadcasts(class_id,created_at);`);
@@ -141,10 +143,12 @@ export async function openSchoolStore(filename,bootstrap={}){
    const u=getUser(userId);if(!u||u.role!=='student')fail('请使用学生账号',403);
    const launch=u.class_id?db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(u.class_id):null,eligible=this.posttestEligible(userId);
    if(!launch)return {active:false,eligible,total:posttestBank.length,phase:'inactive'};
+   const reset=db.prepare('SELECT reset_at AS resetAt FROM student_record_resets WHERE student_id=?').get(userId);
+   if(reset&&launch.startedAt<=reset.resetAt&&!eligible)return {active:false,eligible,total:posttestBank.length,phase:'inactive'};
    const result=db.prepare('SELECT prediction,question_order AS questionOrder,answers,confidence,started_at AS startedAt,answered_at AS answeredAt,submitted_at AS submittedAt FROM posttest_results WHERE student_id=?').get(userId);
    const reasoning=db.prepare('SELECT prediction,answers,score,breakdown,confidence,started_at AS startedAt,answered_at AS answeredAt,scored_at AS scoredAt,submitted_at AS submittedAt FROM reasoning_results WHERE student_id=?').get(userId);
    let phase=!result?'prediction':result.answers===null?'test':result.confidence===null?'confidence':!reasoning?'reasoning_prediction':reasoning.answers===null?'reasoning_test':reasoning.score===null?'reasoning_scoring':reasoning.confidence===null?'reasoning_confidence':'certificate';
-   const status={active:true,eligible,total:posttestBank.length,phase,launchKey:launch.startedAt,startedAt:result?.startedAt||null,submittedAt:result?.submittedAt||null};
+   const status={active:true,eligible,total:posttestBank.length,phase,launchKey:reset?`${launch.startedAt}:${reset.resetAt}`:launch.startedAt,startedAt:result?.startedAt||null,submittedAt:result?.submittedAt||null};
    if(phase==='test'){const order=JSON.parse(result.questionOrder);status.questions=order.map(id=>publicPosttest.get(id)).filter(Boolean);}
    if(phase==='reasoning_test')status.reasoningTest=reasoningTest;
    if(phase==='certificate')status.certificate={studentName:u.name,className:u.class_name,completedAt:reasoning.submittedAt};
@@ -227,6 +231,20 @@ export async function openSchoolStore(filename,bootstrap={}){
    const u=manager(actor);if(u.role!=='teacher'||u.id!==id)fail('只能编辑自己的教师资料',403);const subject=String(p?.subject||'').trim(),school=String(p?.school||'').trim(),gender=String(p?.gender||u.gender),avatar=String(p?.avatar||''),motto=String(p?.motto||'').trim();if(subject.length>80||school.length>120||motto.length>120)fail('资料文字过长');if(!['男','女','未填写'].includes(gender))fail('请选择有效的性别');if(avatar&&(avatar.length>360000||!/^data:image\/webp;base64,[A-Za-z0-9+/]+=*$/.test(avatar)))fail('头像格式无效，请重新裁剪');db.prepare('UPDATE users SET subject=?,school=?,gender=?,avatar=?,motto=? WHERE id=?').run(subject,school,gender,avatar,motto,id);return profile(getUser(id));
   },
   async addStudent(p,actor){validateStudent(p);const duplicate=db.prepare('SELECT * FROM users WHERE username=?').get(p.username);if(duplicate){const owner=manager(actor);if(owner.role==='teacher'&&duplicate.role==='student'){const c=db.prepare('SELECT teacher_id FROM classes WHERE id=?').get(duplicate.class_id);if(c?.teacher_id!==owner.id)fail('账号已存在，但未归属当前教师，请联系管理员在班级归属中核查分配');}fail('账号已存在，请在学生列表中编辑原账号');}const hash=await passwordHash(p.password);return transaction(()=>insertStudent(p,hash,classroom(actor,p)));},
+  async resetStudentAccount(id,actor){
+   targetStudent(id,actor);
+   const password=randomBytes(12).toString('base64url'),hash=await passwordHash(password);
+   return transaction(()=>{const user=targetStudent(id,actor);db.prepare('UPDATE users SET password=?,credential=?,active=1 WHERE id=?').run(hash,vault.encrypt(password),id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);return {student:profile(getUser(user.id)),password};});
+  },
+  clearStudentRecords(id,actor){
+   return transaction(()=>{
+    const user=targetStudent(id,actor);
+    groups.invalidate(user.class_id);
+    for(const [table,column] of [['sessions','user_id'],['scores','user_id'],['conversations','user_id'],['stage_progress','student_id'],['posttest_results','student_id'],['reasoning_results','student_id'],['broadcast_reads','student_id']])db.prepare(`DELETE FROM ${table} WHERE ${column}=?`).run(id);
+    db.prepare('INSERT INTO student_record_resets(student_id,reset_at) VALUES(?,?) ON CONFLICT(student_id) DO UPDATE SET reset_at=excluded.reset_at').run(id,now());
+    return {ok:true};
+   });
+  },
   deleteStudent(id,actor){return transaction(()=>{groups.invalidate(targetStudent(id,actor).class_id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);db.prepare('DELETE FROM scores WHERE user_id=?').run(id);db.prepare('DELETE FROM conversations WHERE user_id=?').run(id);db.prepare('DELETE FROM users WHERE id=?').run(id);});},
   deleteScores(id,actor){transaction(()=>{groups.invalidate(targetStudent(id,actor).class_id);db.prepare('DELETE FROM scores WHERE user_id=?').run(id);});},
   deleteConversation(id,actor){const row=db.prepare('SELECT user_id FROM conversations WHERE id=?').get(id);if(!row)fail('记录不存在',404);targetStudent(row.user_id,actor);db.prepare('DELETE FROM conversations WHERE id=?').run(id);},
@@ -261,14 +279,27 @@ export async function openSchoolStore(filename,bootstrap={}){
    const group=db.prepare('SELECT gm.group_id AS id FROM group_members gm JOIN student_groups g ON g.id=gm.group_id JOIN group_batches b ON b.class_id=g.class_id WHERE gm.user_id=? AND gm.joined=1 AND b.approved_at IS NOT NULL').get(userId);
    if(!group)fail('请先加入已审核的小组',403);
    const rows=db.prepare(`SELECT c.id,c.turn_id AS turnId,c.user_id AS userId,u.name AS senderName,c.agent,c.lesson_id AS lessonId,c.stage,c.kind,c.user_text AS userText,c.reply,c.source,c.status,c.complete,c.created_at AS createdAt,c.answered_at AS answeredAt
-    FROM conversations c JOIN users u ON u.id=c.user_id WHERE c.user_id IN (SELECT user_id FROM group_members WHERE group_id=?) AND c.agent=? AND c.lesson_id=? ORDER BY c.rowid DESC LIMIT ?`).all(group.id,agent,lessonId,Math.max(1,Math.min(500,limit))).reverse();
+    FROM conversations c JOIN users u ON u.id=c.user_id WHERE c.user_id IN (SELECT user_id FROM group_members WHERE group_id=?) AND c.agent=? AND c.lesson_id=?
+    AND (c.agent<>'metacognitive' OR c.rowid>COALESCE((SELECT r.after_rowid FROM inquiry_record_resets r WHERE r.group_id=? AND r.lesson_id=c.lesson_id AND r.stage=c.stage),0))
+    ORDER BY c.rowid DESC LIMIT ?`).all(group.id,agent,lessonId,group.id,Math.max(1,Math.min(500,limit))).reverse();
    return [...new Map(rows.map(row=>[row.turnId,row])).values()];
   },
-  groupPromptHistory(userId,agent,lessonId,stage,limit=8){const rows=this.groupConversations(userId,agent,lessonId,500).filter(row=>!stage||row.stage===stage),messages=[];for(const row of rows){messages.push({role:'user',text:row.userText});if(row.reply&&row.status==='complete')messages.push({role:'agent',text:row.reply});}return messages.slice(-limit);},
+  groupInquiryResets(userId,lessonId){const group=groups.student(userId);if(group.status!=='joined')fail('请先加入已审核的小组',403);return Object.fromEntries(db.prepare('SELECT stage,revision FROM inquiry_record_resets WHERE group_id=? AND lesson_id=?').all(group.id,lessonId).map(row=>[row.stage,row.revision]));},
+  clearInquiryRecord(userId,lessonId,stage){
+   if(!lessons.some(lesson=>lesson.id===lessonId)||!Number.isInteger(stage)||stage<1||stage>6)fail('请选择有效课程和环节');
+   const group=groups.student(userId);if(group.status!=='joined')fail('请先加入已审核的小组',403);
+   return transaction(()=>{
+    if(this.groupHasPending(userId,'metacognitive',lessonId,stage))fail('请等待本环节反馈完成后再清空记录',409);
+    const afterRowid=db.prepare('SELECT COALESCE(MAX(c.rowid),0) AS value FROM conversations c WHERE c.user_id IN (SELECT user_id FROM group_members WHERE group_id=?) AND c.agent=? AND c.lesson_id=? AND c.stage=?').get(group.id,'metacognitive',lessonId,stage).value;
+    const revision=randomUUID();db.prepare('INSERT INTO inquiry_record_resets(group_id,lesson_id,stage,after_rowid,revision) VALUES(?,?,?,?,?) ON CONFLICT(group_id,lesson_id,stage) DO UPDATE SET after_rowid=excluded.after_rowid,revision=excluded.revision').run(group.id,lessonId,stage,afterRowid,revision);
+    return {revision};
+   });
+  },
+  groupPromptHistory(userId,agent,lessonId,stage,limit=8){const rows=this.groupConversations(userId,agent,lessonId,500).filter(row=>(!stage||row.stage===stage)&&(agent!=='metacognitive'||row.status==='complete'&&row.source==='model')),messages=[];for(const row of rows){messages.push({role:'user',text:row.userText});if(row.reply&&row.status==='complete')messages.push({role:'agent',text:row.reply});}return messages.slice(-limit);},
   groupHasPending(userId,agent,lessonId,stage,turnId){return this.groupConversations(userId,agent,lessonId,500).some(row=>row.status==='pending'&&(!stage||row.stage===stage)&&row.turnId!==turnId);},
   groupInquiryState(userId,lessonId,stage,turnId){
-   const rows=this.groupConversations(userId,'metacognitive',lessonId,500),unique=values=>[...new Map(values.map(row=>[row.turnId,row])).values()],content=unique(rows.filter(row=>row.kind==='content'&&row.stage===stage));
-   const context=[];for(const prior of [1,2,3,5,6].filter(value=>value<stage)){const latest=unique(rows.filter(row=>row.kind==='content'&&row.stage===prior)).at(-1);if(latest)context.push({stage:prior,text:latest.userText,id:latest.turnId});}
+   const rows=this.groupConversations(userId,'metacognitive',lessonId,500),content=rows.filter(row=>row.kind==='content'&&row.stage===stage&&row.status==='complete'&&row.source==='model');
+   const context=[];for(const prior of [1,2,3,5,6].filter(value=>value<stage)){const latest=rows.filter(row=>row.kind==='content'&&row.stage===prior&&row.status==='complete'&&row.source==='model').at(-1);if(latest)context.push({stage:prior,text:latest.userText,id:latest.turnId});}
    return {attempt:content.some(row=>row.turnId===turnId)?content.findIndex(row=>row.turnId===turnId)+1:content.length+1,latestSubmission:content.at(-1)?.userText||null,context,conversation:this.groupPromptHistory(userId,'metacognitive',lessonId,stage,6)};
   },
   completed(userId){return this.scores(userId).map(({quizId,version})=>({quizId,version}));},

@@ -44,6 +44,22 @@ test('both agents persist student input and returned replies tied to authenticat
  assert.equal(store.conversations(other.user.id,500,0,teacher.user).length,0);const exported=await request('/api/teacher/export?type=conversations&class='+student.user.classId,teacher);assert.equal(exported.status,200);const data=await workbookText(exported);assert.match(data,/知识|knowledge/);assert.match(data,/metacognitive/);assert.match(data,/物距变化影响像的大小/);
  const scoreCSV=await workbookText(await request('/api/teacher/export?type=scores&class='+student.user.classId,teacher));assert.match(scoreCSV,/9 \/ 10/);assert.match(scoreCSV,/10 \/ 10/);assert.doesNotMatch(scoreCSV,/"账号"|90 \/ 100/);
 });
+test('clearing the current inquiry record keeps the stage and archives earlier feedback',async()=>{
+ store.setGroupLearningState(student.user.id,'geometric-optics-basics',2);
+ const before=await(await request('/api/group-conversations?agent=metacognitive&lesson=geometric-optics-basics',student)).json();
+ assert.ok(before.conversations.some(row=>row.stage===1));
+ assert.equal((await request('/api/inquiry-record/clear',teacher,{lessonId:'geometric-optics-basics',stage:1})).status,403);
+ assert.equal((await request('/api/inquiry-record/clear',student,{lessonId:'unknown',stage:1})).status,400);
+ const cleared=await request('/api/inquiry-record/clear',student,{lessonId:'geometric-optics-basics',stage:1});assert.equal(cleared.status,200);
+ const {revision}=await cleared.json();
+ const after=await(await request('/api/group-conversations?agent=metacognitive&lesson=geometric-optics-basics',student)).json();
+ assert.equal(after.resets[1],revision);
+ assert.equal(after.conversations.filter(row=>row.stage===1).length,0);
+ assert.equal(store.groupLearningState(student.user.id).stage,2);
+ assert.ok(store.conversations(student.user.id,100,0,teacher.user).some(row=>row.userText==='物距变化影响像的大小'));
+ const retry=await request('/api/chat',student,{id:'after-clear',lessonId:'geometric-optics-basics',stage:1,kind:'content',attempt:1,text:'物距和像的大小之间有什么关系？'});assert.equal(retry.status,200);const retryResult=await retry.json();assert.equal(retryResult.source,'fallback');assert.equal(retryResult.remainingAttempts,3);
+ assert.equal(store.groupInquiryState(student.user.id,'geometric-optics-basics',1,'next-turn').attempt,1);
+});
 test('teacher updates student profiles and resets passwords without exposing hashes',async()=>{
  const result=await request(`/api/teacher/students/${other.user.id}`,teacher,{name:'学生乙改',gender:'未填写',className:'七年级三班',username:'student2',password:'New-password-789',active:true},'PUT');assert.equal(result.status,200);const p=await result.json();assert.equal('password' in p.student,false);assert.equal(store.session(other.token),null);assert.equal(await store.login('student2','Student-password-456'),null);assert.ok(await store.login('student2','New-password-789'));assert.equal((await request('/api/teacher/students',student,{name:'伪造'})).status,403);
 });
@@ -58,4 +74,26 @@ test('successful model replies are recorded without substituting local answers',
   return original(url,options);
  };
  try{const response=await request('/api/knowledge',student,{text:'测试在线记录',history:[],lessonId:'bending-light'});const result=await response.json();assert.equal(result.source,'model');assert.equal(calls,1);const row=store.conversations(student.user.id,500,0,teacher.user)[0];assert.equal(row.reply,result.content);assert.equal(row.source,'model');assert.equal(row.lessonId,'bending-light');}finally{globalThis.fetch=original;if(originalKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=originalKey;}
+});
+
+test('teacher can reset a student account and clear learning records without deleting the account',async()=>{
+ assert.equal((await request(`/api/teacher/students/${other.user.id}/reset-account`,student,{})).status,403);
+ const reset=await request(`/api/teacher/students/${other.user.id}/reset-account`,teacher,{});assert.equal(reset.status,200);
+ const account=await reset.json();assert.equal(account.student.username,'student2');assert.equal(account.password.length>=8,true);
+ assert.equal(await store.login('student2','New-password-789'),null);
+ assert.ok(await store.login('student2',account.password));
+ assert.ok(store.scores(student.user.id).length>0);
+ assert.ok(store.conversations(student.user.id,100,0,teacher.user).length>0);
+ store.startPosttest(teacher.user,student.user.classId);assert.equal(store.posttestStatus(student.user.id).active,true);
+ assert.equal((await request(`/api/teacher/students/${student.user.id}/clear-records`,student,{})).status,403);
+ const cleared=await request(`/api/teacher/students/${student.user.id}/clear-records`,teacher,{});assert.equal(cleared.status,200);
+ assert.equal(store.session(student.token),null);
+ assert.deepEqual(store.scores(student.user.id),[]);
+ assert.deepEqual(store.conversations(student.user.id,100,0,teacher.user),[]);
+ assert.equal(store.ready(student.user.id),false);
+ assert.equal(store.posttestStatus(student.user.id).active,false);
+ assert.equal(store.groupStatus(student.user.id).status,'waiting');
+ assert.ok(await store.login('student1','Student-password-123'));
+ for(const lessonId of ['bending-light','geometric-optics-basics','energy-skate-park'])store.updateStageProgress(student.user.id,lessonId,6);
+ assert.equal(store.posttestStatus(student.user.id).active,true);
 });

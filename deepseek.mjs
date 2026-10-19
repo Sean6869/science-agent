@@ -13,7 +13,7 @@ export function deepseekConfig(env = process.env) {
  if (!['enabled', 'disabled'].includes(thinking) || !['low', 'high', 'max'].includes(effort)) throw new Error('Invalid DeepSeek thinking configuration');
  return {model, thinking: {type: thinking}, ...(thinking === 'enabled'
   ? {reasoning_effort: effort, max_tokens: 8192}
-  : {temperature: 0.2, max_tokens: 700})};
+  : {temperature: 0.2, max_tokens: 1200})};
 }
 
 export async function completeFeedback(messages, {env = process.env, fetchImpl = fetch, responseFormat} = {}) {

@@ -46,9 +46,9 @@ async function evaluate(p) {
   latestSubmission:typeof p.latestSubmission==='string'?p.latestSubmission.slice(0,2000):null
  };
  try {
-  const result=await completeStructured(buildFeedbackMessages(clean),raw=>({content:formatStructuredFeedback(raw,clean),complete:isStructuredFeedbackComplete(raw)}));
+  const result=await completeStructured(buildFeedbackMessages(clean),raw=>({content:formatStructuredFeedback(raw,clean),complete:isStructuredFeedbackComplete(raw,clean)}));
   return {...result,source:'model',remainingAttempts,exhausted:false,kind:p.kind};
- } catch(error) {console.error('[metacognitive]',error.code||error.name);return {content:fallbackFeedback(clean),source:'fallback',remainingAttempts,exhausted:false,complete:false,kind:p.kind}; }
+ } catch(error) {console.error('[metacognitive]',error.code||error.name);return {content:fallbackFeedback(clean),source:'fallback',remainingAttempts:p.kind==='content'?Math.max(0,MAX_CONTENT_SUBMISSIONS-p.attempt+1):remainingAttempts,exhausted:false,complete:false,kind:p.kind}; }
 }
 export async function defaultSchoolStore(){
  const dataDir=process.env.RAILWAY_VOLUME_MOUNT_PATH||process.env.DATA_DIR;
@@ -121,7 +121,12 @@ export function createApp({store,synthesize,scoreReasoning=scoreReasoningRespons
    if(req.schoolUser?.role!=='student')return json(res,403,{message:'请使用学生账号'});
    const agent=url.searchParams.get('agent'),lessonId=url.searchParams.get('lesson');
    if(!['knowledge','metacognitive'].includes(agent)||!lessons.some(lesson=>lesson.id===lessonId))return json(res,400,{message:'请选择有效的会话'});
-   return json(res,200,{conversations:store.groupConversations(req.schoolUser.id,agent,lessonId)});
+   return json(res,200,{conversations:store.groupConversations(req.schoolUser.id,agent,lessonId),...(agent==='metacognitive'?{resets:store.groupInquiryResets(req.schoolUser.id,lessonId)}:{})});
+  }
+  if(url.pathname==='/api/inquiry-record/clear'&&req.method==='POST'){
+   if(req.schoolUser?.role!=='student')return json(res,403,{message:'请使用学生账号'});
+   const p=await body(req);
+   return json(res,200,store.clearInquiryRecord(req.schoolUser.id,p?.lessonId,p?.stage));
   }
   if(url.pathname==='/api/assessment'&&req.method==='POST'){
    const p=await body(req),lessonId=lessons.some(lesson=>lesson.id===p?.lessonId)?p.lessonId:null,a=assessmentsForLesson(lessonId).find(item=>item.id===p?.option);if(!a)return json(res,400,{message:'请选择有效课程和自评选项'});

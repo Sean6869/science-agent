@@ -38,6 +38,7 @@ test('teacher registration, scoped APIs, import, exports and password resets enf
   assert.equal((await request('/api/teacher/conversations?class='+classA+'&student='+student.id,b)).status,403);
   assert.equal((await request('/api/teacher/export?type=conversations&class='+classA+'&student='+student.id,b)).status,403);
   assert.equal((await request('/api/teacher/students/'+student.id,b,{...student,password:''},'PUT')).status,403);
+  for(const action of ['reset-account','clear-records'])assert.equal((await request('/api/teacher/students/'+student.id+'/'+action,b,{})).status,403);
   assert.equal(store.allScores(b.user).length,0);assert.equal(store.conversations('',100,0,b.user).length,0);assert.equal(store.allScores(admin.user).length,1);
   const download=await request('/api/teacher/accounts.xlsx?class='+classA,a);assert.equal(download.status,200);assert.equal(download.headers.get('cache-control'),'no-store');
   const book=new ExcelJS.Workbook();await book.xlsx.load(Buffer.from(await download.arrayBuffer()));const sheet=book.worksheets[0];assert.equal(sheet.rowCount,4);assert.deepEqual(sheet.getRow(1).values.slice(1),['姓名','性别','班级','账号','密码','权限分组']);assert.equal(sheet.getCell('E2').value,credentials[0].password);assert.equal(typeof sheet.getCell('E2').value,'string');

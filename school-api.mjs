@@ -27,7 +27,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
   if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,completed:store.completed(session.user.id),group:session.user.role==='student'?store.groupStatus(session.user.id):null,ready:session.user.role!=='student'||store.ready(session.user.id),...(session.user.role==='student'?{stageDurations:store.stageDurations(session.user.id)}:{})}:{user:null});return true;}
   if(!path.startsWith('/api/'))return false;
   if(!session){json(res,401,{message:'请先登录'});return true;}
-  if(session.user.role==='student'&&!session.user.aiEnabled&&['/api/chat','/api/knowledge','/api/assessment','/api/group-conversations'].includes(path)){json(res,403,{message:'静态组不使用知识答疑和探究支架',code:'AI_DISABLED'});return true;}
+  if(session.user.role==='student'&&!session.user.aiEnabled&&['/api/chat','/api/knowledge','/api/assessment','/api/group-conversations','/api/inquiry-record/clear'].includes(path)){json(res,403,{message:'静态组不使用知识答疑和探究支架',code:'AI_DISABLED'});return true;}
   if(path==='/api/teacher/profile'&&req.method==='PUT'){try{if(session.user.role!=='teacher')throw Object.assign(new Error('仅教师可以编辑资料'),{status:403});json(res,200,{user:store.updateTeacherProfile(session.user.id,await body(req,500000),session.user)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
   if(path==='/api/auth/activity'&&req.method==='POST'){store.touchSession(token(req));json(res,200,{ok:true});return true;}
   if(path==='/api/auth/logout'&&req.method==='POST'){store.logout(token(req));res.setHeader('Set-Cookie',cookie(req,'',true));json(res,200,{ok:true});return true;}
@@ -80,6 +80,12 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
    if(path==='/api/teacher/timers'&&req.method==='PUT'){const p=await body(req);json(res,200,{stageDurations:store.setStageDurations(actor,p?.classId,p?.minutes)});return true;}
    if(path==='/api/teacher/ai-permissions'&&req.method==='PUT'){const p=await body(req);store.setAiPermission(actor,p?.classId,p?.aiEnabled);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/knowledge/reset'&&req.method==='POST'){const p=await body(req);if(!lessons.some(l=>l.id===p?.lessonId)){json(res,400,{message:'请选择有效课程'});return true;}store.resetKnowledgeQuota(actor,p.classId,p.lessonId);json(res,200,{ok:true});return true;}
+   const resetStudent=/^\/api\/teacher\/students\/([^/]+)\/(reset-account|clear-records)$/.exec(path);
+   if(resetStudent&&req.method==='POST'){
+    try{json(res,200,resetStudent[2]==='reset-account'?await store.resetStudentAccount(resetStudent[1],actor):store.clearStudentRecords(resetStudent[1],actor));}
+    catch(e){json(res,e.status||400,{message:e.message});}
+    return true;
+   }
    if(req.method==='DELETE'){
     const target=/^\/api\/teacher\/(students|conversations)\/([^/]+)(\/scores)?$/.exec(path);
     if(target){if(target[1]==='conversations'&&!target[3])store.deleteConversation(target[2],actor);else if(target[1]==='students'){if(target[3])store.deleteScores(target[2],actor);else store.deleteStudent(target[2],actor);}else{json(res,404,{message:'接口不存在'});return true;}json(res,200,{ok:true});return true;}
@@ -131,8 +137,8 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
     return true;
    }
   }
-  if(['/api/chat','/api/knowledge','/api/assessment','/api/config','/api/group-conversations','/api/role-hint'].includes(path)&&session.user.role==='student'&&!store.ready(session.user.id)){json(res,403,{message:'请先完成全部入门测验'});return true;}
-  if(['/api/chat','/api/knowledge','/api/assessment','/api/config','/api/group-conversations','/api/role-hint'].includes(path)&&session.user.role==='student'&&store.groupStatus(session.user.id).status!=='joined'){json(res,403,{message:'请等待教师确认分组，再输入本组小组码进入实验'});return true;}
+  if(['/api/chat','/api/knowledge','/api/assessment','/api/config','/api/group-conversations','/api/role-hint','/api/inquiry-record/clear'].includes(path)&&session.user.role==='student'&&!store.ready(session.user.id)){json(res,403,{message:'请先完成全部入门测验'});return true;}
+  if(['/api/chat','/api/knowledge','/api/assessment','/api/config','/api/group-conversations','/api/role-hint','/api/inquiry-record/clear'].includes(path)&&session.user.role==='student'&&store.groupStatus(session.user.id).status!=='joined'){json(res,403,{message:'请等待教师确认分组，再输入本组小组码进入实验'});return true;}
   if(['/api/chat','/api/assessment','/api/role-hint'].includes(path)&&session.user.role==='student'&&!store.groupRoles(session.user.id).leaderId){json(res,403,{message:'请先完成小组角色分工'});return true;}
   return false;
  };

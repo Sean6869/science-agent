@@ -22,5 +22,15 @@ test('group members share both AI histories with sender attribution and shared a
   const retried=store.groupConversations(second.id,'knowledge','bending-light').filter(row=>row.turnId==='knowledge-retry');assert.equal(retried.length,1);assert.equal(retried[0].reply,'最终回复');
   const inquiry=store.begin(first.id,'metacognitive',{id:'inquiry-1',lessonId:'bending-light',stage:1,kind:'content',text:'研究入射角对折射角的影响'});store.finish(inquiry,{content:'请补充可观察的变量。',source:'model',complete:false});
   const state=store.groupInquiryState(second.id,'bending-light',1,'inquiry-2');assert.equal(state.attempt,2);assert.equal(state.latestSubmission,'研究入射角对折射角的影响');assert.match(state.conversation.at(-1).text,/可观察的变量/);
+  const unavailable=store.begin(first.id,'metacognitive',{id:'inquiry-fallback',lessonId:'bending-light',stage:1,kind:'content',text:'继续核对实验问题'});store.finish(unavailable,{content:'智能反馈暂时不可用',source:'fallback',complete:false});
+  assert.equal(store.groupInquiryState(second.id,'bending-light',1,'inquiry-next').attempt,2);
+  store.setGroupLearningState(first.id,'bending-light',3);
+  const {revision}=store.clearInquiryRecord(second.id,'bending-light',1);
+  assert.equal(store.groupInquiryResets(first.id,'bending-light')[1],revision);
+  assert.equal(store.groupConversations(first.id,'metacognitive','bending-light').filter(row=>row.stage===1).length,0);
+  assert.equal(store.groupInquiryState(first.id,'bending-light',1,'inquiry-next').attempt,1);
+  assert.equal(store.groupLearningState(second.id).stage,3);
+  assert.ok(store.conversations('',100,0,admin).some(row=>row.userText==='研究入射角对折射角的影响'));
+  assert.equal(store.groupConversations(second.id,'knowledge','bending-light').length,3);
  }finally{store.close();}
 });
