@@ -4,7 +4,7 @@ import {mountConclusionForm,conclusionPresentation} from '../public/conclusion-v
 import {conclusionTasks} from '../public/conclusion-form.js';
 
 class Element{
- constructor(tag){this.tag=tag;this.children=[];this.value='';this.style={setProperty(){}};}
+ constructor(tag){this.tag=tag;this.children=[];this.value='';this.style={setProperty(name,value){this[name]=value;}};}
  append(...children){this.children.push(...children);}
  replaceChildren(){this.children=[];}
  setAttribute(){}
@@ -33,6 +33,10 @@ test('paging keeps answers, validates hidden blanks, and submits every paragraph
   const form=new Element('form'),draft={fields:[]};let submitted,changes=0;
   mountConclusionForm(form,{lessonId,draft,onChange:()=>changes++,onSubmit:(_,text)=>{submitted=text;}});
   const cards=all(form,'section'),selects=all(form,'select'),buttons=all(form,'button'),submit=()=>form.onsubmit({preventDefault(){}});
+  for(const control of selects){
+   const longest=Math.max(...control.children.map(option=>[...option.textContent].length));
+   assert.equal(control.style['--blank-text-width'],`${longest}em`);
+  }
   assert.equal(cards.filter(card=>!card.hidden).length,1);
   for(const control of selects){control.value=control.children[1].value;control.oninput();}
   const last=selects.at(-1),answer=last.value;last.value='';last.oninput();submit();

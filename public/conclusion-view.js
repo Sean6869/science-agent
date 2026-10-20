@@ -30,7 +30,8 @@ export function mountConclusionForm(form,{lessonId,draft,onChange,onSubmit}){
    const blank=node('option','请选择');blank.value='';control.append(blank);
    for(const value of field.options){const option=node('option',value);option.value=value;control.append(option);}
    control.name=`conclusion-${position}`;control.required=true;control.setAttribute('aria-label',`${section.title}：${field.label}`);
-   control.style.setProperty('--blank-width',`${Math.max(6,...field.options.map(value=>value.length+3))}em`);
+   // Reserve text width independently from padding and the arrow, including the placeholder.
+   control.style.setProperty('--blank-text-width',`${Math.max(...['请选择',...field.options].map(value=>[...value].length))}em`);
    control.value=draft.fields[position]||'';
    control.oninput=()=>{draft.fields[position]=control.value;status.textContent='';onChange();};
    controls[position]={control,page:sectionIndex};target.append(control);
