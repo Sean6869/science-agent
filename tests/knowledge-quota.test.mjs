@@ -7,7 +7,10 @@ test('HH groups share three questions per lesson, retries are free and teacher r
   const {user:admin}=await store.login('admin','Test-admin-password'),other=await store.registerTeacher({name:'其他教师',username:'other',password:'Test-teacher-password'}),students=[];
   for(let i=0;i<6;i++)students.push(await store.addStudent({name:'学生'+i,username:'quota_'+i,password:'12345678',gender:'男',className:'一班'},admin));
   for(const [i,s] of students.entries())for(const q of quizzes)store.submit(s.id,q.id,Object.fromEntries(q.questions.map(x=>[x.id,i<3?x.options.find(o=>o.id!==x.answer).id:x.answer])));
-  let batch=store.listGroups(admin)[0];store.approveGroups(admin,batch.id,batch.batchId);batch=store.listGroups(admin)[0];
+  let batch=store.listGroups(admin)[0];
+  const members=batch.groups.flatMap(group=>group.members),high=members.filter(member=>member.level==='high'),low=members.filter(member=>member.level==='low');
+  store.editGroups(admin,batch.id,batch.batchId,[[high[0].id,high[1].id],[high[2].id,low[0].id],[low[1].id,low[2].id]]);
+  batch=store.listGroups(admin)[0];store.approveGroups(admin,batch.id,batch.batchId);batch=store.listGroups(admin)[0];
   for(const g of batch.groups)for(const m of g.members)store.joinGroup(m.id,g.code);
   const hh=batch.groups.find(g=>g.type==='HH'),[a,b]=hh.members;
   for(let i=0;i<3;i++)assert.equal(store.knowledgeQuota(i%2?a.id:b.id,'bending-light',{id:'q'+i,text:'问题'+i}).remaining,2-i);

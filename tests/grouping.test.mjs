@@ -9,9 +9,9 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 
-test('median split creates balanced paired group types and keeps same-gender preference',()=>{
+test('median split prioritizes high-low pairs and avoids low-low pairs',()=>{
  const six=Array.from({length:6},(_,i)=>({id:String(i),username:'s'+i,total:30+i*30,gender:i%2?'女':'男'})),plan=planGroups(six,{random:()=>.3});
- assert.equal(plan.median,105);assert.deepEqual(plan.counts,{LL:1,HH:1,HL:1});assert.deepEqual(plan.lowRange,[30,90]);assert.deepEqual(plan.highRange,[120,180]);
+ assert.equal(plan.median,105);assert.deepEqual(plan.counts,{LL:0,HH:0,HL:3});assert.deepEqual(plan.lowRange,[30,90]);assert.deepEqual(plan.highRange,[120,180]);
  assert.equal(new Set(plan.groups.flatMap(g=>g.members.map(m=>m.id))).size,6);assert.ok(plan.groups.every(g=>g.members.length===2));
 });
 test('median ties are distributed across strata and odd classes receive a virtual partner',()=>{

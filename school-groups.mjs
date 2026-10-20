@@ -1,6 +1,6 @@
 import {randomUUID,randomBytes} from 'node:crypto';
 import {roleGuidance} from './social-roles.mjs';
-import {planGroups} from './grouping.mjs';
+import {GROUPING_STRATEGY_VERSION,planGroups} from './grouping.mjs';
 
 const VIRTUAL_NAME='小科机器人';
 const virtualId=groupId=>`virtual:${groupId}`;
@@ -54,7 +54,7 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
  function invalidate(classId){if(!classId)return;atomic(()=>{db.prepare('DELETE FROM group_members WHERE group_id IN (SELECT id FROM student_groups WHERE class_id=?)').run(classId);db.prepare('DELETE FROM student_groups WHERE class_id=?').run(classId);db.prepare('DELETE FROM group_batches WHERE class_id=?').run(classId);});}
  function ensure(classId){
   if(!classId)return;const existing=db.prepare('SELECT * FROM group_batches WHERE class_id=?').get(classId);
-  if(existing){const summary=JSON.parse(existing.summary);if(existing.approved_at||summary.strategyVersion===2)return;invalidate(classId);}
+  if(existing){const summary=JSON.parse(existing.summary);if(existing.approved_at||summary.strategyVersion===GROUPING_STRATEGY_VERSION)return;invalidate(classId);}
   const people=roster(classId);if(!people.length||people.some(s=>!s.completed))return;
   const {groups,...summary}=planGroups(people);
   atomic(()=>{db.prepare('INSERT INTO group_batches VALUES(?,?,?,NULL,NULL)').run(classId,randomUUID(),JSON.stringify(summary));
@@ -85,7 +85,7 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
   const people=roster(classId),byId=new Map(people.map(s=>[s.id,s]));
   if(!Array.isArray(assignments)||assignments.length!==Math.ceil(people.length/2)||assignments.some(g=>!Array.isArray(g)||g.length<1||g.length>2))fail('每组须为两名学生；人数为奇数时，最后一名学生将与小科机器人组队');
   const ids=assignments.flat();if(ids.length!==people.length||new Set(ids).size!==people.length||ids.some(id=>!byId.has(id))||people.some(s=>!s.completed))fail('成员须包含本班全部已完成测验的学生，且不能重复');
-  const summary=JSON.parse(batch.summary),storedLevels=new Map(db.prepare('SELECT m.user_id,m.level FROM group_members m JOIN student_groups g ON g.id=m.group_id WHERE g.class_id=?').all(classId).map(row=>[row.user_id,row.level])),boundary=summary.median??summary.threshold,level=s=>storedLevels.get(s.id)||(summary.strategyVersion===2?s.total<boundary?'low':'high':s.total<=boundary?'low':'high');summary.counts={LL:0,HH:0,HL:0};summary.edited=true;
+  const summary=JSON.parse(batch.summary),storedLevels=new Map(db.prepare('SELECT m.user_id,m.level FROM group_members m JOIN student_groups g ON g.id=m.group_id WHERE g.class_id=?').all(classId).map(row=>[row.user_id,row.level])),boundary=summary.median??summary.threshold,level=s=>storedLevels.get(s.id)||(summary.strategyVersion>=2?s.total<boundary?'low':'high':s.total<=boundary?'low':'high');summary.counts={LL:0,HH:0,HL:0};summary.edited=true;
   const planned=assignments.map(ids=>{const members=ids.map(id=>byId.get(id)),virtual=members.length===1,type=virtual?'VR':level(members[0])===level(members[1])?(level(members[0])==='low'?'LL':'HH'):'HL';if(!virtual)summary.counts[type]++;return {members,type,virtual};});
   atomic(()=>{
    invalidate(classId);

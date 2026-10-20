@@ -93,7 +93,7 @@ export function createDataReasoningCoach(){
  dialog.setAttribute('aria-labelledby','dataReasoningTitle');
  dialog.addEventListener('cancel',event=>event.preventDefault());
  document.body.append(dialog);
- let lesson=null,pageIndex=0,answers=new Map(),completedPages=new Set(),completeHandler=()=>{};
+ let lesson=null,pageIndex=0,answers=new Map(),completedPages=new Set(),completeHandler=()=>{},revisit=false;
 
  const show=()=>{if(typeof dialog.showModal==='function')dialog.showModal();else{dialog.hidden=false;dialog.setAttribute('open','');}};
  const close=()=>{if(typeof dialog.close==='function')dialog.close();else{dialog.hidden=true;dialog.removeAttribute('open');}};
@@ -140,7 +140,7 @@ export function createDataReasoningCoach(){
   });
   const actions=document.createElement('footer');
   if(pageIndex>0){const back=document.createElement('button');back.type='button';back.className='secondary';back.textContent='上一页';back.onclick=()=>{pageIndex-=1;render();};actions.append(back);}
-  const primary=document.createElement('button');primary.type=pageComplete()?'button':'submit';primary.className='primary';primary.textContent=pageComplete()?(isLast?'完成引导，进入第五环节':'下一页：继续学习'):'提交答案，听听小科怎么说';
+  const primary=document.createElement('button');primary.type=pageComplete()?'button':'submit';primary.className='primary';primary.textContent=pageComplete()?(isLast?(revisit?'返回第五环节':'完成引导，进入第五环节'):'下一页：继续学习'):'提交答案，听听小科怎么说';
   if(pageComplete())primary.onclick=()=>{if(isLast){close();completeHandler();}else{pageIndex+=1;render();}};
   actions.append(primary);form.append(actions);
   form.onsubmit=event=>{event.preventDefault();const data=new FormData(form);page.questions.forEach((_,index)=>answers.set(`${pageIndex}:${index}`,data.get(`question-${index}`)));completedPages.add(pageIndex);render();};
@@ -148,10 +148,11 @@ export function createDataReasoningCoach(){
  }
 
  return {
-  open({lessonId,onComplete}){
+  open({lessonId,onComplete,reopen=false}){
    const nextLesson=dataReasoningDialogues[lessonId];
    if(!nextLesson){onComplete?.();return;}
-   lesson=nextLesson;pageIndex=0;answers=new Map();completedPages=new Set();completeHandler=onComplete||(()=>{});render();show();
+   if(!reopen||lesson!==nextLesson){answers=new Map();completedPages=new Set();}
+   lesson=nextLesson;pageIndex=0;completeHandler=onComplete||(()=>{});revisit=reopen;render();show();
   },
   get isOpen(){return dialog.open;}
  };

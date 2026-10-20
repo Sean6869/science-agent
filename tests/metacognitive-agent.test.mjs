@@ -46,11 +46,33 @@ test('a directional science question is not marked as missing direction and quot
  const payload={lessonId:'energy-skate-park',stage:1,kind:'content',attempt:2,text:'物体的质量越大，动能会越大吗？'};
  const raw=JSON.stringify({selfAssessmentGuide:'请对照标准自评。',ratings:[{dimension:'明确具体',stars:2,reason:'问题提到质量和动能两个变量，但没有写清质量变化与动能变化的关系方向'},{dimension:'可探究性',stars:2,reason:'还需说明观察方法'}],feedback:'请把变量关系写得更明确。本环节还剩1次内容提交机会。',hasConcepts:false});
  const formatted=formatStructuredFeedback(raw,payload);
- assert.match(buildFeedbackMessages(payload)[0].content,/越大吗.*关系方向/);
- assert.match(formatted,/明确具体⭐⭐⭐（明确提出质量增大时动能是否增大的关系方向）/);
+ assert.match(buildFeedbackMessages(payload)[0].content,/速度变大.*均应评为三星/);
+ assert.match(formatted,/明确具体⭐⭐⭐（明确提出质量变化与动能变化的关系方向）/);
+ assert.match(formatted,/可探究性⭐⭐⭐/);
  assert.doesNotMatch(formatted,/没有写清|请把变量关系写得更明确/);
  assert.equal(formatted.match(/本环节还剩1次内容提交机会/g)?.length,1);
+ assert.equal(isStructuredFeedbackComplete(raw,payload),true);
+});
+
+test('stage-one directional questions in optics and energy are recognized without demanding experiment steps',()=>{
+ for(const [lessonId,text] of [
+  ['bending-light','将入射角增大，折射角也会跟着变大吗？'],
+  ['energy-skate-park','如果将物体的速度变大，它的动能也会变大吗？']
+ ]){
+  const payload={lessonId,stage:1,kind:'content',attempt:1,text};
+  const raw=JSON.stringify({selfAssessmentGuide:'请对照标准自评。',ratings:[{dimension:'明确具体',stars:3,reason:'指出关系方向'},{dimension:'可探究性',stars:2,reason:'还没有说明怎样操作和测量'}],feedback:'请补充具体实验步骤。',hasConcepts:false});
+  const result=formatStructuredFeedback(raw,payload);
+  assert.match(result,/可探究性⭐⭐⭐/);
+  assert.doesNotMatch(result,/还没有说明怎样操作|补充具体实验步骤/);
+  assert.equal(isStructuredFeedbackComplete(raw,payload),true);
+ }
+});
+
+test('a statement about variables is not silently treated as a science question',()=>{
+ const payload={lessonId:'energy-skate-park',stage:1,kind:'content',attempt:1,text:'速度变大，动能也会变大。'};
+ const raw=JSON.stringify({selfAssessmentGuide:'请对照标准自评。',ratings:[{dimension:'明确具体',stars:2,reason:'请形成科学问题'},{dimension:'可探究性',stars:2,reason:'尚未提出待检验的问题'}],feedback:'请将观察转化为问题。',hasConcepts:false});
  assert.equal(isStructuredFeedbackComplete(raw,payload),false);
+ assert.match(formatStructuredFeedback(raw,payload),/可探究性⭐⭐（/);
 });
 
 test('each lesson uses its own criteria and examples across all assessed stages',()=>{

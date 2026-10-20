@@ -1,4 +1,5 @@
 const shuffle=(items,random)=>{const result=[...items];for(let i=result.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[result[i],result[j]]=[result[j],result[i]];}return result;};
+export const GROUPING_STRATEGY_VERSION=3;
 const better=(a,b)=>!b||a.some((value,index)=>a.slice(0,index).every((item,i)=>item===b[i])&&value<b[index]);
 
 function distributions(total,caps,index=0,prefix=[]){
@@ -42,21 +43,21 @@ function buildPairs(high,low,leftover,counts,allocation,random){
 }
 
 export function planGroups(students,{random=Math.random}={}){
- if(!students.length)return {groups:[],threshold:null,median:null,lowRange:null,highRange:null,tieCount:0,counts:{LL:0,HH:0,HL:0},strategyVersion:2};
+ if(!students.length)return {groups:[],threshold:null,median:null,lowRange:null,highRange:null,tieCount:0,counts:{LL:0,HH:0,HL:0},strategyVersion:GROUPING_STRATEGY_VERSION};
  const {sorted,median,low,high,tieCount}=classify(students,random),levelById=new Map([...low.map(student=>[student.id,'low']),...high.map(student=>[student.id,'high'])]);
  let bestScore,best=[];const leftovers=students.length%2?[...students]:[null];
  for(const leftover of leftovers){
   const highCount=high.length-(leftover&&levelById.get(leftover.id)==='high'?1:0),lowCount=low.length-(leftover&&levelById.get(leftover.id)==='low'?1:0);
   for(let mixed=0;mixed<=Math.min(highCount,lowCount);mixed++){
    if((highCount-mixed)%2||(lowCount-mixed)%2)continue;
-   const counts={HH:(highCount-mixed)/2,LL:(lowCount-mixed)/2,HL:mixed},values=Object.values(counts),balance=[Math.max(...values)-Math.min(...values),values.reduce((sum,value)=>sum+value*value,0)];
+   const counts={HH:(highCount-mixed)/2,LL:(lowCount-mixed)/2,HL:mixed};
    const remainingHigh=high.filter(student=>student!==leftover),remainingLow=low.filter(student=>student!==leftover);
    for(const allocation of allocationOptions(remainingHigh,remainingLow,mixed)){
-    const score=[...balance,-allocation.same];if(better(score,bestScore)){bestScore=score;best=[];}if(score.every((value,index)=>value===bestScore[index]))best.push({leftover,counts,allocation});
+    const score=[-counts.HL,counts.LL,counts.HH,-allocation.same];if(better(score,bestScore)){bestScore=score;best=[];}if(score.every((value,index)=>value===bestScore[index]))best.push({leftover,counts,allocation});
    }
   }
  }
  const chosen=best[Math.floor(random()*best.length)],groups=buildPairs(high,low,chosen.leftover,chosen.counts,chosen.allocation,random).map(group=>({...group,members:group.members.map(student=>({...student,level:levelById.get(student.id)}))}));
  const range=list=>list.length?[Math.min(...list.map(student=>student.total)),Math.max(...list.map(student=>student.total))]:null;
- return {threshold:median,median,lowRange:range(low),highRange:range(high),tieCount,counts:chosen.counts,strategyVersion:2,groups};
+ return {threshold:median,median,lowRange:range(low),highRange:range(high),tieCount,counts:chosen.counts,strategyVersion:GROUPING_STRATEGY_VERSION,groups};
 }

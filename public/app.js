@@ -13,10 +13,11 @@ import {formatFeedbackForDisplay} from './feedback-format.js';
 import {normalizeSpeechTranscript} from './speech-text.js';
 import {shouldShowHalfwayEncouragement} from './stage-milestone.js';
 import {createDataReasoningCoach,shouldShowDataReasoningCoach} from './data-reasoning-coach.js';
+import {conclusionTasks,formatConclusion} from './conclusion-form.js';
 const KEY=`science-session-v4:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const LEGACY_KEY=`science-session-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const configuredDurations=()=>stages.map((_,index)=>{const seconds=Number(window.schoolStageDurations?.[index]);return Number.isInteger(seconds)&&seconds>=60&&seconds<=3600?seconds:DEFAULT_STAGE_SECONDS;});
-const fresh=()=>{const durations=configuredDurations();return {version:5,timerConfig:durations.join(','),stage:1,milestones:{halfwayEncouragementShown:false,dataReasoningCompleted:false},timers:createStageTimers(stages.map(s=>s.id),durations),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))};};
+const fresh=()=>{const durations=configuredDurations();return {version:5,timerConfig:durations.join(','),stage:1,milestones:{halfwayEncouragementShown:false,dataReasoningCompleted:false},timers:createStageTimers(stages.map(s=>s.id),durations),data:Object.fromEntries(stages.map(s=>[s.id,{draft:'',fields:[],submissions:[],messages:[],stale:false,awaitingSelfAssessment:false}]))};};
 let state=fresh();
 let activeLessonId=null,legacyState=null;
 function normalizeState(saved){
@@ -34,6 +35,7 @@ const narrationButton=$('narrate');
 const roleHintButton=createRoleHintButton(),roleHint=createRoleHintController(roleHintButton,{load:async hint=>{const response=await apiFetch(`/api/role-hint?stage=${hint.id}`),result=await response.json();if(!response.ok)throw new Error(result.message);return result.hint;}});$('stageTimer').append(roleHintButton);
 const lessonVideo=createLessonVideo({userId:window.schoolUser.id,onWatched:()=>render()});
 const dataReasoningCoach=createDataReasoningCoach();
+const coachReopen=document.createElement('button');coachReopen.type='button';coachReopen.className='coach-reopen';coachReopen.textContent='🧭 科学推理教练';coachReopen.title='查看科学推理教练';coachReopen.setAttribute('aria-label','查看科学推理教练');coachReopen.onclick=()=>dataReasoningCoach.open({lessonId:window.__scienceLesson?.id,reopen:state.milestones.dataReasoningCompleted,onComplete:()=>{state.milestones.dataReasoningCompleted=true;save();render();}});$('stageTimer').append(coachReopen);
 const narrator=createNarrator({onError:()=>{narrationButton.title='语音暂不可用，请点击重试';},onLoading:()=>{narrationButton.title='正在准备语音，点击可停止';},onState:playing=>{
  narrationButton.classList.toggle('playing',playing);
  narrationButton.setAttribute('aria-label',playing?'停止播放开场白':'播放开场白');
@@ -87,8 +89,8 @@ function sharedMessages(id){return uniqueTurns(sharedRows.filter(row=>row.stage=
 async function syncShared(){
  const lessonId=window.__scienceLesson?.id;if(!lessonId||sharedSyncing)return;sharedSyncing=true;const generation=sharedGeneration;
  try{const response=await apiFetch(`/api/group-conversations?agent=metacognitive&lesson=${encodeURIComponent(lessonId)}`),result=await response.json();if(!response.ok)throw new Error(result.message);if(lessonId!==window.__scienceLesson?.id||generation!==sharedGeneration)return;let changed=!sharedLoaded||JSON.stringify(sharedRows)!==JSON.stringify(result.conversations);sharedRows=result.conversations;sharedLoaded=true;
-  for(const stage of stages){const d=state.data[stage.id],revision=result.resets?.[stage.id]||null;if(revision&&d.resetRevision!==revision){d.messages=[];d.submissions=[];d.awaitingSelfAssessment=false;d.resetRevision=revision;invalidate(stage.id);changed=true;}const rows=uniqueTurns(sharedRows.filter(row=>row.stage===stage.id));if(stage.id===4)d.submissions=rows.filter(row=>row.kind==='assessment').map(row=>({id:row.turnId,at:row.createdAt}));else{const content=rows.filter(row=>row.kind==='content'&&row.status==='complete'&&row.source==='model');d.submissions=content.map(row=>({id:row.turnId,text:row.userText,at:row.createdAt}));const last=rows.at(-1);d.awaitingSelfAssessment=!!(last?.status==='complete'&&last.kind==='content'&&!last.complete&&last.source==='model');}}
-  if(changed){save();render();}
+  for(const stage of stages){const d=state.data[stage.id],revision=result.resets?.[stage.id]||null;if(revision&&d.resetRevision!==revision){d.messages=[];d.submissions=[];d.fields=[];d.awaitingSelfAssessment=false;d.resetRevision=revision;invalidate(stage.id);changed=true;}const rows=uniqueTurns(sharedRows.filter(row=>row.stage===stage.id));if(stage.id===4)d.submissions=rows.filter(row=>row.kind==='assessment').map(row=>({id:row.turnId,at:row.createdAt}));else{const content=rows.filter(row=>row.kind==='content'&&row.status==='complete'&&row.source==='model');d.submissions=content.map(row=>({id:row.turnId,text:row.userText,at:row.createdAt}));const last=rows.at(-1);d.awaitingSelfAssessment=stage.id!==5&&!!(last?.status==='complete'&&last.kind==='content'&&!last.complete&&last.source==='model');}}
+  if(changed){if(!state.data[5].fields?.length)renderConclusionForm();save();render();}
  }catch{}finally{sharedSyncing=false;}
 }
 function renderFeedback(div,text){
@@ -122,15 +124,34 @@ function renderBrief(stage) {
  brief.classList.toggle('collapsed',collapsed);toggle.onclick=()=>{const next=!brief.classList.contains('collapsed');brief.classList.toggle('collapsed',next);if(next)collapsedBriefs.add(stage.id);else collapsedBriefs.delete(stage.id);toggle.setAttribute('aria-expanded',String(!next));toggle.setAttribute('aria-label',next?'展开教学提示':'折叠教学提示');toggle.title=next?'展开教学提示':'折叠教学提示';};
  brief.replaceChildren(content,toggle);
 }
+function renderConclusionForm(){
+ const form=$('conclusionForm'),task=conclusionTasks[window.__scienceLesson?.id];form.replaceChildren();if(!task)return;
+ const heading=document.createElement('h3');heading.id='conclusionTitle';heading.textContent=task.title;
+ const instruction=document.createElement('p');instruction.textContent=task.instruction;
+ form.append(heading,instruction);
+ let index=0;const saved=state.data[5].fields||[];
+ task.sections.forEach(section=>{const card=document.createElement('section');card.className='conclusion-section';const title=document.createElement('h4');title.textContent=section.title;card.append(title);
+  section.fields.forEach(field=>{const position=index++,label=document.createElement('label'),caption=document.createElement('span');caption.textContent=field.label;let control;
+   if(field.options){control=document.createElement('select');const empty=document.createElement('option');empty.value='';empty.textContent='请选择';control.append(empty,...field.options.map(value=>{const option=document.createElement('option');option.value=value;option.textContent=value;return option;}));}
+   else{control=document.createElement('input');control.type='text';control.maxLength=200;control.placeholder=field.placeholder;}
+   control.required=true;control.name=`conclusion-${position}`;control.value=saved[position]||'';control.oninput=()=>{state.data[5].fields[position]=control.value;save();};label.append(caption,control);card.append(label);
+  });form.append(card);
+ });
+ const actions=document.createElement('div');actions.className='conclusion-actions';const status=document.createElement('small');status.className='conclusion-status';status.setAttribute('role','status');const submitButton=document.createElement('button');submitButton.type='submit';submitButton.className='primary';submitButton.textContent='提交结论给小科评价';actions.append(status,submitButton);form.append(actions);
+ form.onsubmit=event=>{event.preventDefault();const fields=[...form.querySelectorAll('input,select')].map(control=>control.value.trim());try{status.textContent='';submit(event,formatConclusion(window.__scienceLesson?.id,fields));}catch(error){status.textContent=error.message;form.reportValidity();}};
+}
 function render(forceMessagesBottom=false){
  const s=stages[state.stage-1],d=state.data[s.id];
  document.querySelector('.inquiry').classList.toggle('assessment-active',s.id===4);
+ document.querySelector('.inquiry').classList.toggle('conclusion-active',s.id===5);
+ coachReopen.hidden=s.id!==5;
  document.querySelectorAll('.stage').forEach(b=>{const active=+b.dataset.id===s.id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));const done=state.data[b.dataset.id].submissions.length>0;b.classList.toggle('complete',done);});
  renderBrief(s);
  $('stageStatus').textContent=`第 ${s.id} 步 · ${s.id===4?(d.submissions.length?'已完成自评':'进行中'):`内容提交 ${Math.min(d.submissions.length,3)}/3`}${d.awaitingSelfAssessment?' · 等待星级自评':''}${d.stale?' · 依据已更新，请复核':''}${d.draft?' · 有未提交草稿':''}`;
  $('draft').value=d.draft;$('draft').placeholder=s.placeholder;
- $('composer').hidden=s.id===4;$('assessment').hidden=s.id!==4;
+ $('composer').hidden=s.id===4||s.id===5;$('assessment').hidden=s.id!==4;$('conclusionForm').hidden=s.id!==5;
  const groupBusy=sharedRows.some(row=>row.stage===s.id&&row.status==='pending'),videoRequired=s.id===1&&!lessonVideo.isWatched();$('draft').disabled=busy.has(s.id)||groupBusy||videoRequired;document.querySelector('.send').disabled=busy.has(s.id)||groupBusy||videoRequired;if(videoRequired)$('draft').placeholder='请先观看导入视频，再提出科学问题';
+ const conclusionSubmit=$('conclusionForm').querySelector('button[type=submit]');if(conclusionSubmit){conclusionSubmit.disabled=busy.has(s.id)||groupBusy||d.submissions.length>=3;const status=$('conclusionForm').querySelector('.conclusion-status');if(d.submissions.length>=3)status.textContent='本环节三次提交机会已用完，请查看小科的反馈。';}
  renderMessages(forceMessagesBottom);renderTimer();save();
 }
 function invalidate(id){for(const s of stages)if(s.id>id&&state.data[s.id].submissions.length)state.data[s.id].stale=true;}
@@ -147,16 +168,16 @@ async function requestFeedback(turn){
   add(id,'system','在线评价暂时未完成，产出已保存。请重试本次反馈，不会额外占用提交次数。',{retry:turn});
   return;
  }
- state.data[id].awaitingSelfAssessment=turn.kind==='content'&&!p.exhausted&&!p.complete;
+ state.data[id].awaitingSelfAssessment=id!==5&&turn.kind==='content'&&!p.exhausted&&!p.complete;
  add(id,'agent',p.content,{turnId:turn.id,source:p.source,kind:turn.kind,local:true});
  }catch{if(state!==epoch)return;state.data[id].messages=state.data[id].messages.filter(m=>m!==pending);add(id,'system','反馈暂不可用，产出已保存。可重试本次反馈。',{retry:turn});}
  finally{busy.delete(id);if(state===epoch){await syncShared();save();if(id===state.stage)render();}}
 }
-function submit(e){
- e.preventDefault();const id=state.stage;if(busy.has(id)||sharedRows.some(row=>row.stage===id&&row.status==='pending'))return;const text=$('draft').value.trim();if(!text)return;
+function submit(e,preparedText){
+ e.preventDefault();const id=state.stage;if(busy.has(id)||sharedRows.some(row=>row.stage===id&&row.status==='pending'))return;const text=(preparedText??$('draft').value).trim();if(!text||id===5&&state.data[id].submissions.length>=3)return;
  stopActiveTimer();
  const d=state.data[id];
- const kind=d.awaitingSelfAssessment&&isSelfAssessmentText(text)?'self_assessment':'content';
+ const kind=id!==5&&d.awaitingSelfAssessment&&isSelfAssessmentText(text)?'self_assessment':'content';
  const attempt=kind==='content'?d.submissions.length+1:d.submissions.length;
  const context=stages.filter(s=>s.id<id&&s.id!==4).map(s=>{const latest=state.data[s.id].submissions.at(-1);return latest?{stage:s.id,text:latest.text,id:latest.id}:null;}).filter(Boolean);
  const turn={id:crypto.randomUUID(),lessonId:window.__scienceLesson?.id,stage:id,kind,attempt,text,context,latestSubmission:kind==='self_assessment'?d.submissions.at(-1)?.text||null:text,conversation:d.messages.filter(m=>['user','agent'].includes(m.role)).slice(-6).map(({role,text})=>({role,text}))};
@@ -191,7 +212,7 @@ af.onsubmit=async e=>{e.preventDefault();const option=new FormData(af).get('asse
 $('composer').onsubmit=submit;
 $('draft').maxLength=2000;$('draft').oninput=e=>{state.data[state.stage].draft=e.target.value;save();};
 $('draft').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit();}};
-$('clear').onclick=async()=>{const id=state.stage,lessonId=window.__scienceLesson?.id;if(!lessonId||!window.confirm('清空当前环节的小组对话和提交记录？所在环节与倒计时保留，历史记录仍供教师查看。'))return;const button=$('clear');button.disabled=true;try{const response=await apiFetch('/api/inquiry-record/clear',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lessonId,stage:id})}),result=await response.json();if(!response.ok)throw new Error(result.message||'清空失败');if(speech)speech.abort();narrator.stop();sharedGeneration++;sharedRows=sharedRows.filter(row=>row.stage!==id);const d=state.data[id];d.draft='';d.submissions=[];d.messages=[];d.stale=false;d.awaitingSelfAssessment=false;d.resetRevision=result.revision;invalidate(id);save();render();void syncShared();}catch(error){window.alert(error.message||'清空失败，请重试');}finally{button.disabled=false;}};
+$('clear').onclick=async()=>{const id=state.stage,lessonId=window.__scienceLesson?.id;if(!lessonId||!window.confirm('清空当前环节的小组对话和提交记录？所在环节与倒计时保留，历史记录仍供教师查看。'))return;const button=$('clear');button.disabled=true;try{const response=await apiFetch('/api/inquiry-record/clear',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lessonId,stage:id})}),result=await response.json();if(!response.ok)throw new Error(result.message||'清空失败');if(speech)speech.abort();narrator.stop();sharedGeneration++;sharedRows=sharedRows.filter(row=>row.stage!==id);const d=state.data[id];d.draft='';d.fields=[];d.submissions=[];d.messages=[];d.stale=false;d.awaitingSelfAssessment=false;d.resetRevision=result.revision;invalidate(id);renderConclusionForm();save();render();void syncShared();}catch(error){window.alert(error.message||'清空失败，请重试');}finally{button.disabled=false;}};
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 narrationButton.onclick=()=>narrator.isPlaying()?narrator.stop():narrator.play(stageAudio(state.stage));
 $('voice').onclick=()=>{
@@ -214,6 +235,6 @@ function recordStageProgress(lessonId,stage){if(!lessonId||!Number.isInteger(sta
 let pendingGroupLearningState=null,lastGroupLearningUpdate='',groupLearningInitialized=false;
 async function publishGroupLearningState(lessonId,stage){if(!lessonId||!Number.isInteger(stage))return;try{const response=await apiFetch('/api/group-learning-state',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lessonId,stage})});if(response.ok){const payload=await response.json();lastGroupLearningUpdate=payload.state?.updatedAt||lastGroupLearningUpdate;}}catch{}}
 async function syncGroupLearningState(){try{const response=await apiFetch('/api/group-learning-state');if(!response.ok)return;const {state:groupState}=await response.json();groupLearningInitialized=true;if(!groupState){await publishGroupLearningState(activeLessonId,state.stage);return;}if(groupState.updatedAt===lastGroupLearningUpdate)return;lastGroupLearningUpdate=groupState.updatedAt;if(groupState.lessonId!==activeLessonId){pendingGroupLearningState=groupState;window.dispatchEvent(new CustomEvent('science:select-lesson',{detail:{lessonId:groupState.lessonId}}));return;}if(groupState.stage!==state.stage){const target=stages.find(stage=>stage.id===groupState.stage);if(target)requestStageTransition(target,{publish:false});}}catch{}}
-window.addEventListener('science:lesson-change',event=>{if(activeLessonId){pauseTimer(state.timers[state.stage]);save();}narrator.stop();activeLessonId=event.detail.id;state=loadLessonState(activeLessonId);const synced=pendingGroupLearningState?.lessonId===activeLessonId?pendingGroupLearningState:null;if(synced){state.stage=synced.stage;pendingGroupLearningState=null;}recordStageProgress(activeLessonId,state.stage);sharedGeneration++;sharedRows=[];sharedLoaded=false;renderAssessmentOptions();roleHint.enter(state.stage);render(true);void syncShared();if(!synced)void (groupLearningInitialized?publishGroupLearningState(activeLessonId,state.stage):syncGroupLearningState());});window.addEventListener('focus',()=>{void syncShared();void syncGroupLearningState();});const sharedTimer=setInterval(()=>{if(!document.hidden){void syncShared();void syncGroupLearningState();}},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
+window.addEventListener('science:lesson-change',event=>{if(activeLessonId){pauseTimer(state.timers[state.stage]);save();}narrator.stop();activeLessonId=event.detail.id;state=loadLessonState(activeLessonId);const synced=pendingGroupLearningState?.lessonId===activeLessonId?pendingGroupLearningState:null;if(synced){state.stage=synced.stage;pendingGroupLearningState=null;}recordStageProgress(activeLessonId,state.stage);sharedGeneration++;sharedRows=[];sharedLoaded=false;renderAssessmentOptions();renderConclusionForm();roleHint.enter(state.stage);render(true);void syncShared();if(!synced)void (groupLearningInitialized?publishGroupLearningState(activeLessonId,state.stage):syncGroupLearningState());});window.addEventListener('focus',()=>{void syncShared();void syncGroupLearningState();});const sharedTimer=setInterval(()=>{if(!document.hidden){void syncShared();void syncGroupLearningState();}},2000);window.addEventListener('pagehide',()=>clearInterval(sharedTimer),{once:true});
 setInterval(()=>{const result=advanceTimer(state.timers[state.stage]);if(result.warning){ringAlarm();save();}if(result.finished){ringAlarm(true);save();}renderTimer();},250);
 createExperimentWorkspace();
