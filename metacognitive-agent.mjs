@@ -156,8 +156,8 @@ export function formatStructuredFeedback(raw, {stage,kind='content',attempt=1,le
  if(value.ratings.every(r=>r.stars===3)){
   const processReminder=`请回顾帮助你们满足${expected.map(name=>`“${name}”`).join('和')}这些标准的思考过程，并说明你们采用的方法。`;
   const ending=kind==='content'?`本环节还剩${remaining}次内容提交机会，请保存成果并进入下一环节。`:'本次星级自评不占用内容提交次数，请保存成果并进入下一环节。';
-  return `自我评价：${sentence(value.selfAssessmentGuide)}\n老师的评价：\n${ratings}。\n各维度都达到三星，很棒😊；${processReminder}${ending}${concept}`;
+  return `自我评价：${sentence(value.selfAssessmentGuide)}\n老师的评价：\n${ratings}。\n各维度都达到三星，很棒😊；${processReminder}\n${ending}${concept}`;
  }
  const feedback=value.feedback.replace(/本环节还剩\d+次内容提交机会[。！!]?/g,'').trim()||'请继续依据本环节标准检查你们的探究产出。';
- return `自我评价：${sentence(value.selfAssessmentGuide)}\n老师的评价：\n${ratings}。\n${sentence(feedback)} ${suffix}${concept}`;
+ return `自我评价：${sentence(value.selfAssessmentGuide)}\n老师的评价：\n${ratings}。\n${sentence(feedback)}\n${suffix}${concept}`;
 }

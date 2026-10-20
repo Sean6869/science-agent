@@ -99,20 +99,23 @@ body.workspace-ready .inquiry{height:100%;min-height:0;overflow-x:hidden;overflo
 .data-reasoning-form.multi-question{grid-template-columns:minmax(0,1fr)}
 /* Stage five keeps the standard conversation area and scrolls only its compact worksheet. */
 .inquiry.conclusion-active{grid-template-rows:auto auto auto minmax(130px,1fr) auto}
-.conclusion-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:14px;width:100%;height:clamp(215px,31dvh,350px);min-width:0;padding:15px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scroll-padding-top:12px;scrollbar-width:thin;scrollbar-color:#a9c4e6 transparent;background:linear-gradient(145deg,#f8fbff,#eef5ff);border:1px solid #c9dbf2;border-radius:18px;box-shadow:0 8px 20px #24558a18,inset 0 1px 0 #fff}
-.conclusion-form::-webkit-scrollbar{width:8px}.conclusion-form::-webkit-scrollbar-thumb{background:#a9c4e6;border-radius:8px}
-.conclusion-form h3{grid-column:1/-1;margin:0;color:#174b87;font-size:18px;line-height:1.45}
-.conclusion-form>p{grid-column:1/-1;margin:0;color:#355677;font-size:13px;line-height:1.55}
-.conclusion-section{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:max-content;align-content:start;gap:10px 12px;min-width:0;padding:0 13px 14px;overflow:clip;background:linear-gradient(180deg,#fff 0%,#fbfdff 100%);border:1px solid #d6e4f4;border-radius:16px;box-shadow:0 8px 18px #1e4c7d12,inset 0 1px 0 #fff}
-.conclusion-section h4{grid-column:1/-1;margin:0 -13px 2px;padding:11px 13px;color:#1f5f9f;background:linear-gradient(135deg,#edf5ff,#e7f1ff);border-bottom:1px solid #d6e4f4;border-radius:15px 15px 8px 8px;box-shadow:0 4px 10px #285d9a0d;font-size:15px;line-height:1.35}
-.conclusion-section label{display:grid;grid-template-rows:minmax(38px,auto) 42px;align-items:end;gap:5px;min-width:0;color:#27486d;font-size:12px;font-weight:700;line-height:1.45}
-.conclusion-section label>span{align-self:end;padding-inline:1px}
-.conclusion-section input,.conclusion-section select{width:100%;max-width:220px;min-width:0;height:42px;justify-self:start;padding:8px 10px;color:#173e69;background:linear-gradient(180deg,#fbfdff,#f4f8fd);border:1px solid #c6d9ee;border-radius:11px;font:inherit;font-weight:500;box-shadow:inset 0 1px 3px #24558a0b,0 2px 5px #24558a08}
-.conclusion-section input:focus,.conclusion-section select:focus{outline:3px solid #a9cbfa;border-color:#4b88df}
-.conclusion-actions{grid-column:1/-1;display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:2px;padding-top:8px;border-top:1px solid #e2ebf6}.conclusion-status{flex:1;color:#8a4b12;line-height:1.45}.conclusion-actions button{min-height:40px;padding:8px 13px;font-size:12px;font-weight:700}
-.coach-reopen-group{display:inline-flex;align-items:center;order:11;white-space:nowrap;flex:none}.coach-reopen{flex:none;color:var(--blue);cursor:pointer}.coach-reopen-icon{display:block;width:20px;height:20px;background:currentColor;-webkit-mask:url('/assets/science-reasoning-coach.png') center/contain no-repeat;mask:url('/assets/science-reasoning-coach.png') center/contain no-repeat}
-@media(max-width:700px){.stage-timer{flex-wrap:wrap}.conclusion-actions{align-items:stretch;flex-direction:column}.conclusion-actions button{width:100%}}
-@media(max-width:640px){.conclusion-form{grid-template-columns:1fr;height:clamp(240px,35dvh,310px);padding:13px}.conclusion-section{grid-template-columns:1fr}.conclusion-section input,.conclusion-section select{max-width:none}}
+.conclusion-form{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:8px;width:100%;height:clamp(215px,31dvh,350px);min-width:0;min-height:0;padding:12px 14px;overflow:hidden;background:linear-gradient(145deg,#f8fbff,#eef5ff);border:1px solid #c9dbf2;border-radius:18px;box-shadow:0 8px 20px #24558a18,inset 0 1px 0 #fff}
+.conclusion-heading h3{margin:0;color:#174b87;font-size:16px;line-height:1.4}
+.conclusion-pages{min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#a9c4e6 transparent}
+.conclusion-section{min-width:0;padding:12px 14px;color:#27486d;background:#fff;border:1px solid #d6e4f4;border-radius:12px}
+.conclusion-section[hidden]{display:none}
+.conclusion-section h4{margin:0 0 7px;color:#1f5f9f;font-size:15px;line-height:1.4}
+.conclusion-paragraph{margin:0;white-space:pre-line;overflow-wrap:anywhere;font-size:14px;line-height:2.1}
+.conclusion-paragraph select{display:inline-block;vertical-align:baseline;width:var(--blank-width,6em);max-width:100%;min-width:0;height:32px;margin:0 4px;padding:3px 22px 3px 7px;color:#215daa;background:#f3f8ff;border:1px solid #bad3f2;border-radius:7px;font:inherit;font-weight:600;line-height:normal}
+.conclusion-paragraph select:focus{outline:2px solid #a9cbfa;border-color:#4b88df}
+.conclusion-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0;padding-top:5px;border-top:1px solid #dce7f6}
+.conclusion-actions button{min-height:32px;padding:5px 10px;font-size:12px;font-weight:700}
+.conclusion-progress{color:#55718f;font-size:12px;white-space:nowrap}
+.conclusion-status{color:#8a4b12;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.conclusion-status:empty{display:none}
+.msg.agent .feedback-advice{font-weight:750;color:#192e50;overflow-wrap:anywhere}
+@media(max-width:700px){.stage-timer{flex-wrap:wrap}}
+@media(max-width:640px){.conclusion-form{height:clamp(240px,35dvh,310px);padding:10px}.conclusion-heading h3{font-size:14px}.conclusion-actions{gap:5px}.conclusion-actions button{padding:5px 7px}.conclusion-paragraph{font-size:13px}.conclusion-section{padding:10px}}
 @media(max-height:760px){.data-reasoning-dialog header{padding-top:12px;padding-bottom:10px}.data-reasoning-dialog header img{width:48px;height:48px}.data-reasoning-progress{padding-top:8px;padding-bottom:8px}.data-reasoning-progress span{padding-top:6px;padding-bottom:6px}.data-reasoning-body{padding-top:12px;padding-bottom:14px}.data-reasoning-intro{margin-bottom:10px;padding:10px 12px}.data-reasoning-intro p{line-height:1.5}.data-reasoning-lesson{margin-bottom:10px;padding-top:8px;padding-bottom:8px}.data-reasoning-body h3{margin-bottom:4px}.data-reasoning-instruction{margin-bottom:10px;line-height:1.55}.data-reasoning-form fieldset{padding:12px}.data-reasoning-question{margin-bottom:10px;padding:8px 11px}.data-reasoning-options label{min-height:40px;padding:7px 10px}.data-reasoning-feedback{margin-top:10px;padding:9px 11px}.data-reasoning-form footer button{min-height:40px}}
 .stage-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--muted);font-size:11px}
 .link{background:none;border:0;color:var(--muted);padding:0;white-space:nowrap;font-size:11px}

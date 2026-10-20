@@ -1,12 +1,25 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {buildFeedbackMessages,fallbackConceptPrompt,formatStructuredFeedback,hasRequiredFeedbackStructure,isSelfAssessmentText,isStructuredFeedbackComplete,stageRubrics} from '../metacognitive-agent.mjs';
-import {formatFeedbackForDisplay} from '../public/feedback-format.js';
+import {formatFeedbackForDisplay,feedbackDisplayLines} from '../public/feedback-format.js';
 
 test('rubrics cover every assessed stage and omit evidence collection',()=>{
  assert.deepEqual(Object.keys(stageRubrics),['1','2','3','5','6']);
  assert.deepEqual(Object.fromEntries(Object.entries(stageRubrics).map(([id,r])=>[id,r.dimensions.length])),{1:2,2:3,3:3,5:3,6:2});
  for(const rubric of Object.values(stageRubrics))for(const item of rubric.dimensions){assert.ok(item.levels[1]);assert.ok(item.levels[2]);assert.ok(item.levels[3]);assert.ok(item.example);}
+});
+
+test('advice is emphasized for every metacognitive stage without bolding quotas or stage-five verdicts',()=>{
+ for(const stage of [1,2,3,6])for(const kind of ['content','self_assessment'])for(const stars of [2,3]){
+  const content=formatStructuredFeedback(JSON.stringify({selfAssessmentGuide:'请对照标准。',ratings:stageRubrics[stage].dimensions.map(item=>({dimension:item.name,stars,reason:'依据学生提交内容'})),feedback:'请补上固定介质的条件。',hasConcepts:false}),{stage,kind,attempt:2});
+  const lines=feedbackDisplayLines(content),bold=lines.filter(line=>line.emphasis);
+  assert.equal(bold.length,1);assert.match(bold[0].text,stars===3?/请回顾/:/补上固定介质/);
+  assert.ok(lines.filter(line=>/本环节还剩|本次星级自评/.test(line.text)).every(line=>!line.emphasis));
+ }
+ const legacy=feedbackDisplayLines('自我评价：请对照标准。\n老师的评价：明确性⭐⭐⭐（清楚）；条件性⭐⭐（尚缺条件）。\n你们的方向清楚，再补上固定介质的条件就完整了😊。 本环节还剩2次内容提交机会。\n知识答疑提示：联系“介质”和“折射率”。');
+ assert.equal(legacy.filter(line=>line.emphasis).length,1);assert.doesNotMatch(legacy.find(line=>line.emphasis).text,/提交机会/);
+ assert.equal(feedbackDisplayLines('结论判定：✅ 结论正确\n老师的评价：\n表述精确⭐⭐⭐（正确）。\n固定结论全部正确。').some(line=>line.emphasis),false);
+ assert.equal(feedbackDisplayLines('引导自评：请给出依据。\n参考星级：反馈暂不可用。\n反馈评语：保留当前内容。').at(-1).emphasis,true);
 });
 
 test('prompt is built from the selected rubric and enforces the response contract',()=>{

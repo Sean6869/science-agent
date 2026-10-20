@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {conclusionTasks,conclusionFieldCount,formatConclusion,evaluateConclusion,formatConclusionEvaluation} from '../public/conclusion-form.js';
+import {conclusionTasks,conclusionFieldCount,formatConclusion,evaluateConclusion,formatConclusionEvaluation,migrateConclusionFields} from '../public/conclusion-form.js';
 
 test('each lesson has a complete validated conclusion worksheet',()=>{
  for(const [lessonId,task] of Object.entries(conclusionTasks)){
@@ -28,11 +28,30 @@ test('refraction feedback checks every blank in the added third and fourth concl
  const fields=conclusionTasks['bending-light'].sections.flatMap(section=>section.fields);
  const values=fields.map(field=>field.options?.[0]||'入射角30度与60度的两组实验数据');
  assert.equal(evaluateConclusion('bending-light',formatConclusion('bending-light',values)).correct,true);
- for(let index=8;index<fields.length;index++){
+ for(let index=6;index<fields.length;index++){
   const wrong=[...values];wrong[index]=fields[index].options[1];
   const result=evaluateConclusion('bending-light',formatConclusion('bending-light',wrong));
   assert.equal(result.correct,false,fields[index].label);
-  assert.match(result.errors.join(''),index<12?/实验结论三/:/实验结论四/);
+  assert.match(result.errors.join(''),index<10?/实验结论三/:/实验结论四/);
+ }
+});
+
+test('every template blank is rendered once and old evidence fields migrate without shifting answers',()=>{
+ for(const task of Object.values(conclusionTasks))for(const section of task.sections){
+  assert.deepEqual([...section.template.matchAll(/\{(\d+)\}/g)].map(match=>Number(match[1])),section.fields.map((_,index)=>index));
+  assert.ok(section.fields.every(field=>field.options));
+ }
+ assert.deepEqual(migrateConclusionFields('bending-light',Array.from({length:15},(_,index)=>String(index))),['0','1','2','4','5','6','8','9','10','11','12','13','14']);
+ assert.deepEqual(migrateConclusionFields('energy-skate-park',Array.from({length:13},(_,index)=>String(index))),['0','1','3','4','5','6','7','8','9','10','11','12']);
+ assert.deepEqual(migrateConclusionFields('bending-light',['增大','小于','靠近','旧证据','增大']),['增大','小于','靠近','增大']);
+ assert.deepEqual(migrateConclusionFields('bending-light',['增大','小于','靠近','增大'],2),['增大','小于','靠近','增大']);
+});
+
+test('each incorrect selection is rejected in every lesson, including fixed conditions',()=>{
+ for(const [lessonId,task] of Object.entries(conclusionTasks)){
+  const fields=task.sections.flatMap(section=>section.fields),answers=fields.map(field=>field.options[0]);
+  assert.equal(evaluateConclusion(lessonId,formatConclusion(lessonId,answers)).correct,true);
+  fields.forEach((field,index)=>{const wrong=[...answers];wrong[index]=field.options[1];assert.equal(evaluateConclusion(lessonId,formatConclusion(lessonId,wrong)).correct,false,`${lessonId} ${field.label}`);});
  }
 });
 

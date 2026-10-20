@@ -9,11 +9,11 @@ import {createRoleHintButton,createRoleHintController} from './role-hints.js';
 import {createLessonVideo} from './lesson-video.js';
 import {apiFetch} from './school.js';
 import {updateMessageList} from './chat-scroll.js';
-import {formatFeedbackForDisplay} from './feedback-format.js';
+import {feedbackDisplayLines} from './feedback-format.js';
 import {normalizeSpeechTranscript} from './speech-text.js';
 import {shouldShowHalfwayEncouragement} from './stage-milestone.js';
 import {createDataReasoningCoach,shouldShowDataReasoningCoach} from './data-reasoning-coach.js';
-import {conclusionTasks,formatConclusion} from './conclusion-form.js';
+import {mountConclusionForm} from './conclusion-view.js';
 import {createGroupLearningSync} from './group-learning-sync.js';
 const KEY=`science-session-v4:${window.schoolUser.id}:${window.schoolGroup.id}`;
 const LEGACY_KEY=`science-session-v2:${window.schoolUser.id}:${window.schoolGroup.id}`;
@@ -91,14 +91,13 @@ function sharedMessages(id){return uniqueTurns(sharedRows.filter(row=>row.stage=
 async function syncShared(){
  const lessonId=window.__scienceLesson?.id;if(!lessonId||sharedSyncing)return;sharedSyncing=true;const generation=sharedGeneration;
  try{const response=await apiFetch(`/api/group-conversations?agent=metacognitive&lesson=${encodeURIComponent(lessonId)}`),result=await response.json();if(!response.ok)throw new Error(result.message);if(lessonId!==window.__scienceLesson?.id||generation!==sharedGeneration)return;let changed=!sharedLoaded||JSON.stringify(sharedRows)!==JSON.stringify(result.conversations);sharedRows=result.conversations;sharedLoaded=true;
-   for(const stage of stages){const d=state.data[stage.id],revision=result.resets?.[stage.id]||null,clearPending=!!result.clearRequests?.[stage.id];if(!!d.clearPending!==clearPending){d.clearPending=clearPending;changed=true;}if(revision&&d.resetRevision!==revision){if(stage.id===state.stage){if(speech)speech.abort();narrator.stop();}d.messages=[];d.submissions=[];d.fields=[];d.draft='';d.stale=false;d.awaitingSelfAssessment=false;d.resetRevision=revision;invalidate(stage.id);changed=true;}const rows=uniqueTurns(sharedRows.filter(row=>row.stage===stage.id));if(stage.id===4)d.submissions=rows.filter(row=>row.kind==='assessment').map(row=>({id:row.turnId,at:row.createdAt}));else{const content=rows.filter(row=>row.kind==='content'&&row.status==='complete'&&['model','rule'].includes(row.source));d.submissions=content.map(row=>({id:row.turnId,text:row.userText,at:row.createdAt}));const last=rows.at(-1);d.awaitingSelfAssessment=stage.id!==5&&!!(last?.status==='complete'&&last.kind==='content'&&!last.complete&&['model','rule'].includes(last.source));}}
+   for(const stage of stages){const d=state.data[stage.id],revision=result.resets?.[stage.id]||null,clearPending=!!result.clearRequests?.[stage.id];if(!!d.clearPending!==clearPending){d.clearPending=clearPending;changed=true;}if(revision&&d.resetRevision!==revision){if(stage.id===state.stage){if(speech)speech.abort();narrator.stop();}d.messages=[];d.submissions=[];d.fields=[];d.conclusionPage=0;d.draft='';d.stale=false;d.awaitingSelfAssessment=false;d.resetRevision=revision;invalidate(stage.id);changed=true;}const rows=uniqueTurns(sharedRows.filter(row=>row.stage===stage.id));if(stage.id===4)d.submissions=rows.filter(row=>row.kind==='assessment').map(row=>({id:row.turnId,at:row.createdAt}));else{const content=rows.filter(row=>row.kind==='content'&&row.status==='complete'&&['model','rule'].includes(row.source));d.submissions=content.map(row=>({id:row.turnId,text:row.userText,at:row.createdAt}));const last=rows.at(-1);d.awaitingSelfAssessment=stage.id!==5&&!!(last?.status==='complete'&&last.kind==='content'&&!last.complete&&['model','rule'].includes(last.source));}}
   if(changed){if(!state.data[5].fields?.length)renderConclusionForm();save();render();}
  }catch{}finally{sharedSyncing=false;}
 }
 function renderFeedback(div,text){
- text=formatFeedbackForDisplay(text);
  const labels=['自我评价：','老师的评价：'];
- text.split('\n').forEach((line,index)=>{if(line.startsWith('知识答疑提示：')){const guidance=document.createElement('aside'),badge=document.createElement('strong'),copy=document.createElement('span'),button=document.createElement('button'),value=line.slice('知识答疑提示：'.length),concepts=[...value.matchAll(/“([^”]+)”/g)].map(match=>match[1]);guidance.className='concept-guidance';badge.textContent='概念联想';copy.textContent=value;button.type='button';button.textContent='去问小科';button.onclick=()=>window.dispatchEvent(new CustomEvent('science:knowledge-suggestion',{detail:{question:concepts.length>=2?`${concepts[0]}和${concepts[1]}有什么联系？`:''}}));guidance.append(badge,copy,button);div.append(guidance);return;}if(index)div.append(document.createTextNode('\n'));const label=labels.find(value=>line.startsWith(value));if(label){const strong=document.createElement('strong');strong.className='feedback-label';strong.textContent=label;div.append(strong,document.createTextNode(line.slice(label.length)));}else div.append(document.createTextNode(line));});
+ feedbackDisplayLines(text).forEach(({text:line,emphasis},index)=>{if(line.startsWith('知识答疑提示：')){const guidance=document.createElement('aside'),badge=document.createElement('strong'),copy=document.createElement('span'),button=document.createElement('button'),value=line.slice('知识答疑提示：'.length),concepts=[...value.matchAll(/“([^”]+)”/g)].map(match=>match[1]);guidance.className='concept-guidance';badge.textContent='概念联想';copy.textContent=value;button.type='button';button.textContent='去问小科';button.onclick=()=>window.dispatchEvent(new CustomEvent('science:knowledge-suggestion',{detail:{question:concepts.length>=2?`${concepts[0]}和${concepts[1]}有什么联系？`:''}}));guidance.append(badge,copy,button);div.append(guidance);return;}if(index)div.append(document.createTextNode('\n'));const label=labels.find(value=>line.startsWith(value));if(label){const strong=document.createElement('strong');strong.className='feedback-label';strong.textContent=label;div.append(strong,document.createTextNode(line.slice(label.length)));}else if(emphasis){const strong=document.createElement('strong');strong.className='feedback-advice';strong.textContent=line;div.append(strong);}else div.append(document.createTextNode(line));});
 }
 function renderMessages(forceBottom=false){
  const list=$('messages');updateMessageList(list,()=>{list.replaceChildren();
@@ -127,20 +126,7 @@ function renderBrief(stage) {
  brief.replaceChildren(content,toggle);
 }
 function renderConclusionForm(){
- const form=$('conclusionForm'),task=conclusionTasks[window.__scienceLesson?.id];form.replaceChildren();if(!task)return;
- const heading=document.createElement('h3');heading.id='conclusionTitle';heading.textContent=task.title;
- const instruction=document.createElement('p');instruction.textContent=task.instruction;
- form.append(heading,instruction);
- let index=0;const saved=state.data[5].fields||[];
- let lastCard=null;task.sections.forEach(section=>{const card=document.createElement('section');lastCard=card;card.className='conclusion-section';const title=document.createElement('h4');title.textContent=section.title;card.append(title);
-  section.fields.forEach(field=>{const position=index++,label=document.createElement('label'),caption=document.createElement('span');caption.textContent=field.label;let control;
-   if(field.options){control=document.createElement('select');const empty=document.createElement('option');empty.value='';empty.textContent='请选择';control.append(empty,...field.options.map(value=>{const option=document.createElement('option');option.value=value;option.textContent=value;return option;}));}
-   else{control=document.createElement('input');control.type='text';control.maxLength=200;control.placeholder=field.placeholder;}
-   control.required=true;control.name=`conclusion-${position}`;control.value=saved[position]||'';control.oninput=()=>{state.data[5].fields[position]=control.value;save();};label.append(caption,control);card.append(label);
-  });form.append(card);
- });
- const actions=document.createElement('div');actions.className='conclusion-actions';const status=document.createElement('small');status.className='conclusion-status';status.setAttribute('role','status');const submitButton=document.createElement('button');submitButton.type='submit';submitButton.className='primary';submitButton.textContent='提交结论给小科评价';actions.append(status,submitButton);(lastCard||form).append(actions);
- form.onsubmit=event=>{event.preventDefault();const fields=[...form.querySelectorAll('input,select')].map(control=>control.value.trim());try{status.textContent='';submit(event,formatConclusion(window.__scienceLesson?.id,fields));}catch(error){status.textContent=error.message;form.reportValidity();}};
+ mountConclusionForm($('conclusionForm'),{lessonId:window.__scienceLesson?.id,draft:state.data[5],onChange:save,onSubmit:submit});
 }
 function render(forceMessagesBottom=false){
  const s=stages[state.stage-1],d=state.data[s.id];
