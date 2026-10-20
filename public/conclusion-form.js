@@ -88,3 +88,44 @@ export function formatConclusion(lessonId,values){
  if(text.length>2000)throw new Error('结论内容过长，请精简填写的数据');
  return text;
 }
+
+const conclusionChecks={
+ 'bending-light':[
+  {title:'实验结论一',match:'当光线从空气斜射入水中时：随着入射角增大，折射角增大，折射角小于入射角。折射光线靠近法线。',hint:'空气斜射入水中时，折射角随入射角增大而增大，折射角小于入射角，光线靠近法线。'},
+  {title:'实验结论二',match:'当光线从水中斜射入空气中时：随着入射角增大，折射角增大，折射角大于入射角。折射光线远离法线。',hint:'水中斜射入空气中时，折射角随入射角增大而增大，折射角大于入射角，光线远离法线。'}
+ ],
+ 'geometric-optics-basics':[
+  {title:'实验结论一',match:'当物体离凸透镜的距离大于一倍焦距时：如果物体越靠近凸透镜（物距u越小），那么像距越大，像的大小越大。此时的像都是实像。像与物体左右颠倒，上下颠倒。像与物体在凸透镜的异侧。',hint:'物距大于一倍焦距时，物体靠近凸透镜，像距和像都变大，成倒立实像，像物异侧。'},
+  {title:'实验结论二',match:'当物体离凸透镜的距离小于一倍焦距时：此时的像是虚像。像与物体左右不颠倒，上下不颠倒。像与物体在凸透镜的同侧。',hint:'物距小于一倍焦距时，成正立虚像，像物同侧，左右和上下都不颠倒。'}
+ ],
+ 'energy-skate-park':[
+  {title:'实验结论一',match:'在固定物体速度不变的条件下：物体的质量越大，动能越大。在固定物体质量不变的条件下：物体的速度越大，动能越大。',hint:'速度不变时质量越大动能越大；质量不变时速度越大动能越大。'},
+  {title:'实验结论二',match:'在无摩擦（摩擦力=0）的条件下：同一个物体从高处滑下时，随着高度减小，物体的重力势能减小，物体的动能增大。物体的机械能（动能+势能）不变，此时机械能守恒。在有摩擦（摩擦力>0）的条件下：同一个物体从高处滑下时，随着高度减小，物体的重力势能减小，物体的动能增大。物体的机械能（动能+势能）减小，此时机械能不守恒。在有摩擦（摩擦力>0）的条件下：同一个物体从高处滑下时，部分的机械能转化为热能，并且，摩擦力越大，机械能转化为热能越多。总能量（动能+势能+热能）不变。',hint:'无摩擦时机械能守恒；有摩擦时机械能减少并转化为热能，摩擦力越大转化的热能越多，总能量不变。'}
+ ]
+};
+
+const normalizeConclusionText=text=>String(text||'').replace(/\s/g,'');
+
+export function evaluateConclusion(lessonId,text){
+ const normalized=normalizeConclusionText(text),checks=conclusionChecks[lessonId]||[];
+ const errors=checks.filter(item=>!normalized.includes(normalizeConclusionText(item.match)));
+ const evidenceRequired=lessonId==='bending-light'?2:lessonId==='energy-skate-park'?1:0;
+ const evidenceMatches=[...String(text||'').matchAll(/支持(?:这条规律|这些结论)的数据是：([^。\n]*)/g)];
+ const evidenceComplete=evidenceMatches.length>=evidenceRequired&&evidenceMatches.slice(0,evidenceRequired).every(match=>match[1].trim()&&match[1].trim()!=='任务单记录：第一组与第二组有一致趋势');
+ const correct=errors.length===0&&evidenceComplete;
+ const ratings=[
+  {name:'证据充分',stars:evidenceRequired===0||evidenceComplete?3:2,reason:evidenceComplete||evidenceRequired===0?'已提交对应结论的任务单数据。':'还有结论缺少对应的任务单数据。'},
+  {name:'条件明确',stars:errors.length===0?3:2,reason:errors.length===0?'每条结论都写明了成立条件。':'有结论的成立条件或对应关系填写不正确。'},
+  {name:'表述精确',stars:errors.length===0?3:1,reason:errors.length===0?'变化方向和成像或能量特征与任务单一致。':'至少一条变化方向或实验现象与任务单不一致。'}
+ ];
+ return {correct,errors:errors.map(item=>`${item.title}：${item.hint}`),ratings,evidenceComplete};
+}
+
+export function formatConclusionEvaluation(lessonId,text,attempt=1){
+ const result=evaluateConclusion(lessonId,text),remaining=Math.max(0,3-attempt);
+ const ratings=result.ratings.map(item=>`${item.name}${'⭐'.repeat(item.stars)}（${item.reason}）`).join('；\n');
+ const verdict=result.correct?'✅ 结论正确':'❌ 结论需要订正';
+ const errors=result.errors.length?`\n需要订正：\n${result.errors.join('\n')}`:'';
+ const evidence=lessonId==='geometric-optics-basics'?'任务单中的固定结论已完成核对。':result.evidenceComplete?'证据数据已填写。':'请补充每条结论对应的任务单数据。';
+ return `结论判定：${verdict}\n老师的评价：\n${ratings}。\n${result.correct?'小科已按任务单逐项核对，固定模板中的结论关系全部正确。':errors}\n证据核对：${evidence}\n本环节还剩${remaining}次内容提交机会。`;
+}

@@ -15,6 +15,7 @@ import {roleGuidance} from './social-roles.mjs';
 import {roleHints} from './public/role-hints.js';
 import {fallbackPersonalizedRoleHint,personalizeRoleHint,pretestProfile} from './role-hint-agent.mjs';
 import {assessmentsForLesson,stages} from './public/content.js';
+import {formatConclusionEvaluation} from './public/conclusion-form.js';
 import {scoreReasoningResponses} from './reasoning-test.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
 try { process.loadEnvFile(resolve(root, '.env.local')); } catch {}
@@ -45,6 +46,10 @@ async function evaluate(p) {
   conversation:Array.isArray(p.conversation)?p.conversation.filter(x=>x&&['user','agent'].includes(x.role)&&typeof x.text==='string').slice(-6).map(x=>({role:x.role,text:x.text.slice(0,1200)})):[],
   latestSubmission:typeof p.latestSubmission==='string'?p.latestSubmission.slice(0,2000):null
  };
+  if(clean.stage===5&&clean.kind==='content'){
+   const content=formatConclusionEvaluation(clean.lessonId,clean.text,clean.attempt);
+   return {content,source:'rule',remainingAttempts,exhausted:false,complete:content.startsWith('结论判定：✅'),kind:clean.kind};
+  }
  try {
   const result=await completeStructured(buildFeedbackMessages(clean),raw=>({content:formatStructuredFeedback(raw,clean),complete:isStructuredFeedbackComplete(raw,clean)}));
   return {...result,source:'model',remainingAttempts,exhausted:false,kind:p.kind};

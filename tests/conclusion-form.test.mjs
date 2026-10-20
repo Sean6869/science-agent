@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {conclusionTasks,conclusionFieldCount,formatConclusion} from '../public/conclusion-form.js';
+import {conclusionTasks,conclusionFieldCount,formatConclusion,evaluateConclusion,formatConclusionEvaluation} from '../public/conclusion-form.js';
 
 test('each lesson has a two-part conclusion worksheet with complete validated output',()=>{
  for(const [lessonId,task] of Object.entries(conclusionTasks)){
@@ -43,4 +43,19 @@ test('submitted conclusions follow the task-sheet sentence templates',()=>{
  assert.match(energyText,/在固定物体速度不变的条件下：物体的质量越大，动能越大/);
  assert.match(energyText,/在无摩擦（摩擦力=0）的条件下/);
  assert.match(energyText,/总能量（动能\+势能\+热能）不变/);
+});
+
+test('stage five feedback judges fixed conclusion answers instead of asking for metacognitive self-assessment',()=>{
+ const fields=conclusionTasks['geometric-optics-basics'].sections.flatMap(section=>section.fields);
+ const correctText=formatConclusion('geometric-optics-basics',fields.map(field=>field.options[0]));
+ assert.equal(evaluateConclusion('geometric-optics-basics',correctText).correct,true);
+ const correctFeedback=formatConclusionEvaluation('geometric-optics-basics',correctText,1);
+ assert.match(correctFeedback,/结论判定：✅ 结论正确/);
+ assert.doesNotMatch(correctFeedback,/自我评价|请回顾|你们会评几星/);
+
+ const wrongText=correctText.replace('像距越大','像距越小');
+ const wrong=evaluateConclusion('geometric-optics-basics',wrongText);
+ assert.equal(wrong.correct,false);
+ assert.match(formatConclusionEvaluation('geometric-optics-basics',wrongText,1),/结论判定：❌ 结论需要订正/);
+ assert.match(formatConclusionEvaluation('geometric-optics-basics',wrongText,1),/物距大于一倍焦距时/);
 });
