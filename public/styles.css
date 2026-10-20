@@ -101,6 +101,10 @@ body.workspace-ready .inquiry{height:100%;min-height:0;overflow-x:hidden;overflo
 .inquiry.conclusion-active{grid-template-rows:auto auto auto minmax(130px,1fr) auto}
 .conclusion-form{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:8px;width:100%;height:clamp(215px,31dvh,350px);min-width:0;min-height:0;padding:12px 14px;overflow:hidden;background:linear-gradient(145deg,#f8fbff,#eef5ff);border:1px solid #c9dbf2;border-radius:18px;box-shadow:0 8px 20px #24558a18,inset 0 1px 0 #fff}
 .conclusion-heading h3{margin:0;color:#174b87;font-size:16px;line-height:1.4}
+.conclusion-heading{display:flex;flex-wrap:wrap;align-items:center;gap:5px 10px;min-width:0}
+.conclusion-topic{display:inline-block;max-width:100%;padding:3px 9px;color:#366b9b;background:#eaf3ff;border:1px solid #d2e4fa;border-radius:7px;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.conclusion-topic[hidden]{display:none}
+.conclusion-condition{font-weight:750;color:#173f69}
 .conclusion-pages{min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#a9c4e6 transparent}
 .conclusion-section{min-width:0;padding:12px 14px;color:#27486d;background:#fff;border:1px solid #d6e4f4;border-radius:12px}
 .conclusion-section[hidden]{display:none}

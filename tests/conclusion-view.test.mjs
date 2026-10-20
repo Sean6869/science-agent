@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mountConclusionForm} from '../public/conclusion-view.js';
+import {mountConclusionForm,conclusionPresentation} from '../public/conclusion-view.js';
 import {conclusionTasks} from '../public/conclusion-form.js';
 
 class Element{
@@ -12,6 +12,20 @@ class Element{
  reportValidity(){this.reported=true;}
 }
 const all=(node,tag)=>[...(node.tag===tag?[node]:[]),...node.children.flatMap(child=>all(child,tag))];
+test('all worksheets present inline conditions and move parenthetical topics into the heading',()=>{
+ for(const task of Object.values(conclusionTasks))for(const section of task.sections){
+  const presentation=conclusionPresentation(section.template),body=presentation.segments.map(segment=>segment.text).join('');
+  assert.doesNotMatch(body,/：\n/);
+  assert.equal(body.replaceAll('\n',''),section.template.replace(/^（[^\n]+）\n/,'').replaceAll('\n',''));
+  for(const segment of presentation.segments.filter(item=>item.condition))assert.ok(segment.text.endsWith('：'));
+ }
+ const energy=conclusionPresentation(conclusionTasks['energy-skate-park'].sections[0].template);
+ assert.equal(energy.topic,'动能的影响因素');
+ assert.equal(energy.segments.filter(item=>item.condition).length,2);
+ assert.match(energy.segments[0].text,/在固定物体速度不变的条件下：$/);
+ const lens=conclusionPresentation(conclusionTasks['geometric-optics-basics'].sections[0].template);
+ assert.ok(lens.segments.some(item=>item.condition&&item.text.includes('{0}')));
+});
 test('paging keeps answers, validates hidden blanks, and submits every paragraph together',()=>{
  const original=globalThis.document;
  globalThis.document={createElement:tag=>new Element(tag),createTextNode:text=>({textContent:text,children:[]})};
