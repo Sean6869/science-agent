@@ -52,6 +52,7 @@ test('stage five feedback judges fixed conclusion answers instead of asking for 
  const correctFeedback=formatConclusionEvaluation('geometric-optics-basics',correctText,1);
  assert.match(correctFeedback,/结论判定：✅ 结论正确/);
  assert.doesNotMatch(correctFeedback,/自我评价|请回顾|你们会评几星/);
+ assert.match(formatConclusionEvaluation('geometric-optics-basics',correctText,3),/本环节还剩0次内容提交机会/);
 
  const wrongText=correctText.replace('像距越大','像距越小');
  const wrong=evaluateConclusion('geometric-optics-basics',wrongText);

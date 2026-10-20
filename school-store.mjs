@@ -298,7 +298,7 @@ export async function openSchoolStore(filename,bootstrap={}){
   groupPromptHistory(userId,agent,lessonId,stage,limit=8){const rows=this.groupConversations(userId,agent,lessonId,500).filter(row=>(!stage||row.stage===stage)&&(agent!=='metacognitive'||row.status==='complete'&&row.source==='model')),messages=[];for(const row of rows){messages.push({role:'user',text:row.userText});if(row.reply&&row.status==='complete')messages.push({role:'agent',text:row.reply});}return messages.slice(-limit);},
   groupHasPending(userId,agent,lessonId,stage,turnId){return this.groupConversations(userId,agent,lessonId,500).some(row=>row.status==='pending'&&(!stage||row.stage===stage)&&row.turnId!==turnId);},
   groupInquiryState(userId,lessonId,stage,turnId){
-   const rows=this.groupConversations(userId,'metacognitive',lessonId,500),content=rows.filter(row=>row.kind==='content'&&row.stage===stage&&row.status==='complete'&&row.source==='model');
+   const rows=this.groupConversations(userId,'metacognitive',lessonId,500),content=rows.filter(row=>row.kind==='content'&&row.stage===stage&&row.status==='complete'&&['model','rule'].includes(row.source));
    const context=[];for(const prior of [1,2,3,5,6].filter(value=>value<stage)){const latest=rows.filter(row=>row.kind==='content'&&row.stage===prior&&row.status==='complete'&&row.source==='model').at(-1);if(latest)context.push({stage:prior,text:latest.userText,id:latest.turnId});}
    return {attempt:content.some(row=>row.turnId===turnId)?content.findIndex(row=>row.turnId===turnId)+1:content.length+1,latestSubmission:content.at(-1)?.userText||null,context,conversation:this.groupPromptHistory(userId,'metacognitive',lessonId,stage,6)};
   },

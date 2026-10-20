@@ -24,6 +24,10 @@ test('group members share both AI histories with sender attribution and shared a
   const state=store.groupInquiryState(second.id,'bending-light',1,'inquiry-2');assert.equal(state.attempt,2);assert.equal(state.latestSubmission,'研究入射角对折射角的影响');assert.match(state.conversation.at(-1).text,/可观察的变量/);
   const unavailable=store.begin(first.id,'metacognitive',{id:'inquiry-fallback',lessonId:'bending-light',stage:1,kind:'content',text:'继续核对实验问题'});store.finish(unavailable,{content:'智能反馈暂时不可用',source:'fallback',complete:false});
   assert.equal(store.groupInquiryState(second.id,'bending-light',1,'inquiry-next').attempt,2);
+  const firstConclusion=store.begin(first.id,'metacognitive',{id:'conclusion-1',lessonId:'bending-light',stage:5,kind:'content',text:'第一次固定模板结论'});store.finish(firstConclusion,{content:'结论判定：需要订正。还剩2次。',source:'rule',complete:false});
+  const secondConclusion=store.begin(second.id,'metacognitive',{id:'conclusion-2',lessonId:'bending-light',stage:5,kind:'content',text:'第二次固定模板结论'});store.finish(secondConclusion,{content:'结论判定：需要订正。还剩1次。',source:'rule',complete:false});
+  assert.equal(store.groupInquiryState(first.id,'bending-light',5,'conclusion-3').attempt,3);
+  assert.equal(store.groupInquiryState(first.id,'bending-light',5,'conclusion-3').latestSubmission,'第二次固定模板结论');
   store.setGroupLearningState(first.id,'bending-light',3);
   const {revision}=store.clearInquiryRecord(second.id,'bending-light',1);
   assert.equal(store.groupInquiryResets(first.id,'bending-light')[1],revision);
