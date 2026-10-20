@@ -35,7 +35,7 @@ const narrationButton=$('narrate');
 const roleHintButton=createRoleHintButton(),roleHint=createRoleHintController(roleHintButton,{load:async hint=>{const response=await apiFetch(`/api/role-hint?stage=${hint.id}`),result=await response.json();if(!response.ok)throw new Error(result.message);return result.hint;}});$('stageTimer').append(roleHintButton);
 const lessonVideo=createLessonVideo({userId:window.schoolUser.id,onWatched:()=>render()});
 const dataReasoningCoach=createDataReasoningCoach();
-const coachReopen=document.createElement('button');coachReopen.type='button';coachReopen.className='coach-reopen';coachReopen.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m14.8 9.2-1.9 3.7-3.7 1.9 1.9-3.7 3.7-1.9Z"/></svg><span>科学推理教练</span>';coachReopen.title='查看科学推理教练';coachReopen.setAttribute('aria-label','查看科学推理教练');coachReopen.onclick=()=>dataReasoningCoach.open({lessonId:window.__scienceLesson?.id,reopen:state.milestones.dataReasoningCompleted,onComplete:()=>{state.milestones.dataReasoningCompleted=true;save();render();}});$('stageTimer').append(coachReopen);
+const coachReopenGroup=document.createElement('span'),coachReopenLabel=document.createElement('span'),coachReopen=document.createElement('button');coachReopenGroup.className='coach-reopen-group';coachReopenLabel.className='coach-reopen-label';coachReopenLabel.textContent='科学推理教练';coachReopen.type='button';coachReopen.className='coach-reopen';coachReopen.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m14.8 9.2-1.9 3.7-3.7 1.9 1.9-3.7 3.7-1.9Z"/></svg>';coachReopen.title='查看科学推理教练';coachReopen.setAttribute('aria-label','查看科学推理教练');coachReopen.onclick=()=>dataReasoningCoach.open({lessonId:window.__scienceLesson?.id,reopen:state.milestones.dataReasoningCompleted,onComplete:()=>{state.milestones.dataReasoningCompleted=true;save();render();}});coachReopenGroup.append(coachReopenLabel,coachReopen);$('stageTimer').append(coachReopenGroup);
 const narrator=createNarrator({onError:()=>{narrationButton.title='语音暂不可用，请点击重试';},onLoading:()=>{narrationButton.title='正在准备语音，点击可停止';},onState:playing=>{
  narrationButton.classList.toggle('playing',playing);
  narrationButton.setAttribute('aria-label',playing?'停止播放开场白':'播放开场白');
@@ -102,7 +102,6 @@ function renderMessages(forceBottom=false){
  const list=$('messages');updateMessageList(list,()=>{list.replaceChildren();
   const server=sharedLoaded?sharedMessages(state.stage):[],ids=new Set(server.map(message=>message.turnId).filter(Boolean)),local=state.data[state.stage].messages.filter(message=>!sharedLoaded||((message.retry||message.local)&&!ids.has(message.turnId||message.retry?.id))),shown=[...server,...local];
   const pending=busy.has(state.stage)||sharedRows.some(row=>row.stage===state.stage&&row.status==='pending');
-  if(state.stage===5){const header=document.createElement('header'),title=document.createElement('strong'),hint=document.createElement('span');header.className='stage-five-message-header';title.textContent='小科评价记录';hint.textContent=shown.length||pending?'查看提交内容与小科反馈':'结论提交后，小科会在这里给出评价';header.append(title,hint);list.append(header);}
   for(const m of shown){const div=document.createElement('div');div.className=`msg ${m.role}`;if(m.senderName){const sender=document.createElement('small');sender.className='msg-sender';sender.textContent=m.senderName;div.append(sender);}if(m.role==='agent')renderFeedback(div,m.text);else div.append(document.createTextNode(m.text));
   if(m.retry){const b=document.createElement('button');b.textContent='重试反馈';b.onclick=()=>requestFeedback(m.retry);div.append(document.createElement('br'),b);}
   list.append(div);}
@@ -145,7 +144,7 @@ function render(forceMessagesBottom=false){
  const s=stages[state.stage-1],d=state.data[s.id];
  document.querySelector('.inquiry').classList.toggle('assessment-active',s.id===4);
  document.querySelector('.inquiry').classList.toggle('conclusion-active',s.id===5);
- coachReopen.hidden=s.id!==5;
+ coachReopenGroup.hidden=s.id!==5;
  document.querySelectorAll('.stage').forEach(b=>{const active=+b.dataset.id===s.id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));const done=state.data[b.dataset.id].submissions.length>0;b.classList.toggle('complete',done);});
  renderBrief(s);
  $('stageStatus').textContent=`第 ${s.id} 步 · ${s.id===4?(d.submissions.length?'已完成自评':'进行中'):`内容提交 ${Math.min(d.submissions.length,3)}/3`}${d.awaitingSelfAssessment?' · 等待星级自评':''}${d.stale?' · 依据已更新，请复核':''}${d.draft?' · 有未提交草稿':''}`;
