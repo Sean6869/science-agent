@@ -91,6 +91,9 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
     if(target){if(target[1]==='conversations'&&!target[3])store.deleteConversation(target[2],actor);else if(target[1]==='students'){if(target[3])store.deleteScores(target[2],actor);else store.deleteStudent(target[2],actor);}else{json(res,404,{message:'接口不存在'});return true;}json(res,200,{ok:true});return true;}
    }
    if(path==='/api/teacher/groups'&&req.method==='GET'){json(res,200,{classes:store.listGroups(actor,classId),lessons});return true;}
+   if(path==='/api/teacher/inquiry-clear-requests'&&req.method==='GET'){json(res,200,{requests:store.inquiryClearRequests(actor,classId)});return true;}
+   const reviewClear=/^\/api\/teacher\/inquiry-clear-requests\/([^/]+)\/review$/.exec(path);
+   if(reviewClear&&req.method==='POST'){const p=await body(req);json(res,200,store.reviewInquiryClearRequest(reviewClear[1],p?.approve,actor));return true;}
    if(path==='/api/teacher/progress'&&req.method==='GET'){
     const lessonId=url.searchParams.get('lesson')||lessons[0]?.id;if(!lessons.some(lesson=>lesson.id===lessonId)){json(res,400,{message:'请选择有效课程'});return true;}
     json(res,200,{lessonId,lessons:lessons.map(({id,title,number})=>({id,title,number})),rows:store.stageProgress(actor,classId,lessonId)});return true;

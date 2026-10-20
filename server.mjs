@@ -126,7 +126,7 @@ export function createApp({store,synthesize,scoreReasoning=scoreReasoningRespons
    if(req.schoolUser?.role!=='student')return json(res,403,{message:'请使用学生账号'});
    const agent=url.searchParams.get('agent'),lessonId=url.searchParams.get('lesson');
    if(!['knowledge','metacognitive'].includes(agent)||!lessons.some(lesson=>lesson.id===lessonId))return json(res,400,{message:'请选择有效的会话'});
-   return json(res,200,{conversations:store.groupConversations(req.schoolUser.id,agent,lessonId),...(agent==='metacognitive'?{resets:store.groupInquiryResets(req.schoolUser.id,lessonId)}:{})});
+   return json(res,200,{conversations:store.groupConversations(req.schoolUser.id,agent,lessonId),...(agent==='metacognitive'?{resets:store.groupInquiryResets(req.schoolUser.id,lessonId),clearRequests:store.groupInquiryClearRequests(req.schoolUser.id,lessonId)}:{})});
   }
   if(url.pathname==='/api/inquiry-record/clear'&&req.method==='POST'){
    if(req.schoolUser?.role!=='student')return json(res,403,{message:'请使用学生账号'});

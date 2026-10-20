@@ -44,19 +44,29 @@ test('both agents persist student input and returned replies tied to authenticat
  assert.equal(store.conversations(other.user.id,500,0,teacher.user).length,0);const exported=await request('/api/teacher/export?type=conversations&class='+student.user.classId,teacher);assert.equal(exported.status,200);const data=await workbookText(exported);assert.match(data,/知识|knowledge/);assert.match(data,/metacognitive/);assert.match(data,/物距变化影响像的大小/);
  const scoreCSV=await workbookText(await request('/api/teacher/export?type=scores&class='+student.user.classId,teacher));assert.match(scoreCSV,/9 \/ 10/);assert.match(scoreCSV,/10 \/ 10/);assert.doesNotMatch(scoreCSV,/"账号"|90 \/ 100/);
 });
-test('clearing the current inquiry record keeps the stage and archives earlier feedback',async()=>{
+test('student clearing requires teacher approval and preserves stage and exported AI history',async()=>{
  store.setGroupLearningState(student.user.id,'geometric-optics-basics',2);
  const before=await(await request('/api/group-conversations?agent=metacognitive&lesson=geometric-optics-basics',student)).json();
  assert.ok(before.conversations.some(row=>row.stage===1));
  assert.equal((await request('/api/inquiry-record/clear',teacher,{lessonId:'geometric-optics-basics',stage:1})).status,403);
  assert.equal((await request('/api/inquiry-record/clear',student,{lessonId:'unknown',stage:1})).status,400);
  const cleared=await request('/api/inquiry-record/clear',student,{lessonId:'geometric-optics-basics',stage:1});assert.equal(cleared.status,200);
- const {revision}=await cleared.json();
+ const pending=await cleared.json();assert.equal(pending.status,'pending');assert.equal(pending.revision,undefined);
+ const awaiting=await(await request('/api/group-conversations?agent=metacognitive&lesson=geometric-optics-basics',student)).json();
+ assert.ok(awaiting.conversations.some(row=>row.stage===1));assert.equal(awaiting.clearRequests[1].id,pending.id);
+ assert.equal((await request('/api/teacher/inquiry-clear-requests',student)).status,403);
+ const {requests}=await(await request('/api/teacher/inquiry-clear-requests',teacher)).json();assert.ok(requests.some(row=>row.id===pending.id));
+ const reviewPath='/api/teacher/inquiry-clear-requests/'+pending.id+'/review';
+ assert.equal((await request(reviewPath,student,{approve:true})).status,403);
+ assert.equal((await request(reviewPath,teacher,{approve:'yes'})).status,400);
+ const approved=await request(reviewPath,teacher,{approve:true});assert.equal(approved.status,200);const {revision}=await approved.json();assert.ok(revision);
  const after=await(await request('/api/group-conversations?agent=metacognitive&lesson=geometric-optics-basics',student)).json();
  assert.equal(after.resets[1],revision);
+ assert.equal(after.clearRequests[1],undefined);
  assert.equal(after.conversations.filter(row=>row.stage===1).length,0);
  assert.equal(store.groupLearningState(student.user.id).stage,2);
  assert.ok(store.conversations(student.user.id,100,0,teacher.user).some(row=>row.userText==='物距变化影响像的大小'));
+ assert.match(await workbookText(await request('/api/teacher/export?type=conversations&class='+student.user.classId,teacher)),/物距变化影响像的大小/);
  const retry=await request('/api/chat',student,{id:'after-clear',lessonId:'geometric-optics-basics',stage:1,kind:'content',attempt:1,text:'物距和像的大小之间有什么关系？'});assert.equal(retry.status,200);const retryResult=await retry.json();assert.equal(retryResult.source,'fallback');assert.equal(retryResult.remainingAttempts,3);
  assert.equal(store.groupInquiryState(student.user.id,'geometric-optics-basics',1,'next-turn').attempt,1);
 });

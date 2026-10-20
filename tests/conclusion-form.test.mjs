@@ -2,9 +2,9 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {conclusionTasks,conclusionFieldCount,formatConclusion,evaluateConclusion,formatConclusionEvaluation} from '../public/conclusion-form.js';
 
-test('each lesson has a two-part conclusion worksheet with complete validated output',()=>{
+test('each lesson has a complete validated conclusion worksheet',()=>{
  for(const [lessonId,task] of Object.entries(conclusionTasks)){
-  assert.equal(task.sections.length,2,lessonId);
+  assert.equal(task.sections.length,lessonId==='bending-light'?4:2,lessonId);
   const fields=task.sections.flatMap(section=>section.fields);
   assert.equal(fields.length,conclusionFieldCount(lessonId));
   const values=fields.map(field=>field.options?.[0]||'任务单记录：第一组与第二组有一致趋势');
@@ -24,11 +24,26 @@ test('the convex-lens worksheet contains only guided selections',()=>{
  assert.ok(fields.every(field=>field.label!=='支持结论的任务单数据'));
 });
 
+test('refraction feedback checks every blank in the added third and fourth conclusions',()=>{
+ const fields=conclusionTasks['bending-light'].sections.flatMap(section=>section.fields);
+ const values=fields.map(field=>field.options?.[0]||'入射角30度与60度的两组实验数据');
+ assert.equal(evaluateConclusion('bending-light',formatConclusion('bending-light',values)).correct,true);
+ for(let index=8;index<fields.length;index++){
+  const wrong=[...values];wrong[index]=fields[index].options[1];
+  const result=evaluateConclusion('bending-light',formatConclusion('bending-light',wrong));
+  assert.equal(result.correct,false,fields[index].label);
+  assert.match(result.errors.join(''),index<12?/实验结论三/:/实验结论四/);
+ }
+});
+
 test('submitted conclusions follow the task-sheet sentence templates',()=>{
  const bending=conclusionTasks['bending-light'].sections.flatMap(section=>section.fields);
  const bendingText=formatConclusion('bending-light',bending.map(field=>field.options?.[0]||'入射角30°时折射角20°，入射角60°时折射角40°'));
  assert.match(bendingText,/当光线从空气斜射入水中时：随着入射角增大，折射角增大，折射角小于入射角。折射光线靠近法线/);
  assert.match(bendingText,/当光线从水中斜射入空气中时：随着入射角增大，折射角增大，折射角大于入射角。折射光线远离法线/);
+ assert.match(bendingText,/折射率小的介质斜射入折射率大的介质时，折射角小于入射角，折射光线靠近法线/);
+ assert.match(bendingText,/折射率大的介质斜射入折射率小的介质时，折射角大于入射角，折射光线远离法线/);
+ assert.match(bendingText,/垂直射向水面\/玻璃时，光线的传播方向不改变，此时入射角为0度，折射角为0度/);
 
  const geometric=conclusionTasks['geometric-optics-basics'].sections.flatMap(section=>section.fields);
  const geometricText=formatConclusion('geometric-optics-basics',geometric.map(field=>field.options[0]));
