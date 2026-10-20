@@ -28,6 +28,7 @@ test('group members share both AI histories with sender attribution and shared a
   const secondConclusion=store.begin(second.id,'metacognitive',{id:'conclusion-2',lessonId:'bending-light',stage:5,kind:'content',text:'第二次固定模板结论'});store.finish(secondConclusion,{content:'结论判定：需要订正。还剩1次。',source:'rule',complete:false});
   assert.equal(store.groupInquiryState(first.id,'bending-light',5,'conclusion-3').attempt,3);
   assert.equal(store.groupInquiryState(first.id,'bending-light',5,'conclusion-3').latestSubmission,'第二次固定模板结论');
+  assert.equal(store.groupInquiryState(first.id,'bending-light',6,'reflection-1').context.find(row=>row.stage===5)?.text,'第二次固定模板结论');
   store.setGroupLearningState(first.id,'bending-light',3);
   const request=store.clearInquiryRecord(second.id,'bending-light',1);
   assert.equal(request.status,'pending');
@@ -57,5 +58,11 @@ test('group members share both AI histories with sender attribution and shared a
   assert.equal(store.groupInquiryState(first.id,'bending-light',5,'conclusion-3').attempt,3);
   assert.ok(store.conversations('',100,0,admin).some(row=>row.userText==='研究入射角对折射角的影响'));
   assert.equal(store.groupConversations(second.id,'knowledge','bending-light').length,3);
+  // Deleting archived rows must not reuse the boundary that hides cleared history.
+  for(const row of store.conversations('',100,0,admin))store.deleteConversation(row.id,admin);
+  const fresh=store.begin(second.id,'metacognitive',{id:'after-archive-delete',lessonId:'bending-light',stage:1,kind:'content',text:'清理档案后的新问题'});
+  store.finish(fresh,{content:'新的评价',source:'model'});
+  assert.equal(store.groupConversations(first.id,'metacognitive','bending-light').at(-1)?.userText,'清理档案后的新问题');
+  assert.equal(store.groupInquiryState(first.id,'bending-light',1,'another-turn').attempt,2);
  }finally{store.close();}
 });

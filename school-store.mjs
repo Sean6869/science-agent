@@ -63,6 +63,12 @@ export async function openSchoolStore(filename,bootstrap={}){
  db.exec(`CREATE TABLE IF NOT EXISTS inquiry_record_resets(group_id TEXT NOT NULL REFERENCES student_groups(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,stage INTEGER NOT NULL CHECK(stage BETWEEN 1 AND 6),after_rowid INTEGER NOT NULL,revision TEXT NOT NULL,PRIMARY KEY(group_id,lesson_id,stage));`);
  db.exec(`CREATE TABLE IF NOT EXISTS inquiry_clear_requests(id TEXT PRIMARY KEY,group_id TEXT NOT NULL REFERENCES student_groups(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL,stage INTEGER NOT NULL CHECK(stage BETWEEN 1 AND 6),requested_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,requested_at TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')),reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,reviewed_at TEXT);
  CREATE UNIQUE INDEX IF NOT EXISTS inquiry_clear_request_pending ON inquiry_clear_requests(group_id,lesson_id,stage) WHERE status='pending';`);
+ // SQLite rowids can be reused after deleting history. Preserve existing reset
+ // boundaries and use a durable counter for all future conversation ordering.
+ if(!db.prepare('PRAGMA table_info(conversations)').all().some(column=>column.name==='sequence'))db.exec('ALTER TABLE conversations ADD COLUMN sequence INTEGER');
+ db.exec('UPDATE conversations SET sequence=rowid WHERE sequence IS NULL; CREATE UNIQUE INDEX IF NOT EXISTS conversation_sequence_order ON conversations(sequence); CREATE TABLE IF NOT EXISTS conversation_sequence(id INTEGER PRIMARY KEY CHECK(id=1),last_value INTEGER NOT NULL);');
+ const sequenceFloor=db.prepare('SELECT MAX(value) AS value FROM (SELECT COALESCE(MAX(sequence),0) AS value FROM conversations UNION ALL SELECT COALESCE(MAX(after_rowid),0) AS value FROM inquiry_record_resets)').get().value;
+ db.prepare('INSERT INTO conversation_sequence(id,last_value) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET last_value=MAX(last_value,excluded.last_value)').run(sequenceFloor);
  db.exec(`CREATE TABLE IF NOT EXISTS student_record_resets(student_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,reset_at TEXT NOT NULL);`);
  db.exec(`CREATE TABLE IF NOT EXISTS class_broadcasts(id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,sender_id TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS broadcast_reads(broadcast_id TEXT NOT NULL REFERENCES class_broadcasts(id) ON DELETE CASCADE,student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,read_at TEXT NOT NULL,PRIMARY KEY(broadcast_id,student_id));
@@ -275,15 +281,15 @@ export async function openSchoolStore(filename,bootstrap={}){
   ready(userId){return quizzes.every(q=>this.scores(userId).some(s=>s.quizId===q.id&&s.version===q.version));},
   submit(userId,quizId,answers){const q=quizzes.find(q=>q.id===quizId);if(!q)fail('测验不存在');const old=this.scores(userId).find(s=>s.quizId===q.id&&s.version===q.version);if(old)return old;if(quizzes.slice(0,quizzes.indexOf(q)).some(p=>!this.scores(userId).some(s=>s.quizId===p.id&&s.version===p.version)))fail('请先完成上一份测验');if(!answers||Array.isArray(answers)||Object.keys(answers).length!==q.questions.length||q.questions.some(item=>!item.options.some(o=>o.id===answers[item.id])))fail('请完成全部题目，不会的题目可选“我不知道”');const correct=q.questions.filter(item=>answers[item.id]===item.answer).length;db.prepare('INSERT INTO scores VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(),userId,q.id,q.version,correct*10,correct,q.questions.length,JSON.stringify(answers),now());groups.ensure(getUser(userId).class_id);return this.scores(userId).find(s=>s.quizId===q.id&&s.version===q.version);},
   allScores(actor,classId=''){return db.prepare('SELECT u.id AS studentId,u.name,u.gender,u.class_name AS className,u.username,s.quiz_id AS quizId,s.version,s.score,s.correct,s.total,s.answers,s.created_at AS createdAt FROM scores s JOIN users u ON u.id=s.user_id WHERE '+scopedWhere+' ORDER BY s.created_at DESC').all(...scopeArgs(actor,classId));},
-  conversations(userId='',limit=500,offset=0,actor,classId=''){const args=scopeArgs(actor,classId);if(userId)targetStudent(userId,actor);return db.prepare("SELECT c.id,u.name,u.gender,u.class_name AS className,u.username,c.agent,c.lesson_id AS lessonId,c.stage,c.user_text AS userText,c.reply,c.source,c.status,c.created_at AS createdAt,c.answered_at AS answeredAt FROM conversations c JOIN users u ON u.id=c.user_id WHERE (?='' OR c.user_id=?) AND "+scopedWhere+' ORDER BY c.created_at DESC LIMIT ? OFFSET ?').all(userId,userId,...args,limit,offset);},
+  conversations(userId='',limit=500,offset=0,actor,classId=''){const args=scopeArgs(actor,classId);if(userId)targetStudent(userId,actor);return db.prepare("SELECT c.id,u.name,u.gender,u.class_name AS className,u.username,c.agent,c.lesson_id AS lessonId,c.stage,c.user_text AS userText,c.reply,c.source,c.status,c.created_at AS createdAt,c.answered_at AS answeredAt FROM conversations c JOIN users u ON u.id=c.user_id WHERE (?='' OR c.user_id=?) AND "+scopedWhere+' ORDER BY c.sequence DESC LIMIT ? OFFSET ?').all(userId,userId,...args,limit,offset);},
   groupConversations(userId,agent,lessonId,limit=200){
    if(!['knowledge','metacognitive'].includes(agent)||typeof lessonId!=='string')fail('请选择有效的会话');
    const group=db.prepare('SELECT gm.group_id AS id FROM group_members gm JOIN student_groups g ON g.id=gm.group_id JOIN group_batches b ON b.class_id=g.class_id WHERE gm.user_id=? AND gm.joined=1 AND b.approved_at IS NOT NULL').get(userId);
    if(!group)fail('请先加入已审核的小组',403);
    const rows=db.prepare(`SELECT c.id,c.turn_id AS turnId,c.user_id AS userId,u.name AS senderName,c.agent,c.lesson_id AS lessonId,c.stage,c.kind,c.user_text AS userText,c.reply,c.source,c.status,c.complete,c.created_at AS createdAt,c.answered_at AS answeredAt
     FROM conversations c JOIN users u ON u.id=c.user_id WHERE c.user_id IN (SELECT user_id FROM group_members WHERE group_id=?) AND c.agent=? AND c.lesson_id=?
-    AND (c.agent<>'metacognitive' OR c.rowid>COALESCE((SELECT r.after_rowid FROM inquiry_record_resets r WHERE r.group_id=? AND r.lesson_id=c.lesson_id AND r.stage=c.stage),0))
-    ORDER BY c.rowid DESC LIMIT ?`).all(group.id,agent,lessonId,group.id,Math.max(1,Math.min(500,limit))).reverse();
+    AND (c.agent<>'metacognitive' OR c.sequence>COALESCE((SELECT r.after_rowid FROM inquiry_record_resets r WHERE r.group_id=? AND r.lesson_id=c.lesson_id AND r.stage=c.stage),0))
+    ORDER BY c.sequence DESC LIMIT ?`).all(group.id,agent,lessonId,group.id,Math.max(1,Math.min(500,limit))).reverse();
    return [...new Map(rows.map(row=>[row.turnId,row])).values()];
   },
   groupInquiryResets(userId,lessonId){const group=groups.student(userId);if(group.status!=='joined')fail('请先加入已审核的小组',403);return Object.fromEntries(db.prepare('SELECT stage,revision FROM inquiry_record_resets WHERE group_id=? AND lesson_id=?').all(group.id,lessonId).map(row=>[row.stage,row.revision]));},
@@ -309,7 +315,7 @@ export async function openSchoolStore(filename,bootstrap={}){
     let revision;
     if(approve){
      if(db.prepare("SELECT 1 FROM conversations c WHERE c.user_id IN (SELECT user_id FROM group_members WHERE group_id=?) AND c.agent='metacognitive' AND c.lesson_id=? AND c.stage=? AND c.status='pending' LIMIT 1").get(request.group_id,request.lesson_id,request.stage))fail('本环节反馈仍在生成，请稍后审核',400);
-     const afterRowid=db.prepare("SELECT COALESCE(MAX(c.rowid),0) AS value FROM conversations c WHERE c.user_id IN (SELECT user_id FROM group_members WHERE group_id=?) AND c.agent='metacognitive' AND c.lesson_id=? AND c.stage=?").get(request.group_id,request.lesson_id,request.stage).value;
+     const afterRowid=db.prepare("SELECT COALESCE(MAX(c.sequence),0) AS value FROM conversations c WHERE c.user_id IN (SELECT user_id FROM group_members WHERE group_id=?) AND c.agent='metacognitive' AND c.lesson_id=? AND c.stage=?").get(request.group_id,request.lesson_id,request.stage).value;
      revision=randomUUID();db.prepare('INSERT INTO inquiry_record_resets(group_id,lesson_id,stage,after_rowid,revision) VALUES(?,?,?,?,?) ON CONFLICT(group_id,lesson_id,stage) DO UPDATE SET after_rowid=excluded.after_rowid,revision=excluded.revision').run(request.group_id,request.lesson_id,request.stage,afterRowid,revision);
     }
     const status=approve?'approved':'rejected';db.prepare('UPDATE inquiry_clear_requests SET status=?,reviewed_by=?,reviewed_at=? WHERE id=?').run(status,manager(actor).id,now(),id);
@@ -320,7 +326,7 @@ export async function openSchoolStore(filename,bootstrap={}){
   groupHasPending(userId,agent,lessonId,stage,turnId){return this.groupConversations(userId,agent,lessonId,500).some(row=>row.status==='pending'&&(!stage||row.stage===stage)&&row.turnId!==turnId);},
   groupInquiryState(userId,lessonId,stage,turnId){
    const rows=this.groupConversations(userId,'metacognitive',lessonId,500),content=rows.filter(row=>row.kind==='content'&&row.stage===stage&&row.status==='complete'&&['model','rule'].includes(row.source));
-   const context=[];for(const prior of [1,2,3,5,6].filter(value=>value<stage)){const latest=rows.filter(row=>row.kind==='content'&&row.stage===prior&&row.status==='complete'&&row.source==='model').at(-1);if(latest)context.push({stage:prior,text:latest.userText,id:latest.turnId});}
+   const context=[];for(const prior of [1,2,3,5,6].filter(value=>value<stage)){const latest=rows.filter(row=>row.kind==='content'&&row.stage===prior&&row.status==='complete'&&['model','rule'].includes(row.source)).at(-1);if(latest)context.push({stage:prior,text:latest.userText,id:latest.turnId});}
    return {attempt:content.some(row=>row.turnId===turnId)?content.findIndex(row=>row.turnId===turnId)+1:content.length+1,latestSubmission:content.at(-1)?.userText||null,context,conversation:this.groupPromptHistory(userId,'metacognitive',lessonId,stage,6)};
   },
   completed(userId){return this.scores(userId).map(({quizId,version})=>({quizId,version}));},
@@ -332,7 +338,7 @@ export async function openSchoolStore(filename,bootstrap={}){
   resetKnowledgeQuota(actor,classId,lessonId){return groups.resetQuota(actor,classId,lessonId);},
   joinGroup(userId,code){return groups.join(userId,code);},
   listGroups(actor,classId=''){scope(actor,classId);return this.classes(actor).filter(c=>!classId||c.id===classId).map(c=>groups.report(c));},
-  begin(userId,agent,p){const id=randomUUID();db.prepare('INSERT INTO conversations(id,user_id,turn_id,agent,lesson_id,stage,user_text,status,created_at,kind) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id,userId,p.id||randomUUID(),agent,p.lessonId||'unknown',p.stage||null,p.text,'pending',now(),p.kind||null);return id;},
+  begin(userId,agent,p){const id=randomUUID(),sequence=db.prepare('UPDATE conversation_sequence SET last_value=last_value+1 WHERE id=1 RETURNING last_value').get().last_value;db.prepare('INSERT INTO conversations(id,user_id,turn_id,agent,lesson_id,stage,user_text,status,created_at,kind,sequence) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,userId,p.id||randomUUID(),agent,p.lessonId||'unknown',p.stage||null,p.text,'pending',now(),p.kind||null,sequence);return id;},
   finish(id,result){db.prepare('UPDATE conversations SET reply=?,source=?,status=?,answered_at=?,complete=? WHERE id=?').run(result.content,result.source,'complete',now(),result.complete===undefined?null:Number(!!result.complete),id);},
   fail(id){db.prepare("UPDATE conversations SET status='failed',answered_at=? WHERE id=?").run(now(),id);}
  };

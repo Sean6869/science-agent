@@ -148,6 +148,7 @@ export function createDataReasoningCoach(){
  }
 
  return {
+  close(){completeHandler=()=>{};close();},
   open({lessonId,onComplete,reopen=false}){
    const nextLesson=dataReasoningDialogues[lessonId];
    if(!nextLesson){onComplete?.();return;}

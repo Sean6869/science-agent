@@ -8,7 +8,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
  return async function schoolApi(req,res,url){
   const path=url.pathname;
   const session=store.session(token(req));req.schoolUser=session?.user;
-  if(session&&req.headers['x-session-user']&&req.headers['x-session-user']!==session.user.id){json(res,409,{message:'账号已在另一个页面切换，请重新载入'});return true;}
+  if(session&&req.headers['x-session-user']&&req.headers['x-session-user']!==session.user.id){json(res,409,{message:'账号已在另一个页面切换，请重新载入',code:'SESSION_CHANGED'});return true;}
   if(path.startsWith('/api/')&&req.method!=='GET'){
    const origin=req.headers.origin;
    if(req.headers['sec-fetch-site']==='cross-site'||(origin&&new URL(origin).host!==req.headers.host)){json(res,403,{message:'请从本站页面操作'});return true;}

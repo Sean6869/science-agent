@@ -34,7 +34,7 @@ export async function setupRoles(api,bar,{onStartExploration=()=>{}}={}){
   const iconAction=(kind,label)=>{const action=node('button');action.type='button';action.className='school-link social-icon-action';action.setAttribute('aria-label',label);action.title=label;action.innerHTML=`<span class="ui-icon ui-icon-${kind}" aria-hidden="true"></span>`;return action;};
   const advice=iconAction('cooperation','合作建议');advice.onclick=async()=>{state=await api('/api/groups/roles');render();const dialog=node('dialog'),form=node('div');dialog.className='social-role-dialog';dialog.append(form);document.body.append(dialog);dialog.addEventListener('cancel',e=>e.preventDefault());dialog.showModal();showGuidance(dialog,form);};
   display.append(advice);
-  if(state.members.length>1&&state.type!=='VR'){const swap=iconAction('roles','交换角色');if(state.type==='HH'||state.type==='LL')swap.classList.add('social-role-swap-reminder');swap.onclick=async()=>{swap.disabled=true;try{state=await api('/api/groups/roles',{swap:true,version:state.version});render();}catch(err){alert(err.message);swap.disabled=false;}};display.append(swap);}
+  if(state.members.length>1&&state.type!=='VR'){const swap=iconAction('roles','交换角色');if(state.type==='HH'||state.type==='LL')swap.classList.add('social-role-swap-reminder');swap.onclick=async()=>{swap.disabled=true;try{state=await api('/api/groups/roles',{swap:true,version:state.version});render();}catch(err){if(err.status===409){try{state=await api('/api/groups/roles');render();}catch{}}alert(err.message);swap.disabled=false;}};display.append(swap);}
   display.append(node('span',`领航：${name(state.leaderId)} · 质疑：${name(state.challengerId)}`,'workspace-role-text'));
  }
  if(!state.leaderId)await new Promise(resolve=>{
@@ -52,7 +52,10 @@ export async function setupRoles(api,bar,{onStartExploration=()=>{}}={}){
   form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{
    state=await api('/api/groups/roles',{leaderId:leader.value,challengerId:challenger.value,version:state.version});render();
    showGuidance(dialog,form,resolve,preparedAudio,releasePrepared);
-  }catch(err){error.textContent=err.message;submit.disabled=false;}};
+  }catch(err){
+   if(err.status===409){try{state=await api('/api/groups/roles');if(state.leaderId){render();showGuidance(dialog,form,resolve,null,releasePrepared);return;}}catch{}}
+   error.textContent=err.message;submit.disabled=false;
+  }};
  });
  render();
  const sync=async()=>{if(document.hidden)return;try{const next=await api('/api/groups/roles');if(next.version!==state.version){state=next;render();}}catch{}};

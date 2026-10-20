@@ -157,7 +157,8 @@ export function createApp({store,synthesize,scoreReasoning=scoreReasoningRespons
    if(!p||!Number.isInteger(p.stage)||![1,2,3,5,6].includes(p.stage)||!['content','self_assessment'].includes(p.kind)||!Number.isInteger(p.attempt)||p.attempt<0||p.attempt>MAX_CONTENT_SUBMISSIONS+1||(p.kind==='content'&&p.attempt<1)||typeof p.text!=='string'||!p.text.trim()||p.text.length>2000) return json(res,400,{message:'请选择有效阶段并输入1至2000字产出'});
    const lessonId=lessons.some(lesson=>lesson.id===p.lessonId)?p.lessonId:defaultLessonId,state=req.schoolUser.role==='student'?store.groupInquiryState(req.schoolUser.id,lessonId,p.stage,p.id):p;
    if(req.schoolUser.role==='student'&&store.groupHasPending(req.schoolUser.id,'metacognitive',lessonId,p.stage,p.id))return json(res,423,{message:'请等待小组当前反馈完成'});
-   const shared={...p,...state,lessonId,latestSubmission:p.kind==='self_assessment'?state.latestSubmission:p.text};
+   const shared={...p,...state,lessonId,...(req.schoolUser.role==='student'&&p.kind==='self_assessment'?{attempt:Math.max(0,state.attempt-1)}:{}),latestSubmission:p.kind==='self_assessment'?state.latestSubmission:p.text};
+   if(shared.kind==='content'&&shared.attempt>MAX_CONTENT_SUBMISSIONS)return json(res,200,await evaluate(shared));
    return json(res,200,await recorded(req,'metacognitive',shared,()=>evaluate(shared)));
   }
   if(url.pathname.startsWith('/api/')) return json(res,404,{message:'接口不存在'});
