@@ -1,6 +1,11 @@
 const shuffle=(items,random)=>{const result=[...items];for(let i=result.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[result[i],result[j]]=[result[j],result[i]];}return result;};
-export const GROUPING_STRATEGY_VERSION=3;
+export const GROUPING_STRATEGY_VERSION=4;
+export const GROUPING_PRIORITY=['HL','HH','LL'];
 const better=(a,b)=>!b||a.some((value,index)=>a.slice(0,index).every((item,i)=>item===b[i])&&value<b[index]);
+// Lexicographic objective: maximize high-low pairs, then minimize low-low pairs,
+// which leaves high-high as the preferred same-level fallback. Gender matching is
+// considered only after the knowledge-level composition has been optimized.
+const groupingScore=(counts,sameGenderPairs)=>[-counts.HL,counts.LL,counts.HH,-sameGenderPairs];
 
 function distributions(total,caps,index=0,prefix=[]){
  if(!caps.length)return total===0?[[]]:[];
@@ -53,7 +58,7 @@ export function planGroups(students,{random=Math.random}={}){
    const counts={HH:(highCount-mixed)/2,LL:(lowCount-mixed)/2,HL:mixed};
    const remainingHigh=high.filter(student=>student!==leftover),remainingLow=low.filter(student=>student!==leftover);
    for(const allocation of allocationOptions(remainingHigh,remainingLow,mixed)){
-    const score=[-counts.HL,counts.LL,counts.HH,-allocation.same];if(better(score,bestScore)){bestScore=score;best=[];}if(score.every((value,index)=>value===bestScore[index]))best.push({leftover,counts,allocation});
+    const score=groupingScore(counts,allocation.same);if(better(score,bestScore)){bestScore=score;best=[];}if(score.every((value,index)=>value===bestScore[index]))best.push({leftover,counts,allocation});
    }
   }
  }

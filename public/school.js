@@ -241,8 +241,8 @@ async function groupsPanel(panel){
  for(const c of classes){const card=e('section',undefined,'conversation-record');card.append(e('h2',c.name),message('已完成全部测验：'+c.completed+' / '+c.total+' 人'));
   if(c.status==='waiting'){card.append(message('全班完成测验后自动生成分组草案。'));panel.append(card);continue;}
   const range=r=>r?r.join('–')+' 分':'无';card.append(message('三课总分中位数：'+c.summary.median+' 分；低先验知识分段 '+range(c.summary.lowRange)+'；高先验知识分段 '+range(c.summary.highRange)));
-  const counts=c.summary.counts;card.append(message('低低 '+counts.LL+' 组 · 高高 '+counts.HH+' 组 · 高低 '+counts.HL+' 组'));
-  if(Math.max(...Object.values(counts))-Math.min(...Object.values(counts))>1)card.append(message(c.summary.edited?'当前方案的三类组数未能完全均衡。':'受性别人数或同分分布限制，三类组数未能完全均衡。'));
+  const counts=c.summary.counts;card.append(message('分组优先级：高低优先，高高其次，低低最后。当前：高低 '+counts.HL+' 组 · 高高 '+counts.HH+' 组 · 低低 '+counts.LL+' 组'));
+  if(counts.LL)card.append(message(c.summary.edited?'当前手动方案包含低低组，请在确认前再次核对。':'受当前高低层人数与奇数人机组安排限制，已在无法继续组成高低组或高高组后安排低低组。'));
   if(!c.summary.highRange||String(c.summary.lowRange)===String(c.summary.highRange))card.append(message('全班总分相同或中位数两侧分数相同，平台已按规则均衡分配临界学生。'));
   if(c.summary.tieCount)card.append(message('共有 '+c.summary.tieCount+' 名学生成绩等于中位数，已随机且均匀地分配到高、低先验知识层。'));
   if(c.groups.some(g=>g.type==='VR'))card.append(message('本班人数为奇数，多出的一名学生已与小科机器人组成二人小组。'));

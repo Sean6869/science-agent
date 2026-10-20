@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {planGroups} from '../grouping.mjs';
+import {GROUPING_PRIORITY,GROUPING_STRATEGY_VERSION,planGroups} from '../grouping.mjs';
 import {openSchoolStore,quizzes} from '../school-store.mjs';
 import {createApp} from '../server.mjs';
 import ExcelJS from 'exceljs';
@@ -11,6 +11,7 @@ import {tmpdir} from 'node:os';
 
 test('median split prioritizes high-low pairs and avoids low-low pairs',()=>{
  const six=Array.from({length:6},(_,i)=>({id:String(i),username:'s'+i,total:30+i*30,gender:i%2?'女':'男'})),plan=planGroups(six,{random:()=>.3});
+ assert.deepEqual(GROUPING_PRIORITY,['HL','HH','LL']);assert.equal(GROUPING_STRATEGY_VERSION,4);assert.equal(plan.strategyVersion,4);
  assert.equal(plan.median,105);assert.deepEqual(plan.counts,{LL:0,HH:0,HL:3});assert.deepEqual(plan.lowRange,[30,90]);assert.deepEqual(plan.highRange,[120,180]);
  assert.equal(new Set(plan.groups.flatMap(g=>g.members.map(m=>m.id))).size,6);assert.ok(plan.groups.every(g=>g.members.length===2));
 });
