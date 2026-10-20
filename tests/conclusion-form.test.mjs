@@ -23,3 +23,24 @@ test('the convex-lens worksheet contains only guided selections',()=>{
  assert.ok(fields.every(field=>Array.isArray(field.options)));
  assert.ok(fields.every(field=>field.label!=='支持结论的任务单数据'));
 });
+
+test('submitted conclusions follow the task-sheet sentence templates',()=>{
+ const bending=conclusionTasks['bending-light'].sections.flatMap(section=>section.fields);
+ const bendingText=formatConclusion('bending-light',bending.map(field=>field.options?.[0]||'入射角30°时折射角20°，入射角60°时折射角40°'));
+ assert.match(bendingText,/当光线从空气斜射入水中时：随着入射角增大，折射角增大，折射角小于入射角。折射光线靠近法线/);
+ assert.match(bendingText,/当光线从水中斜射入空气中时：随着入射角增大，折射角增大，折射角大于入射角。折射光线远离法线/);
+
+ const geometric=conclusionTasks['geometric-optics-basics'].sections.flatMap(section=>section.fields);
+ const geometricText=formatConclusion('geometric-optics-basics',geometric.map(field=>field.options[0]));
+ assert.match(geometricText,/在固定焦距不变的条件下：当物体离凸透镜的距离大于一倍焦距时/);
+ assert.match(geometricText,/像距越大，像的大小越大/);
+ assert.match(geometricText,/像与物体左右颠倒，上下颠倒/);
+ assert.match(geometricText,/像与物体左右不颠倒，上下不颠倒/);
+ assert.match(geometricText,/像与物体在凸透镜的同侧/);
+
+ const energy=conclusionTasks['energy-skate-park'].sections.flatMap(section=>section.fields);
+ const energyText=formatConclusion('energy-skate-park',energy.map(field=>field.options?.[0]||'质量60kg、速度10m\/s时动能3000J'));
+ assert.match(energyText,/在固定物体速度不变的条件下：物体的质量越大，动能越大/);
+ assert.match(energyText,/在无摩擦（摩擦力=0）的条件下/);
+ assert.match(energyText,/总能量（动能\+势能\+热能）不变/);
+});
