@@ -35,7 +35,7 @@ const narrationButton=$('narrate');
 const roleHintButton=createRoleHintButton(),roleHint=createRoleHintController(roleHintButton,{load:async hint=>{const response=await apiFetch(`/api/role-hint?stage=${hint.id}`),result=await response.json();if(!response.ok)throw new Error(result.message);return result.hint;}});$('stageTimer').append(roleHintButton);
 const lessonVideo=createLessonVideo({userId:window.schoolUser.id,onWatched:()=>render()});
 const dataReasoningCoach=createDataReasoningCoach();
-const coachReopenGroup=document.createElement('span'),coachReopenLabel=document.createElement('span'),coachReopen=document.createElement('button');coachReopenGroup.className='coach-reopen-group';coachReopenLabel.className='coach-reopen-label';coachReopenLabel.textContent='科学推理教练';coachReopen.type='button';coachReopen.className='icon-button coach-reopen';coachReopen.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m14.8 9.2-1.9 3.7-3.7 1.9 1.9-3.7 3.7-1.9Z"/></svg>';coachReopen.title='查看科学推理教练';coachReopen.setAttribute('aria-label','查看科学推理教练');coachReopen.onclick=()=>dataReasoningCoach.open({lessonId:window.__scienceLesson?.id,reopen:state.milestones.dataReasoningCompleted,onComplete:()=>{state.milestones.dataReasoningCompleted=true;save();render();}});coachReopenGroup.append(coachReopenLabel,coachReopen);$('stageTimer').append(coachReopenGroup);
+const coachReopenGroup=document.createElement('span'),coachReopen=document.createElement('button');coachReopenGroup.className='coach-reopen-group';coachReopen.type='button';coachReopen.className='icon-button coach-reopen';coachReopen.innerHTML='<span class="coach-reopen-icon" aria-hidden="true"></span>';coachReopen.title='查看科学推理教练';coachReopen.setAttribute('aria-label','查看科学推理教练');coachReopen.onclick=()=>dataReasoningCoach.open({lessonId:window.__scienceLesson?.id,reopen:state.milestones.dataReasoningCompleted,onComplete:()=>{state.milestones.dataReasoningCompleted=true;save();render();}});coachReopenGroup.append(coachReopen);$('stageTimer').append(coachReopenGroup);
 const narrator=createNarrator({onError:()=>{narrationButton.title='语音暂不可用，请点击重试';},onLoading:()=>{narrationButton.title='正在准备语音，点击可停止';},onState:playing=>{
  narrationButton.classList.toggle('playing',playing);
  narrationButton.setAttribute('aria-label',playing?'停止播放开场白':'播放开场白');
@@ -130,14 +130,14 @@ function renderConclusionForm(){
  const instruction=document.createElement('p');instruction.textContent=task.instruction;
  form.append(heading,instruction);
  let index=0;const saved=state.data[5].fields||[];
- task.sections.forEach(section=>{const card=document.createElement('section');card.className='conclusion-section';const title=document.createElement('h4');title.textContent=section.title;card.append(title);
+ let lastCard=null;task.sections.forEach(section=>{const card=document.createElement('section');lastCard=card;card.className='conclusion-section';const title=document.createElement('h4');title.textContent=section.title;card.append(title);
   section.fields.forEach(field=>{const position=index++,label=document.createElement('label'),caption=document.createElement('span');caption.textContent=field.label;let control;
    if(field.options){control=document.createElement('select');const empty=document.createElement('option');empty.value='';empty.textContent='请选择';control.append(empty,...field.options.map(value=>{const option=document.createElement('option');option.value=value;option.textContent=value;return option;}));}
    else{control=document.createElement('input');control.type='text';control.maxLength=200;control.placeholder=field.placeholder;}
    control.required=true;control.name=`conclusion-${position}`;control.value=saved[position]||'';control.oninput=()=>{state.data[5].fields[position]=control.value;save();};label.append(caption,control);card.append(label);
   });form.append(card);
  });
- const actions=document.createElement('div');actions.className='conclusion-actions';const status=document.createElement('small');status.className='conclusion-status';status.setAttribute('role','status');const submitButton=document.createElement('button');submitButton.type='submit';submitButton.className='primary';submitButton.textContent='提交结论给小科评价';actions.append(status,submitButton);form.append(actions);
+ const actions=document.createElement('div');actions.className='conclusion-actions';const status=document.createElement('small');status.className='conclusion-status';status.setAttribute('role','status');const submitButton=document.createElement('button');submitButton.type='submit';submitButton.className='primary';submitButton.textContent='提交结论给小科评价';actions.append(status,submitButton);(lastCard||form).append(actions);
  form.onsubmit=event=>{event.preventDefault();const fields=[...form.querySelectorAll('input,select')].map(control=>control.value.trim());try{status.textContent='';submit(event,formatConclusion(window.__scienceLesson?.id,fields));}catch(error){status.textContent=error.message;form.reportValidity();}};
 }
 function render(forceMessagesBottom=false){
