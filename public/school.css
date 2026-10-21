@@ -18,6 +18,17 @@ body.login-ready .login-card{width:min(450px,100%);max-width:450px;box-sizing:bo
 .school-button.export-button{color:#fff;background:#168a70;border-color:#168a70}.school-button.export-button:hover{background:#10735d;border-color:#10735d}.school-button.export-button:focus-visible{outline:3px solid #84d8c5;outline-offset:2px}
 .school-button:disabled{opacity:.55;cursor:wait}.school-link{font:inherit;color:#346dd2;border:0;background:none;cursor:pointer;padding:5px}
 .school-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px;width:100%;min-width:0;margin:18px 0 0}
+.workbench-content.student-accounts-panel{display:grid;gap:24px}
+.student-accounts-panel>.student-editor+.student-editor{margin-top:0}
+.student-import-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px 20px;margin-top:14px;min-width:0}
+.student-import-row>.file-row{margin:0;min-width:0}
+.student-import-row>.school-button{justify-self:end;white-space:nowrap}
+.student-list-section{display:grid;gap:18px;min-width:0}
+.student-list-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px 20px;min-width:0}
+.student-list-head>h2{margin:0}
+.student-list-head>.export-button{margin-left:auto}
+.student-list-section>.school-table-wrap{margin:0}
+@media(max-width:650px){.student-import-row{grid-template-columns:minmax(0,1fr)}.student-import-row>.file-row{flex-wrap:wrap}.student-import-row .file-name{flex:1 1 100px}.student-accounts-panel{gap:20px}}
 .school-actions>.school-button{min-height:46px;max-width:100%;margin:0;text-align:center;white-space:normal}
 .login-card .school-actions{margin-top:20px}
 .login-card .school-actions>.school-button{min-width:100px}
