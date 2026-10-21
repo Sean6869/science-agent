@@ -5,6 +5,10 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
  const attempts=new Map();
  function token(req){return /(?:^|;\s*)xiaoke_session=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie||'')?.[1];}
  const cookie=(req,value,clear=false)=>`xiaoke_session=${value}; Path=/; HttpOnly; SameSite=Lax${clear?'; Max-Age=0':''}${req.headers['x-forwarded-proto']==='https'||req.socket.encrypted?'; Secure':''}`;
+ function classExportDisposition(actor,classId,label,fallback){
+  const className=classId?(store.classes(actor).find(item=>item.id===classId)?.name||'未知班级'):'全部班级';
+  return `attachment; filename="${fallback}.xlsx"; filename*=UTF-8''${encodeURIComponent(`${className}_${label}.xlsx`)}`;
+ }
  return async function schoolApi(req,res,url){
   const path=url.pathname;
   const session=store.session(token(req));req.schoolUser=session?.user;
@@ -106,7 +110,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
    if(path==='/api/teacher/groups/approve'&&req.method==='POST'){const p=await body(req);store.approveGroups(actor,p?.classId,p?.batchId);json(res,200,{ok:true});return true;}
    if(path==='/api/teacher/groups.xlsx'&&req.method==='GET'){
     const rows=store.listGroups(actor,classId).filter(c=>c.status==='approved').flatMap(c=>c.groups.map(g=>({className:c.name,number:g.number,code:g.code,type:({LL:'低低',HH:'高高',HL:'高低',VR:'人机组'})[g.type],names:g.members.map(s=>s.name).join('、'),usernames:g.members.map(s=>s.virtual?'—':s.username).join('、'),scores:g.members.map(s=>s.virtual?'—':s.total).join('、'),low:c.summary.lowRange?.join('–'),high:c.summary.highRange?.join('–')||'无'})));
-    const file=await workbookBuffer([['班级','className'],['小组','number',10],['小组码','code'],['类型','type'],['成员','names',28],['账号','usernames',40],['三课总分','scores'],['低分段','low'],['高分段','high']],rows,'分组名单');res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':'attachment; filename="student-groups.xlsx"','cache-control':'no-store'});res.end(file);return true;
+    const file=await workbookBuffer([['班级','className'],['小组','number',10],['小组码','code'],['类型','type'],['成员','names',28],['账号','usernames',40],['三课总分','scores'],['低分段','low'],['高分段','high']],rows,'分组名单');res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':classExportDisposition(actor,classId,'小组码','student-groups'),'cache-control':'no-store'});res.end(file);return true;
    }
    if(path==='/api/teacher/classes'&&req.method==='GET'){json(res,200,{classes:store.classes(actor)});return true;}
    if(path==='/api/teacher/import'&&req.method==='POST'){
@@ -114,7 +118,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
    }
    if(path==='/api/teacher/accounts.xlsx'&&req.method==='GET'){
     const rows=store.studentCredentials(actor,classId).map(s=>({...s,permissionGroup:s.aiEnabled?'动态组':'静态组'}));const file=await workbookBuffer([['姓名','name'],['性别','gender',10],['班级','className'],['账号','username',30],['密码','password',20],['权限分组','permissionGroup']],rows);
-    res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':'attachment; filename="student-accounts.xlsx"','cache-control':'no-store'});res.end(file);return true;
+    res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':classExportDisposition(actor,classId,'账号密码','student-accounts'),'cache-control':'no-store'});res.end(file);return true;
    }
    if(path==='/api/teacher/students'){
     if(req.method==='GET'){json(res,200,{students:store.students(actor,classId)});return true;}
