@@ -31,6 +31,10 @@ test('teacher registration, scoped APIs, import, exports and password resets enf
   const credentials=store.studentCredentials(a.user);assert.deepEqual(credentials.map(s=>s.username).sort(),['chenhui2_student','chenhui_student','shanming_student'].sort());
   for(const s of credentials){assert.match(s.password,/^\d{8}$/);assert.equal(s.classId,classA);assert.ok(await store.login(s.username,s.password));}
   const student=credentials[0],studentSession=await store.login(student.username,student.password);
+  const credentialResponse=await request('/api/teacher/student-credentials?class='+classA,a);assert.equal(credentialResponse.status,200);assert.equal(credentialResponse.headers.get('cache-control'),'no-store');
+  const credentialList=(await credentialResponse.json()).students;assert.equal(credentialList.find(s=>s.id===student.id).password,student.password);assert.ok(credentialList.every(s=>!('credential' in s)));
+  assert.equal((await request('/api/teacher/student-credentials?class='+classA,b)).status,403);assert.equal((await request('/api/teacher/student-credentials?class='+classA,studentSession)).status,403);assert.equal((await request('/api/teacher/student-credentials',a)).status,400);
+  assert.ok((await(await request('/api/teacher/students?class='+classA,a)).json()).students.every(s=>!('password' in s)));
   assert.equal((await request('/api/admin/teachers',studentSession)).status,403);assert.equal((await request('/api/teacher/accounts.xlsx',studentSession)).status,403);
   store.submit(student.id,quizzes[0].id,Object.fromEntries(quizzes[0].questions.map(q=>[q.id,q.answer])));
   const turn=store.begin(student.id,'knowledge',{text:'什么是动能？',lessonId:'energy-skate-park'});store.finish(turn,{content:'测试回答',source:'model'});

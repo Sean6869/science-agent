@@ -67,6 +67,7 @@ export function createApp({store,synthesize,scoreReasoning=scoreReasoningRespons
  const warming=new Set();
  const roleHintCache=new Map();
  function warmRoleSpeech(roles){
+  if(roles.scaffoldingEnabled===false)return;
   const members=roles.members||[],texts=[];
   if(roles.guidance)texts.push(roles.guidance);
   else if(roles.type==='VR'){const actual=members.find(member=>!member.virtual),robot=members.find(member=>member.virtual);if(actual&&robot)texts.push(roleGuidance(roles.type,members,actual.id,robot.id));}
@@ -99,6 +100,7 @@ export function createApp({store,synthesize,scoreReasoning=scoreReasoningRespons
   }
   if((url.pathname==='/audio/roles.wav'||url.pathname==='/audio/roles-preview.wav'||/^\/audio\/stages\/\d+\.wav$/.test(url.pathname))&&req.method==='GET'){
    if(!req.schoolUser||req.schoolUser.role!=='student')return json(res,403,{message:'请使用学生账号'});
+   if(!req.schoolUser.aiEnabled)return json(res,403,{message:'静态组不使用角色建议和探究支架',code:'AI_DISABLED'});
    if(url.searchParams.get('user')!==req.schoolUser.id)return json(res,409,{message:'账号已切换，请重新载入'});
    const roles=store.groupRoles(req.schoolUser.id);
    let text;

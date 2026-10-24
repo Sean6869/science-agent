@@ -31,7 +31,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
   if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,completed:store.completed(session.user.id),group:session.user.role==='student'?store.groupStatus(session.user.id):null,ready:session.user.role!=='student'||store.ready(session.user.id),...(session.user.role==='student'?{stageDurations:store.stageDurations(session.user.id)}:{})}:{user:null});return true;}
   if(!path.startsWith('/api/'))return false;
   if(!session){json(res,401,{message:'请先登录'});return true;}
-  if(session.user.role==='student'&&!session.user.aiEnabled&&['/api/chat','/api/knowledge','/api/assessment','/api/group-conversations','/api/inquiry-record/clear'].includes(path)){json(res,403,{message:'静态组不使用知识答疑和探究支架',code:'AI_DISABLED'});return true;}
+  if(session.user.role==='student'&&!session.user.aiEnabled&&['/api/chat','/api/knowledge','/api/assessment','/api/group-conversations','/api/inquiry-record/clear','/api/role-hint'].includes(path)){json(res,403,{message:'静态组不使用知识答疑和探究支架',code:'AI_DISABLED'});return true;}
   if(path==='/api/teacher/profile'&&req.method==='PUT'){try{if(session.user.role!=='teacher')throw Object.assign(new Error('仅教师可以编辑资料'),{status:403});json(res,200,{user:store.updateTeacherProfile(session.user.id,await body(req,500000),session.user)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}
   if(path==='/api/auth/activity'&&req.method==='POST'){store.touchSession(token(req));json(res,200,{ok:true});return true;}
   if(path==='/api/auth/logout'&&req.method==='POST'){store.logout(token(req));res.setHeader('Set-Cookie',cookie(req,'',true));json(res,200,{ok:true});return true;}
@@ -120,6 +120,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
     const rows=store.studentCredentials(actor,classId).map(s=>({...s,permissionGroup:s.aiEnabled?'动态组':'静态组'}));const file=await workbookBuffer([['姓名','name'],['性别','gender',10],['班级','className'],['账号','username',30],['密码','password',20],['权限分组','permissionGroup']],rows);
     res.writeHead(200,{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':classExportDisposition(actor,classId,'账号密码','student-accounts'),'cache-control':'no-store'});res.end(file);return true;
    }
+   if(path==='/api/teacher/student-credentials'&&req.method==='GET'){json(res,200,{students:store.studentCredentials(actor,classId)});return true;}
    if(path==='/api/teacher/students'){
     if(req.method==='GET'){json(res,200,{students:store.students(actor,classId)});return true;}
     if(req.method==='POST'){try{json(res,201,{student:await store.addStudent(await body(req),actor)});}catch(e){json(res,e.status||400,{message:e.message});}return true;}

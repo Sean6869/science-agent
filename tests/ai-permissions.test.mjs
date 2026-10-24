@@ -29,7 +29,12 @@ test('static accounts retain experiment and roles while coach and knowledge APIs
   const request=(path,data)=>fetch(base+path,{method:data?'POST':'GET',headers:{cookie:`xiaoke_session=${auth.token}`,'x-csrf-token':auth.csrf},body:data?JSON.stringify(data):undefined});
 
   assert.equal((await request('/api/groups/roles')).status,200);
-  await request('/api/groups/roles',{version:0,leaderId:student.id,challengerId:student.id});
+  const initialRoles=await(await request('/api/groups/roles')).json();
+  const assigned=await request('/api/groups/roles',{version:0,leaderId:student.id,challengerId:initialRoles.members.find(m=>m.virtual).id});assert.equal(assigned.status,200);
+  const staticRoles=await assigned.json();assert.equal(staticRoles.guidance,null);assert.equal(staticRoles.scaffoldingEnabled,false);
+  assert.equal((await request('/api/groups/roles',{version:staticRoles.version,swap:true})).status,403);
+  assert.equal((await request('/api/groups/roles',{version:staticRoles.version,leaderId:staticRoles.leaderId,challengerId:staticRoles.challengerId})).status,403);
+  for(const path of ['/api/role-hint?stage=1','/audio/roles.wav?user='+student.id,'/audio/roles-preview.wav?user='+student.id,'/audio/stages/1.wav?user='+student.id])assert.equal((await request(path)).status,403,path);
   for(const path of ['/api/chat','/api/knowledge','/api/assessment']){const r=await request(path,{stage:1,kind:'content',attempt:1,text:'问题',history:[],option:'sufficient',aiEnabled:true});assert.equal(r.status,403);assert.equal((await r.json()).code,'AI_DISABLED');}
   assert.equal((await request('/api/knowledge?lesson=bending-light')).status,403);
   assert.equal((await request('/api/config')).status,200);assert.equal((await request('/api/quizzes')).status,200);
@@ -44,4 +49,22 @@ test('static accounts retain experiment and roles while coach and knowledge APIs
   await new Promise(r=>server.close(r));server=null;store.close();store=await openSchoolStore(file);
   assert.equal((await store.login('student','12345678')).user.aiEnabled,false);
  }finally{globalThis.fetch=originalFetch;if(oldKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=oldKey;if(server)await new Promise(r=>server.close(r));store.close();await rm(dir,{recursive:true,force:true});}
+});
+
+test('apply permission to class updates every student and existing sessions without touching other classes',async()=>{
+ const store=await openSchoolStore(':memory:',{username:'admin',password:'Test-admin-password'});let server;
+ try{
+  const owner=await store.registerTeacher({name:'教师',username:'owner',password:'12345678'}),other=await store.registerTeacher({name:'其他教师',username:'other',password:'12345678'});
+  const make=(name,className,aiEnabled=true)=>store.addStudent({name,username:name,password:'12345678',gender:'男',className,aiEnabled},owner);
+  const a=await make('student_a','一班'),b=await make('student_b','一班',false),outside=await make('student_c','二班');
+  const auth=await store.login('student_a','12345678'),teacher=await store.login('owner','12345678'),outsider=await store.login('other','12345678');
+  server=createApp({store});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  const apply=(actor,aiEnabled,classId=a.classId)=>fetch(`http://127.0.0.1:${server.address().port}/api/teacher/ai-permissions`,{method:'PUT',headers:{cookie:`xiaoke_session=${actor.token}`,'x-csrf-token':actor.csrf},body:JSON.stringify({classId,aiEnabled})});
+  assert.equal((await apply(outsider,false)).status,403);assert.equal((await apply(teacher,'false')).status,400);assert.equal((await apply(teacher,false,'')).status,400);
+  for(const enabled of [false,true]){
+   assert.equal((await apply(teacher,enabled)).status,200);
+   assert.ok(store.students(owner,a.classId).every(s=>s.aiEnabled===enabled));assert.equal(store.session(auth.token).user.aiEnabled,enabled);
+   assert.equal(store.students(owner,outside.classId)[0].aiEnabled,true);assert.equal(store.studentCredentials(owner,a.classId).find(s=>s.id===b.id).password,'12345678');
+  }
+ }finally{if(server)await new Promise(r=>server.close(r));store.close();}
 });

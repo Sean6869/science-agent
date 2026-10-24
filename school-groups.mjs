@@ -19,11 +19,12 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
  function roles(userId,change){
   const g=db.prepare('SELECT g.id,g.type,g.virtual_member FROM student_groups g JOIN group_members m ON m.group_id=g.id JOIN group_batches b ON b.class_id=g.class_id WHERE m.user_id=? AND m.joined=1 AND b.approved_at IS NOT NULL').get(userId);
   if(!g)fail('请先加入已审核的小组',403);
-  const members=membersOf(g);
+  const members=membersOf(g),scaffoldingEnabled=!!getUser(userId).ai_enabled;
   return atomic(()=>{
    let saved=db.prepare('SELECT * FROM group_roles WHERE group_id=?').get(g.id);
    if(change){
     if((saved?.version||0)!==change.version)fail('角色分工已更新，请刷新后重试',409);
+    if(!scaffoldingEnabled&&(saved||change.swap))fail('静态组仅填写初始分工，不使用角色交换',403);
     let leader=change.leaderId,challenger=change.challengerId;
     if(change.swap){if(!saved)fail('请先完成角色分工');if(g.type==='VR')fail('人机组的角色分工固定，无需交换');leader=saved.challenger_id;challenger=saved.leader_id;}
     if(!members.some(m=>m.id===leader)||!members.some(m=>m.id===challenger)||(members.length>1&&leader===challenger))fail('请为两位组员选择不同的角色');
@@ -31,7 +32,7 @@ export function createGroupStore(db,{quizzes,getUser,scope,fail}){
     db.prepare('INSERT INTO group_roles VALUES(?,?,?,?) ON CONFLICT(group_id) DO UPDATE SET leader_id=excluded.leader_id,challenger_id=excluded.challenger_id,version=excluded.version').run(g.id,leader,challenger,(saved?.version||0)+1);
     saved=db.prepare('SELECT * FROM group_roles WHERE group_id=?').get(g.id);
    }
-   return {type:g.type,members:members.map(({id,name,virtual})=>({id,name,virtual:!!virtual})),version:saved?.version||0,leaderId:saved?.leader_id||null,challengerId:saved?.challenger_id||null,guidance:saved?roleGuidance(g.type,members,saved.leader_id,saved.challenger_id):null};
+   return {type:g.type,members:members.map(({id,name,virtual})=>({id,name,virtual:!!virtual})),version:saved?.version||0,leaderId:saved?.leader_id||null,challengerId:saved?.challenger_id||null,scaffoldingEnabled,guidance:saved&&scaffoldingEnabled?roleGuidance(g.type,members,saved.leader_id,saved.challenger_id):null};
   });
  }
  function quota(userId,lessonId,turn){
