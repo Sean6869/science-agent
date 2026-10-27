@@ -11,7 +11,9 @@ export async function createExperimentWorkspace(){
  try{
   const response=await fetch('/api/config');
   if(!response.ok)throw new Error('config');
-  const {lessons,defaultLessonId}=await response.json();
+  const {lessons,defaultLessonId,currentLessonId}=await response.json();
+  window.schoolCurrentLessonId=currentLessonId||null;
+  for(const id of ['previousLesson','nextLesson']){const control=document.getElementById(id);control.disabled=lessons.length<2;control.title=currentLessonId?'教师已指定本班当前课程':'';}
   let saved;try{saved=sessionStorage.getItem('science-lesson');}catch{}
 
   function presentLesson(lesson){

@@ -122,7 +122,8 @@ export function createApp({store,synthesize,scoreReasoning=scoreReasoningRespons
    try{const audio=await speechAudio(text);res.writeHead(200,{'content-type':'audio/wav','cache-control':url.pathname==='/audio/roles-preview.wav'?'private, max-age=3600':'private, no-store'});res.end(audio);}catch(e){json(res,e.status||502,{message:e.message});}return;
   }
   if (url.pathname==='/api/config' && req.method==='GET') {
-   return json(res,200,{lessons,defaultLessonId});
+   const currentLessonId=store.currentLesson(req.schoolUser.id);
+   return json(res,200,{lessons:currentLessonId?lessons.filter(l=>l.id===currentLessonId):lessons,defaultLessonId:currentLessonId||defaultLessonId,currentLessonId});
   }
   if(url.pathname==='/api/group-conversations'&&req.method==='GET'){
    if(req.schoolUser?.role!=='student')return json(res,403,{message:'请使用学生账号'});

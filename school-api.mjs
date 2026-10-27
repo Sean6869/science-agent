@@ -28,7 +28,7 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
    const auth=await store.login(p.username.trim(),p.password);if(!auth){json(res,401,{message:'账号或密码错误，或账号已停用'});return true;}
    attempts.delete(ip);res.setHeader('Set-Cookie',cookie(req,auth.token));json(res,200,{user:auth.user,csrf:auth.csrf});return true;
   }
-  if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,completed:store.completed(session.user.id),group:session.user.role==='student'?store.groupStatus(session.user.id):null,ready:session.user.role!=='student'||store.ready(session.user.id),...(session.user.role==='student'?{stageDurations:store.stageDurations(session.user.id)}:{})}:{user:null});return true;}
+  if(path==='/api/me'&&req.method==='GET'){json(res,200,session?{...session,completed:store.completed(session.user.id),group:session.user.role==='student'?store.groupStatus(session.user.id):null,ready:session.user.role!=='student'||store.ready(session.user.id),...(session.user.role==='student'?{stageDurations:store.stageDurations(session.user.id),currentLessonId:store.currentLesson(session.user.id)}:{})}:{user:null});return true;}
   if(!path.startsWith('/api/'))return false;
   if(!session){json(res,401,{message:'请先登录'});return true;}
   if(session.user.role==='student'&&!session.user.aiEnabled&&['/api/chat','/api/knowledge','/api/assessment','/api/group-conversations','/api/inquiry-record/clear','/api/role-hint'].includes(path)){json(res,403,{message:'静态组不使用知识答疑和探究支架',code:'AI_DISABLED'});return true;}
@@ -80,6 +80,8 @@ export function createSchoolApi(store,{json,body,onRoles=()=>{},scoreReasoning})
   if(path.startsWith('/api/teacher/')){
    if(!['admin','teacher'].includes(session.user.role)){json(res,403,{message:'仅教师或管理员可以访问'});return true;}
    const actor=session.user,classId=url.searchParams.get('class')||'';
+   if(path==='/api/teacher/classroom-lesson'&&req.method==='PUT'){const p=await body(req);json(res,200,store.setCurrentLesson(actor,p?.classId,p?.lessonId));return true;}
+   if(path==='/api/teacher/classroom-lesson'&&req.method==='GET'){const classes=store.classes(actor);if(classId)store.students(actor,classId);json(res,200,{classes:classes.filter(c=>!classId||c.id===classId),lessons:lessons.map(({id,number,title})=>({id,number,title}))});return true;}
    if(actor.role==='teacher'&&req.method==='GET'&&path!=='/api/teacher/classes'&&!classId){json(res,400,{message:'请选择一个班级'});return true;}
    if(path==='/api/teacher/timers'&&req.method==='PUT'){const p=await body(req);json(res,200,{stageDurations:store.setStageDurations(actor,p?.classId,p?.minutes)});return true;}
    if(path==='/api/teacher/ai-permissions'&&req.method==='PUT'){const p=await body(req);store.setAiPermission(actor,p?.classId,p?.aiEnabled);json(res,200,{ok:true});return true;}
