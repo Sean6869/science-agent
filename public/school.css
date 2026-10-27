@@ -28,6 +28,14 @@ body.login-ready .login-card{width:min(450px,100%);max-width:450px;box-sizing:bo
 .student-list-head>h2{margin:0}
 .student-list-head>.export-button{margin-left:auto}
 .student-list-section>.school-table-wrap{margin:0}
+.class-ownership{container-type:inline-size}
+.class-ownership-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px 24px;min-width:0}
+@container(min-width:984px){.class-ownership-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.class-ownership-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:14px;border:1px solid #dbe8f6;border-radius:12px;background:#ffffff80;min-width:0}
+.class-ownership-row>span{grid-column:1/-1;overflow-wrap:anywhere;font-weight:600}
+#schoolScreen .class-ownership-row>select{width:100%;min-width:0}
+.class-ownership-row>button{white-space:nowrap}
+@media(max-width:650px){.class-ownership-row{grid-template-columns:1fr auto}.class-ownership-row>select{grid-column:1/-1}.class-ownership-row>.school-button{justify-self:end}.class-ownership-row>.school-link{justify-self:end}}
 @media(max-width:650px){.student-import-row{grid-template-columns:minmax(0,1fr)}.student-import-row>.file-row{flex-wrap:wrap}.student-import-row .file-name{flex:1 1 100px}.student-accounts-panel{gap:20px}}
 .school-actions>.school-button{min-height:46px;max-width:100%;margin:0;text-align:center;white-space:normal}
 .login-card .school-actions{margin-top:20px}
