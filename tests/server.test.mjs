@@ -17,6 +17,22 @@ test('oversized requests return 413 without crashing',async()=>{for(const [url,p
 test('offline feedback preserves the metacognitive three-part structure without consuming an attempt',async()=>{const p=await(await fetch(base+'/api/chat',{method:'POST',body:JSON.stringify({stage:2,kind:'content',attempt:1,text:'我们预测像会变大'})})).json();assert.equal(p.source,'fallback');assert.match(p.content,/^自我评价：/);assert.match(p.content,/\n老师的评价：/);assert.match(p.content,/\n/);assert.equal(p.remainingAttempts,3);});
 test('a fourth content submission is stopped without calling the model',async()=>{const p=await(await fetch(base+'/api/chat',{method:'POST',body:JSON.stringify({stage:1,kind:'content',attempt:4,text:'第四次提交'})})).json();assert.equal(p.source,'rule');assert.equal(p.exhausted,true);assert.equal(p.remainingAttempts,0);assert.match(p.content,/三次内容提交机会已经用完/);});
 test('static source files outside public cannot be read',async()=>{for(const p of ['/server.mjs','/%2e%2e%2fserver.mjs']){const r=await fetch(base+p);assert.notEqual(r.status,200);}});
+test('local experiment allows same-origin framing on GET, HEAD and cache revalidation while other pages stay protected',async()=>{
+ const url=base+'/vendor/phet/geometric-optics-basics-1.3.18_zh_CN.html';
+ const response=await globalThis.fetch(url);assert.equal(response.status,200);
+ assert.match(response.headers.get('content-type'),/^text\/html/);
+ assert.equal(response.headers.get('x-frame-options'),'SAMEORIGIN');
+ assert.equal(response.headers.get('content-security-policy'),"frame-ancestors 'self'");
+ assert.match(await response.text(),/Geometric Optics: Basics/);
+ for(const options of [{method:'HEAD'},{headers:{'if-none-match':response.headers.get('etag')}}]){
+  const r=await globalThis.fetch(url,options);assert.equal(r.status,options.method?200:304);
+  assert.equal(r.headers.get('x-frame-options'),'SAMEORIGIN');
+  assert.equal(r.headers.get('content-security-policy'),"frame-ancestors 'self'");
+ }
+ for(const path of ['/','/index.html','/api/version','/vendor/phet/README.md','/vendor/phet/missing.html']){
+  const r=await globalThis.fetch(base+path);assert.equal(r.headers.get('x-frame-options'),'DENY');
+ }
+});
 test('release version is public and never cached',async()=>{const r=await globalThis.fetch(base+'/api/version');assert.equal(r.status,200);assert.equal(r.headers.get('cache-control'),'no-store');const payload=await r.json();assert.equal(typeof payload.version,'string');assert.ok(payload.version.length>0);});
 test('speech routes require a student session',async()=>{for(const path of ['/audio/roles.wav?version=1','/audio/stages/1.wav'])assert.equal((await globalThis.fetch(base+path)).status,403);});
 

@@ -19,5 +19,10 @@ from viewport dimensions and students do not need to calibrate. If the simulatio
 unavailable or its ruler API cannot be read, measurement gives a loading message
 instead of returning an unverified length.
 
+The configured local simulation HTML is served with `X-Frame-Options: SAMEORIGIN`
+and `Content-Security-Policy: frame-ancestors 'self'`, including HEAD and 304
+responses. Other platform pages retain the default `X-Frame-Options: DENY`.
+Browser verification must use the actual application server and its response headers.
+
 When upgrading the simulation, verify ruler geometry, native zoom, both screens,
 window resizing, and the browser's displayed ruler before updating the pinned hash.

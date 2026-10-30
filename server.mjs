@@ -34,6 +34,12 @@ async function serveStatic(req,res,url){
  let info;try{info=await stat(path);}catch(error){if(['ENOENT','ENOTDIR'].includes(error.code))return json(res,404,{message:'文件不存在'});throw error;}
  if(!info.isFile())return json(res,404,{message:'文件不存在'});
  const type=extname(path),contentType=contentTypes[type]||'application/octet-stream',etag=`W/"${info.size}-${Math.trunc(info.mtimeMs)}"`;
+ // Only the explicitly configured local simulation may be embedded by our own pages.
+ // Apply before the 304 path so cache revalidation retains the same frame policy.
+ if(type==='.html'&&pathname.startsWith('/vendor/phet/')&&lessons.some(lesson=>lesson.url===pathname)){
+  res.setHeader('X-Frame-Options','SAMEORIGIN');
+  res.setHeader('Content-Security-Policy',"frame-ancestors 'self'");
+ }
  const cacheControl=type==='.png'?'public, max-age=31536000, immutable':'no-cache';
  if(!req.headers.range&&req.headers['if-none-match']===etag){res.writeHead(304,{etag,'cache-control':cacheControl});return res.end();}
  const file=await readFile(path);res.writeHead(200,{'content-type':contentType,'content-length':file.length,'cache-control':cacheControl,'x-content-type-options':'nosniff',etag});res.end(req.method==='HEAD'?undefined:file);
