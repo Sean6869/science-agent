@@ -42,7 +42,8 @@ test('every template blank is rendered once and old evidence fields migrate with
   assert.ok(section.fields.every(field=>field.options));
  }
  assert.deepEqual(migrateConclusionFields('bending-light',Array.from({length:15},(_,index)=>String(index))),['0','1','2','4','5','6','8','9','10','11','12','13','14']);
- assert.deepEqual(migrateConclusionFields('energy-skate-park',Array.from({length:13},(_,index)=>String(index))),['0','1','3','4','5','6','7','8','9','10','11','12']);
+ assert.deepEqual(migrateConclusionFields('energy-skate-park',Array.from({length:13},(_,index)=>String(index))),['0','1','3','4','5','6','7','8','9','10']);
+ assert.deepEqual(migrateConclusionFields('energy-skate-park',Array.from({length:12},(_,index)=>String(index)),2),Array.from({length:10},(_,index)=>String(index)));
  assert.deepEqual(migrateConclusionFields('bending-light',['增大','小于','靠近','旧证据','增大']),['增大','小于','靠近','增大']);
  assert.deepEqual(migrateConclusionFields('bending-light',['增大','小于','靠近','增大'],2),['增大','小于','靠近','增大']);
 });
@@ -76,7 +77,8 @@ test('submitted conclusions follow the task-sheet sentence templates',()=>{
  const energyText=formatConclusion('energy-skate-park',energy.map(field=>field.options?.[0]||'质量60kg、速度10m\/s时动能3000J'));
  assert.match(energyText,/在固定物体速度不变的条件下：物体的质量越大，动能越大/);
  assert.match(energyText,/在无摩擦（摩擦力=0）的条件下/);
- assert.match(energyText,/总能量（动能\+势能\+热能）不变/);
+ assert.doesNotMatch(energyText,/部分的机械能转化为热能|总能量/);
+ assert.equal(energy.length,10);
 });
 
 test('stage five feedback judges fixed conclusion answers instead of asking for metacognitive self-assessment',()=>{

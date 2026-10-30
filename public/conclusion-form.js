@@ -68,9 +68,7 @@ export const conclusionTasks={
     choice('有摩擦时，重力势能',['减小','增大','不变']),
     choice('有摩擦时，动能',['增大','减小','不变']),
     choice('有摩擦时，机械能',['减小','增大','不变']),
-    choice('有摩擦时，机械能是否守恒',['不守恒','守恒']),
-    choice('摩擦力越大，转化成的热能',['越多','越少']),
-    choice('总能量（动能+势能+热能）',['不变','增大','减小'])
+    choice('有摩擦时，机械能是否守恒',['不守恒','守恒'])
    ]}
   ]
  }
@@ -92,7 +90,7 @@ const templates={
  ],
  'energy-skate-park':[
   '（动能的影响因素）\n在固定物体速度不变的条件下：\n物体的质量越大，动能{0}。\n在固定物体质量不变的条件下：\n物体的速度越大，动能{1}。',
-  '（动能与势能的转化与机械能守恒规律）\n在无摩擦（摩擦力=0）的条件下：\n同一个物体从高处滑下时，随着高度减小，物体的重力势能{0}，物体的动能{1}。物体的机械能（动能+势能）{2}，此时机械能{3}。\n在有摩擦（摩擦力>0）的条件下：\n同一个物体从高处滑下时，随着高度减小，物体的重力势能{4}，物体的动能{5}。物体的机械能（动能+势能）{6}，此时机械能{7}。\n在有摩擦（摩擦力>0）的条件下：\n同一个物体从高处滑下时，部分的机械能转化为热能，并且，摩擦力越大，机械能转化为热能{8}。总能量（动能+势能+热能）{9}。'
+  '（动能与势能的转化与机械能守恒规律）\n在无摩擦（摩擦力=0）的条件下：\n同一个物体从高处滑下时，随着高度减小，物体的重力势能{0}，物体的动能{1}。物体的机械能（动能+势能）{2}，此时机械能{3}。\n在有摩擦（摩擦力>0）的条件下：\n同一个物体从高处滑下时，随着高度减小，物体的重力势能{4}，物体的动能{5}。物体的机械能（动能+势能）{6}，此时机械能{7}。'
  ]
 };
 for(const [lessonId,task] of Object.entries(conclusionTasks))task.sections.forEach((section,index)=>{section.template=templates[lessonId][index];});
@@ -103,9 +101,9 @@ export function conclusionParagraph(section,answers){
 
 export function migrateConclusionFields(lessonId,values=[],version=1){
  if(!Array.isArray(values))return [];
+ if(lessonId==='energy-skate-park'){const fields=version>=2?Array.from(values):Array.from(values).filter((_,index)=>index!==2);return fields.slice(0,10);}
  if(version>=2)return values;
  if(lessonId==='bending-light')return Array.from(values).filter((_,index)=>index!==3&&index!==7);
- if(lessonId==='energy-skate-park')return Array.from(values).filter((_,index)=>index!==2);
  return values;
 }
 
@@ -138,7 +136,7 @@ const conclusionChecks={
  ],
  'energy-skate-park':[
   {title:'实验结论一',match:'在固定物体速度不变的条件下：物体的质量越大，动能越大。在固定物体质量不变的条件下：物体的速度越大，动能越大。',hint:'速度不变时质量越大动能越大；质量不变时速度越大动能越大。'},
-  {title:'实验结论二',match:'在无摩擦（摩擦力=0）的条件下：同一个物体从高处滑下时，随着高度减小，物体的重力势能减小，物体的动能增大。物体的机械能（动能+势能）不变，此时机械能守恒。在有摩擦（摩擦力>0）的条件下：同一个物体从高处滑下时，随着高度减小，物体的重力势能减小，物体的动能增大。物体的机械能（动能+势能）减小，此时机械能不守恒。在有摩擦（摩擦力>0）的条件下：同一个物体从高处滑下时，部分的机械能转化为热能，并且，摩擦力越大，机械能转化为热能越多。总能量（动能+势能+热能）不变。',hint:'无摩擦时机械能守恒；有摩擦时机械能减少并转化为热能，摩擦力越大转化的热能越多，总能量不变。'}
+  {title:'实验结论二',match:'在无摩擦（摩擦力=0）的条件下：同一个物体从高处滑下时，随着高度减小，物体的重力势能减小，物体的动能增大。物体的机械能（动能+势能）不变，此时机械能守恒。在有摩擦（摩擦力>0）的条件下：同一个物体从高处滑下时，随着高度减小，物体的重力势能减小，物体的动能增大。物体的机械能（动能+势能）减小，此时机械能不守恒。',hint:'无摩擦时机械能守恒；有摩擦时机械能减少，不守恒。'}
  ]
 };
 

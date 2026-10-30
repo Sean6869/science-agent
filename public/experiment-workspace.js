@@ -1,3 +1,4 @@
+import {createLengthTool} from './length-tool.js';
 export async function createExperimentWorkspace(){
  const selector=document.getElementById('lessonSelector');
  const initial=document.getElementById('lab');
@@ -5,6 +6,7 @@ export async function createExperimentWorkspace(){
  const loading=document.getElementById('loading');
  const instances=new Map();
  const angleTool=createAngleTool(frame);
+ const lengthTool=createLengthTool(frame);
  let activeId=null;
  let requestedId=null;
  let timeout;
@@ -24,6 +26,8 @@ export async function createExperimentWorkspace(){
    window.__scienceLesson=lesson;
    angleTool.hidden=lesson.id!=='bending-light';
    if(lesson.id!=='bending-light')angleTool.reset();
+   lengthTool.hidden=lesson.id!=='geometric-optics-basics';
+   if(lesson.id!=='geometric-optics-basics')lengthTool.reset();
    window.dispatchEvent(new CustomEvent('science:lesson-change',{detail:lesson}));
   }
 

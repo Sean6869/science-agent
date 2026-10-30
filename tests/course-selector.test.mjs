@@ -7,8 +7,8 @@ async function mount(locked){
  const node=()=>({hidden:false,classList:{add(){},remove(){}},addEventListener(){},append(){}});
  for(const id of ['lessonSelector','lab','loading','lessonArtwork','previousLesson','nextLesson'])nodes[id]=node();nodes.lab.parentElement=node();
  const window={addEventListener:(key,callback)=>events[key]=callback,dispatchEvent:event=>{events[event.type]?.(event);}},document={getElementById:id=>nodes[id],createElement:node},sessionStorage={getItem:()=> 'three',setItem(){}};
- let source=await readFile(new URL('../public/experiment-workspace.js',import.meta.url),'utf8');source=source.slice(0,source.indexOf('\nfunction createAngleTool')).replace('export async function','async function');
- const context={window,document,sessionStorage,fetch:async()=>({ok:true,json:async()=>({lessons:locked?[lessons[0]]:lessons,defaultLessonId:'one',currentLessonId:locked?'one':null})}),createAngleTool:()=>({reset(){}}),CustomEvent:class{constructor(type,{detail}){this.type=type;this.detail=detail;}},setTimeout:()=>0,clearTimeout(){}};
+ let source=await readFile(new URL('../public/experiment-workspace.js',import.meta.url),'utf8');source=source.replace(/^import .*;\r?\n/,'');source=source.slice(0,source.indexOf('\nfunction createAngleTool')).replace('export async function','async function');
+ const context={window,document,sessionStorage,fetch:async()=>({ok:true,json:async()=>({lessons:locked?[lessons[0]]:lessons,defaultLessonId:'one',currentLessonId:locked?'one':null})}),createLengthTool:()=>({reset(){}}),createAngleTool:()=>({reset(){}}),CustomEvent:class{constructor(type,{detail}){this.type=type;this.detail=detail;}},setTimeout:()=>0,clearTimeout(){}};
  runInNewContext(source+'\nglobalThis.mount=createExperimentWorkspace;',context);await context.mount();return {window,nodes,events};
 }
 test('locked course ignores another cached course, arrows and stale group lesson events',async()=>{

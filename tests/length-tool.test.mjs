@@ -1,0 +1,21 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {runInNewContext} from 'node:vm';
+test('length tool calibrates millimetres, releases experiment clicks, and invalidates changed scale',async()=>{
+ const noop=()=>{},events={};let width=800,resize;
+ const context2d=new Proxy({},{get:()=>noop,set:()=>true});
+ const node=tag=>({tag,children:[],style:{},classList:{add:noop,remove:noop},append(...nodes){this.children.push(...nodes);},setAttribute:noop,getContext:()=>context2d,getBoundingClientRect:()=>({left:20,top:30,width,height:500})});
+ const frame=node('frame'),context={document:{createElement:node},window:{devicePixelRatio:2,addEventListener:(key,fn)=>events[key]=fn},ResizeObserver:class{constructor(fn){resize=fn;}observe(){}}};
+ const source=(await readFile(new URL('../public/length-tool.js',import.meta.url),'utf8')).replace('export function','function');runInNewContext(source+'\nglobalThis.mount=createLengthTool;',context);
+ const root=context.mount(frame),[calibrate,input,,measure,reset,readout]=root.children,layer=frame.children[1];
+ const click=(x,y)=>layer.onclick({clientX:x+20,clientY:y+30});
+ assert.equal(measure.disabled,true);input.value='0';calibrate.onclick();assert.match(readout.textContent,/有效/);assert.equal(layer.hidden,true);
+ input.value='100';calibrate.onclick();click(0,0);click(0,0);assert.match(readout.textContent,/过近/);
+ click(20,20);click(220,20);assert.equal(measure.disabled,false);assert.equal(layer.style.pointerEvents,'none');
+ measure.onclick();click(20,20);click(80,100);assert.equal(readout.textContent,'长度约 50.0 毫米');assert.equal(layer.style.pointerEvents,'none');
+ width=900;resize();assert.equal(measure.disabled,true);assert.equal(layer.hidden,true);
+ calibrate.onclick();click(0,0);click(100,0);input.oninput();assert.equal(measure.disabled,true);
+ calibrate.onclick();click(0,0);click(100,0);events.resize();assert.equal(layer.hidden,true);
+ calibrate.onclick();root.reset();assert.equal(layer.hidden,true);assert.equal(measure.disabled,true);reset.onclick();
+});
