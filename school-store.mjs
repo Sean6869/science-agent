@@ -16,6 +16,9 @@ export const quizzes=JSON.parse(readFileSync(new URL('./quizzes.json',import.met
 export const publicQuizzes=quizzes.map(q=>({...q,questions:q.questions.map(({answer,...question})=>question)}));
 const posttestBank=quizzes.flatMap(quiz=>quiz.questions.map(question=>({...question,id:`${quiz.id}:${question.id}`,sourceQuizId:quiz.id})));
 const publicPosttest=new Map(posttestBank.map(({answer,...question})=>[question.id,question]));
+// Scientific reasoning is now administered on paper. Keep its schema and legacy
+// records readable, but end the online posttest after the physics confidence item.
+const ONLINE_REASONING_POSTTEST_ENABLED=process.env.ONLINE_REASONING_POSTTEST_ENABLED==='true';
 // One versioned, deterministic order is shared by every student. The salt keeps
 // the posttest order distinct from the three pretests concatenated in source order.
 const FIXED_POSTTEST_ORDER=Object.freeze(posttestBank.map(question=>question.id).sort((a,b)=>createHash('sha256').update(`xiaoke-posttest-order-v1:${a}`).digest().compare(createHash('sha256').update(`xiaoke-posttest-order-v1:${b}`).digest())));
@@ -161,11 +164,11 @@ export async function openSchoolStore(filename,bootstrap={}){
    if(reset&&launch.startedAt<=reset.resetAt&&!eligible)return {active:false,eligible,total:posttestBank.length,phase:'inactive'};
    const result=db.prepare('SELECT prediction,question_order AS questionOrder,answers,confidence,started_at AS startedAt,answered_at AS answeredAt,submitted_at AS submittedAt FROM posttest_results WHERE student_id=?').get(userId);
    const reasoning=db.prepare('SELECT prediction,answers,score,breakdown,confidence,started_at AS startedAt,answered_at AS answeredAt,scored_at AS scoredAt,submitted_at AS submittedAt FROM reasoning_results WHERE student_id=?').get(userId);
-   let phase=!result?'prediction':result.answers===null?'test':result.confidence===null?'confidence':!reasoning?'reasoning_prediction':reasoning.answers===null?'reasoning_test':reasoning.score===null?'reasoning_scoring':reasoning.confidence===null?'reasoning_confidence':'certificate';
+   let phase=!result?'prediction':result.answers===null?'test':result.confidence===null?'confidence':!ONLINE_REASONING_POSTTEST_ENABLED?'certificate':!reasoning?'reasoning_prediction':reasoning.answers===null?'reasoning_test':reasoning.score===null?'reasoning_scoring':reasoning.confidence===null?'reasoning_confidence':'certificate';
    const status={active:true,eligible,total:posttestBank.length,phase,launchKey:reset?`${launch.startedAt}:${reset.resetAt}`:launch.startedAt,startedAt:result?.startedAt||null,submittedAt:result?.submittedAt||null};
    if(phase==='test'){const order=JSON.parse(result.questionOrder);status.questions=order.map(id=>publicPosttest.get(id)).filter(Boolean);}
    if(phase==='reasoning_test')status.reasoningTest=reasoningTest;
-   if(phase==='certificate')status.certificate={studentName:u.name,className:u.class_name,completedAt:reasoning.submittedAt};
+   if(phase==='certificate')status.certificate={studentName:u.name,className:u.class_name,completedAt:reasoning?.submittedAt||result.submittedAt};
    return status;
   },
   startPosttest(actor,classId){
@@ -190,29 +193,33 @@ export async function openSchoolStore(filename,bootstrap={}){
    if(row.confidence===null)db.prepare('UPDATE posttest_results SET confidence=?,submitted_at=? WHERE student_id=?').run(value,now(),userId);return this.posttestStatus(userId);
   },
   saveReasoningPrediction(userId,prediction){
+   if(!ONLINE_REASONING_POSTTEST_ENABLED)return this.posttestStatus(userId);
    const value=Number(prediction),status=this.posttestStatus(userId);if(status.phase!=='reasoning_prediction')return status;
    if(!Number.isInteger(value)||value<0||value>100)fail('预测分数须为0–100的整数');
    db.prepare('INSERT INTO reasoning_results(student_id,prediction,started_at) VALUES(?,?,?)').run(userId,value,now());return this.posttestStatus(userId);
   },
   saveReasoningAnswers(userId,answers){
+   if(!ONLINE_REASONING_POSTTEST_ENABLED)return this.posttestStatus(userId);
    const row=db.prepare('SELECT answers FROM reasoning_results WHERE student_id=?').get(userId);if(!row)fail('请先完成科学推理测试成绩预测',409);if(row.answers!==null)return this.posttestStatus(userId);
    if(!answers||Array.isArray(answers)||Object.keys(answers).length!==reasoningTest.questions.length)fail('请完成全部简答题');
    const clean={};for(const question of reasoningTest.questions){const value=typeof answers[question.id]==='string'?answers[question.id].trim():'';if(!value)fail('请完成全部简答题');if(value.length>3000)fail('每题回答不能超过3000字');clean[question.id]=value;}
    db.prepare('UPDATE reasoning_results SET answers=?,answered_at=? WHERE student_id=?').run(JSON.stringify(clean),now(),userId);return this.posttestStatus(userId);
   },
-  reasoningAnswers(userId){const row=db.prepare('SELECT answers FROM reasoning_results WHERE student_id=?').get(userId);if(!row?.answers)fail('请先完成科学推理能力测试',409);return JSON.parse(row.answers);},
+  reasoningAnswers(userId){if(!ONLINE_REASONING_POSTTEST_ENABLED)fail('科学推理能力测试已改为纸笔测试',409);const row=db.prepare('SELECT answers FROM reasoning_results WHERE student_id=?').get(userId);if(!row?.answers)fail('请先完成科学推理能力测试',409);return JSON.parse(row.answers);},
   saveReasoningScore(userId,result){
+   if(!ONLINE_REASONING_POSTTEST_ENABLED)return this.posttestStatus(userId);
    const row=db.prepare('SELECT answers,score FROM reasoning_results WHERE student_id=?').get(userId);if(!row?.answers)fail('请先完成科学推理能力测试',409);if(row.score!==null)return this.posttestStatus(userId);
    const score=Number(result?.total),items=result?.items;if(!Number.isInteger(score)||score<0||score>100||!Array.isArray(items)||items.length!==5)fail('评分结果无效');
    db.prepare('UPDATE reasoning_results SET score=?,breakdown=?,scored_at=? WHERE student_id=?').run(score,JSON.stringify(items),now(),userId);return this.posttestStatus(userId);
   },
   saveReasoningConfidence(userId,confidence){
+   if(!ONLINE_REASONING_POSTTEST_ENABLED)return this.posttestStatus(userId);
    const value=Number(confidence),row=db.prepare('SELECT score,confidence FROM reasoning_results WHERE student_id=?').get(userId);if(row?.score===null||row?.score===undefined)fail('请等待科学推理能力测试评分完成',409);if(!Number.isInteger(value)||value<0||value>100)fail('信心值须为0%–100%的整数');
    if(row.confidence===null)db.prepare('UPDATE reasoning_results SET confidence=?,submitted_at=? WHERE student_id=?').run(value,now(),userId);return this.posttestStatus(userId);
   },
   posttestReport(actor,classId=''){
    const classes=this.classes(actor).filter(item=>!classId||item.id===classId);if(classId)scope(actor,classId);
-   return classes.map(classroom=>{const launch=db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(classroom.id);const students=this.students(actor,classroom.id).filter(student=>student.active).map(student=>{const result=db.prepare('SELECT prediction,correct,total,confidence,question_order AS questionOrder,answers,started_at AS startedAt,answered_at AS answeredAt,submitted_at AS submittedAt FROM posttest_results WHERE student_id=?').get(student.id),reasoning=db.prepare('SELECT prediction AS reasoningPrediction,answers AS reasoningAnswers,score AS reasoningScore,breakdown AS reasoningBreakdown,confidence AS reasoningConfidence,started_at AS reasoningStartedAt,answered_at AS reasoningAnsweredAt,scored_at AS reasoningScoredAt,submitted_at AS reasoningSubmittedAt FROM reasoning_results WHERE student_id=?').get(student.id);const status=reasoning?.reasoningSubmittedAt?'已完成':reasoning?.reasoningScore!==null&&reasoning?.reasoningScore!==undefined?'待填写推理信心':reasoning?.reasoningAnsweredAt?'AI评分中':reasoning?'科学推理答题中':result?.confidence!==null&&result?.confidence!==undefined?'待科学推理测试':result?.answeredAt?'待填写物理信心':result?'物理测试答题中':launch?'等待进入':'未开启';return {...student,eligible:this.posttestEligible(student.id),status,...result,...reasoning};});return {...classroom,active:!!launch,startedAt:launch?.startedAt||null,ready:students.length>0&&students.every(student=>student.eligible),students};});
+   return classes.map(classroom=>{const launch=db.prepare('SELECT started_at AS startedAt FROM posttest_launches WHERE class_id=?').get(classroom.id);const students=this.students(actor,classroom.id).filter(student=>student.active).map(student=>{const result=db.prepare('SELECT prediction,correct,total,confidence,question_order AS questionOrder,answers,started_at AS startedAt,answered_at AS answeredAt,submitted_at AS submittedAt FROM posttest_results WHERE student_id=?').get(student.id),reasoning=db.prepare('SELECT prediction AS reasoningPrediction,answers AS reasoningAnswers,score AS reasoningScore,breakdown AS reasoningBreakdown,confidence AS reasoningConfidence,started_at AS reasoningStartedAt,answered_at AS reasoningAnsweredAt,scored_at AS reasoningScoredAt,submitted_at AS reasoningSubmittedAt FROM reasoning_results WHERE student_id=?').get(student.id);const completedAt=ONLINE_REASONING_POSTTEST_ENABLED?reasoning?.reasoningSubmittedAt:reasoning?.reasoningSubmittedAt||result?.submittedAt,status=completedAt?'已完成':ONLINE_REASONING_POSTTEST_ENABLED?(reasoning?.reasoningScore!==null&&reasoning?.reasoningScore!==undefined?'待填写推理信心':reasoning?.reasoningAnsweredAt?'AI评分中':reasoning?'科学推理答题中':result?.confidence!==null&&result?.confidence!==undefined?'待科学推理测试':result?.answeredAt?'待填写物理信心':result?'物理测试答题中':launch?'等待进入':'未开启'):(result?.answeredAt?'待填写物理信心':result?'物理测试答题中':launch?'等待进入':'未开启');return {...student,eligible:this.posttestEligible(student.id),status,...result,...reasoning,completedAt};});return {...classroom,active:!!launch,startedAt:launch?.startedAt||null,ready:students.length>0&&students.every(student=>student.eligible),students};});
   },
   sendBroadcast(actor,classId,message){
    scope(actor,classId);const text=String(message||'').trim();if(!classId)fail('请选择班级');if(!text)fail('请输入广播内容');if(text.length>1000)fail('广播内容不能超过1000字');const item={id:randomUUID(),classId,message:text,createdAt:now()};db.prepare('INSERT INTO class_broadcasts VALUES(?,?,?,?,?)').run(item.id,classId,actor.id,text,item.createdAt);return item;
